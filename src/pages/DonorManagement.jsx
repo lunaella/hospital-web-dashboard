@@ -335,16 +335,8 @@ export default function DonorManagement() {
     });
   }
 
-  // The Appointment View card was designed around exactly 3 same-day
-  // appointments; with real (unbounded) data there can be more, so the
-  // card height and everything below it need to grow to match instead of
-  // overlapping. (At high daily volume this list would eventually want its
-  // own scroll/pagination rather than growing the whole page indefinitely.)
-  const EXTRA_APPTS = Math.max(0, appointments.length - 3);
-  const APPT_SHIFT = EXTRA_APPTS * 173;
-
   return (
-    <div className="bg-white relative w-[1440px] mx-auto font-poppins" style={{ height: 1050 + APPT_SHIFT }}>
+    <div className="bg-white relative w-[1440px] h-[1050px] mx-auto font-poppins">
 
       {/* Top bar */}
       <PageHeader title="Partner Profiles" />
@@ -568,10 +560,7 @@ export default function DonorManagement() {
       </div>
 
       {/* Appointment View card */}
-      <div
-        className="absolute bg-white border border-[#d9d9d9] border-solid left-[1021px] rounded-[10px] shadow-[0px_9px_5px_0px_rgba(0,0,0,0.05),0px_4px_4px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] top-[225px] w-[352px]"
-        style={{ height: 659 + APPT_SHIFT }}
-      />
+      <div className="absolute bg-white border border-[#d9d9d9] border-solid left-[1021px] rounded-[10px] shadow-[0px_9px_5px_0px_rgba(0,0,0,0.05),0px_4px_4px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] top-[225px] w-[352px] h-[659px]" />
       <div className="absolute left-[1049px] top-[238px] w-[303px] h-[22px] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img alt="" className="w-4 h-4" src={imgVector6} />
@@ -613,15 +602,17 @@ export default function DonorManagement() {
         </p>
       )}
 
-      {appointments.map((apt, idx) => {
-        const top = 313 + idx * 173;
-        return (
+      {/* Fixed-height viewport: the list scrolls internally instead of
+          growing the card (and everything below it) as appointments are
+          added. Sized to show ~3 cards at a time, matching the original
+          design's assumed default. */}
+      <div className="absolute left-[1056px] top-[313px] w-[290px] max-h-[500px] overflow-y-auto flex flex-col gap-[25px] pr-1">
+        {appointments.map((apt) => (
           <div
             key={apt.id}
-            className="absolute rounded-[10px] w-[290px] h-[148px] left-[1056px] bg-[#f8f3f4] border-[1.5px] border-[#f1dddc] border-solid"
-            style={{ top }}
+            className="relative shrink-0 rounded-[10px] w-[280px] h-[148px] bg-[#f8f3f4] border-[1.5px] border-[#f1dddc] border-solid"
           >
-            <span className="absolute bg-[#eadbdd] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#8f404b] left-[219px] top-[11px]">
+            <span className="absolute bg-[#eadbdd] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#8f404b] left-[209px] top-[11px]">
               {apt.bloodType}
             </span>
             <p className="absolute left-[17px] top-[15px] flex items-center gap-1 text-[12px] font-medium text-[#aaa4a0]">
@@ -638,7 +629,7 @@ export default function DonorManagement() {
               <p className="text-[10px] font-medium text-[#aaa4a0] leading-tight">Regular Donor</p>
             </div>
             {apt.status === "completed" ? (
-              <div className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[31px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1">
+              <div className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1">
                 <div className="w-[13px] h-[13px]">
                   <img alt="" className="block max-w-none size-full" src={imgVector8} />
                 </div>
@@ -648,7 +639,7 @@ export default function DonorManagement() {
               <button
                 type="button"
                 onClick={() => recordDonation(apt.id)}
-                className="absolute bg-[#ad2b21] h-[28px] left-[31px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1 cursor-pointer hover:bg-[#8f2419] transition-colors"
+                className="absolute bg-[#ad2b21] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1 cursor-pointer hover:bg-[#8f2419] transition-colors"
               >
                 <div className="w-[13px] h-[13px]">
                   <img alt="" className="block max-w-none size-full" src={imgVector8} />
@@ -659,20 +650,19 @@ export default function DonorManagement() {
               <button
                 type="button"
                 onClick={() => confirmArrival(apt.id)}
-                className="absolute bg-[#ad2b21] h-[28px] left-[31px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+                className="absolute bg-[#ad2b21] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
               >
                 <span className="text-[13px] font-medium text-white">Confirm Arrival</span>
               </button>
             )}
           </div>
-        );
-      })}
+        ))}
+      </div>
 
       <button
         type="button"
         onClick={openWalkInModal}
-        style={{ top: 825 + APPT_SHIFT }}
-        className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[1057px] rounded-[4px] w-[289px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#f6f5f4] transition-colors"
+        className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[1057px] top-[825px] rounded-[4px] w-[289px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#f6f5f4] transition-colors"
       >
         <div className="w-[15px] h-[15px]">
           <img alt="" className="block max-w-none size-full" src={imgVector9} />
@@ -680,28 +670,16 @@ export default function DonorManagement() {
         <span className="text-[13px] font-medium text-[#808080]">Add Manual Walk-in</span>
       </button>
 
-      <div
-        style={{ top: 899 + APPT_SHIFT }}
-        className="absolute bg-[#fbfaf9] border border-[#d9d9d9] border-solid h-[75px] left-[1027px] rounded-[10px] shadow-[0px_6px_4px_0px_rgba(0,0,0,0.05),0px_3px_3px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[350px]"
-      />
-      <p
-        style={{ top: 908 + APPT_SHIFT }}
-        className="absolute font-semibold leading-[normal] left-[1116.25px] not-italic text-[#808080] text-[13px] text-center w-[144.5px]"
-      >
+      <div className="absolute top-[899px] bg-[#fbfaf9] border border-[#d9d9d9] border-solid h-[75px] left-[1027px] rounded-[10px] shadow-[0px_6px_4px_0px_rgba(0,0,0,0.05),0px_3px_3px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[350px]" />
+      <p className="absolute top-[908px] font-semibold leading-[normal] left-[1116.25px] not-italic text-[#808080] text-[13px] text-center w-[144.5px]">
         STATION CAPACITY
       </p>
-      <div style={{ top: 941 + APPT_SHIFT }} className="absolute bg-[#d9d9d9] h-[5px] left-[1054px] rounded-[10px] w-[292px]" />
-      <div style={{ top: 941 + APPT_SHIFT }} className="absolute bg-[#ad2b22] h-[5px] left-[1054px] rounded-[10px] w-[224px]" />
-      <p
-        style={{ top: 930 + APPT_SHIFT }}
-        className="absolute font-semibold leading-[normal] left-[1334.5px] not-italic text-[#808080] text-[7.5px] text-center w-[23px]"
-      >
+      <div className="absolute top-[941px] bg-[#d9d9d9] h-[5px] left-[1054px] rounded-[10px] w-[292px]" />
+      <div className="absolute top-[941px] bg-[#ad2b22] h-[5px] left-[1054px] rounded-[10px] w-[224px]" />
+      <p className="absolute top-[930px] font-semibold leading-[normal] left-[1334.5px] not-italic text-[#808080] text-[7.5px] text-center w-[23px]">
         72%
       </p>
-      <p
-        style={{ top: 950 + APPT_SHIFT }}
-        className="absolute font-medium leading-[normal] left-[1091px] not-italic text-[#aaa4a0] text-[11px] w-[212px]"
-      >
+      <p className="absolute top-[950px] font-medium leading-[normal] left-[1091px] not-italic text-[#aaa4a0] text-[11px] w-[212px]">
         4 of 6 extraction beds currently in use
       </p>
 
