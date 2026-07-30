@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import WebNav from "../components/WebNav";
 import PageHeader from "../components/PageHeader";
+import { api } from "../lib/apiClient";
 
 const imgVector2 = "https://www.figma.com/api/mcp/asset/05e71480-622d-4ace-8429-68c10fb260b9";
 const imgEllipse54 = "https://www.figma.com/api/mcp/asset/98df5025-d8c9-4be7-b57b-213f0507b011";
@@ -14,12 +14,23 @@ const imgGroup5 = "https://www.figma.com/api/mcp/asset/729d32a7-fdc8-4e32-a9fb-4
 const imgVector5 = "https://www.figma.com/api/mcp/asset/a5ce2ada-bfd4-45b2-959c-ea404768c811";
 const imgVector6 = "https://www.figma.com/api/mcp/asset/06fd37b2-fd44-4e70-8e2d-3fe15832cc5e";
 
-const sessionInfo = [
-  { key: "engine", label: "ENGINE", value: "Chrome v122", icon: imgGroup4 },
-  { key: "system", label: "SYSTEM", value: "Windows 11", icon: imgGroup5 },
-  { key: "network", label: "NETWORK IP", value: "192.168.1.104", icon: imgVector5 },
-  { key: "region", label: "REGION", value: "Quezon, PH", icon: imgVector6 },
+// Static per-tile chrome; values come from GET /api/settings/session.
+const SESSION_TILE_META = [
+  { key: "engine", label: "ENGINE", icon: imgGroup4 },
+  { key: "system", label: "SYSTEM", icon: imgGroup5 },
+  { key: "network", label: "NETWORK IP", icon: imgVector5 },
+  { key: "region", label: "REGION", icon: imgVector6 },
 ];
+
+function formatRelativeTime(isoString) {
+  if (!isoString) return "";
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins = Math.max(0, Math.round(diffMs / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ago`;
+}
 
 // Field label helper — keeps the "space after the heading" consistent
 // everywhere instead of hand-tuned pixel offsets per field.
@@ -36,14 +47,42 @@ function Field({ label, hint, children }) {
 export default function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState("admin.root@email.com");
+  const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saveMessage, setSaveMessage] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [profile, setProfile] = useState(null);
+  const [session, setSession] = useState(null);
 
   const contentRef = useRef(null);
   const [pageHeight, setPageHeight] = useState(1024);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [me, activeSession] = await Promise.all([
+          api.get("/api/auth/me"),
+          api.get("/api/settings/session"),
+        ]);
+        if (cancelled) return;
+        setProfile(me);
+        setEmail(me.email);
+        setSession(activeSession);
+      } catch (err) {
+        if (!cancelled) setSaveMessage({ type: "error", text: `Couldn't load profile: ${err.message}` });
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const el = contentRef.current;
@@ -59,7 +98,7 @@ export default function Settings() {
     return () => observer.disconnect();
   }, [saveMessage]);
 
-  function handleSave(e) {
+  async function handleSave(e) {
     e.preventDefault();
 
     if (currentPassword || newPassword || confirmPassword) {
@@ -77,15 +116,39 @@ export default function Settings() {
       }
     }
 
-    setSaveMessage({ type: "success", text: "Credentials updated successfully." });
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+    setIsSaving(true);
+    try {
+      if (profile && email !== profile.email) {
+        const updated = await api.patch("/api/settings/email", { email });
+        setProfile(updated);
+      }
+      if (currentPassword || newPassword || confirmPassword) {
+        await api.patch("/api/settings/password", { currentPassword, newPassword });
+      }
+      setSaveMessage({ type: "success", text: "Credentials updated successfully." });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setSaveMessage({ type: "error", text: err.message });
+    } finally {
+      setIsSaving(false);
+    }
   }
+
+  const sessionTiles = SESSION_TILE_META.map((meta) => ({
+    ...meta,
+    value:
+      {
+        engine: session?.engine,
+        system: session?.system,
+        network: session?.ipAddress,
+        region: session?.region,
+      }[meta.key] ?? "--",
+  }));
 
   return (
     <div className="bg-white relative w-[1440px] mx-auto font-poppins" style={{ height: pageHeight }}>
-      <WebNav property1="SettingsNav" className="absolute left-0 top-0 h-full w-[296px] overflow-clip" />
 
       {/* Header bar */}
       <PageHeader title="Administrative Controls" />
@@ -119,7 +182,9 @@ export default function Settings() {
               <p className="font-poppins font-medium text-[20px] text-black">Account Credentials</p>
               <p className="mt-1 flex items-center gap-2 font-poppins font-semibold text-[15px] text-[#808080]">
                 <img alt="" className="w-2 h-2" src={imgEllipse54} />
-                Last login from Tayabas City, Quezon, PH &nbsp;&nbsp; 3 hours ago
+                {session
+                  ? `Last login from ${session.region ?? "unknown region"}    ${formatRelativeTime(session.createdAt)}`
+                  : "Loading session info..."}
               </p>
             </div>
           </div>
@@ -128,7 +193,7 @@ export default function Settings() {
             <div className="grid grid-cols-2 gap-x-10 gap-y-8">
               <Field label="SYSTEM USERNAME" hint="Username is immutable for system level accounts.">
                 <div className="bg-[#d9d9d9] rounded-[10px] w-full h-[40px] flex items-center px-4">
-                  <span className="font-poppins text-[15px] text-[#aaa4a0]">admin</span>
+                  <span className="font-poppins text-[15px] text-[#aaa4a0]">{profile?.username ?? "--"}</span>
                 </div>
               </Field>
 
@@ -136,7 +201,7 @@ export default function Settings() {
                 <div className="bg-[rgba(225,32,53,0.25)] rounded-[10px] w-full h-[40px] flex items-center px-4 gap-2">
                   <img alt="" className="w-4 h-4" src={imgVector3} />
                   <span className="font-poppins font-medium text-[15px] text-[#fa0000] tracking-wide">
-                    FULL_ROOT_ACCESS_LEVEL_5
+                    {profile?.clearance ?? "--"}
                   </span>
                 </div>
               </Field>
@@ -209,9 +274,12 @@ export default function Settings() {
               )}
               <button
                 type="submit"
-                className="shrink-0 bg-[#ad2b21] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+                disabled={isSaving}
+                className="shrink-0 bg-[#ad2b21] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
               >
-                <span className="font-poppins font-bold text-[17px] text-white">Save Credentials</span>
+                <span className="font-poppins font-bold text-[17px] text-white">
+                  {isSaving ? "Saving..." : "Save Credentials"}
+                </span>
               </button>
             </div>
           </div>
@@ -233,10 +301,12 @@ export default function Settings() {
                 <span className="border border-[#808080] rounded-[10px] h-[19px] px-3 flex items-center justify-center font-poppins font-bold text-[10px] text-black whitespace-nowrap">
                   Active Now
                 </span>
-                <p className="font-poppins font-medium text-[15px] text-black">Established Session ID: VTX-992-KLA</p>
+                <p className="font-poppins font-medium text-[15px] text-black">
+                  Established Session ID: {session?.sessionCode ?? "--"}
+                </p>
               </div>
               <div className="flex gap-3">
-                {sessionInfo.map((info) => (
+                {sessionTiles.map((info) => (
                   <div key={info.key} className="bg-[#d9d9d9] rounded-[13px] w-[115px] h-[70px] px-3 pt-3">
                     <img alt="" className="w-4 h-4 mb-1" src={info.icon} />
                     <p className="font-poppins font-semibold text-[12px] text-black tracking-wide">{info.label}</p>

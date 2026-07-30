@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { api, clearToken } from "../lib/apiClient";
 
 const imgEllipse66 = "https://www.figma.com/api/mcp/asset/f07e63bf-ab8c-44f6-9e47-24b9229b4d31";
 const imgGroup6 = "https://www.figma.com/api/mcp/asset/7ed43ebc-11a1-429b-a3c3-941f47c6dff6";
@@ -9,13 +11,23 @@ const imgVector7 = "https://www.figma.com/api/mcp/asset/4e70a1e9-3e56-4d85-90cf-
 // so it only implements the dialog + dimmed backdrop, not the page behind it.
 export default function LogoutConfirmation() {
   const navigate = useNavigate();
+  const [isEnding, setIsEnding] = useState(false);
 
   function handleCancel() {
     navigate(-1);
   }
 
-  function handleConfirm() {
-    navigate("/login");
+  async function handleConfirm() {
+    setIsEnding(true);
+    try {
+      await api.post("/api/auth/logout");
+    } catch {
+      // Even if the server call fails (e.g. already expired), still clear
+      // the local token and send the admin back to login.
+    } finally {
+      clearToken();
+      navigate("/login");
+    }
   }
 
   return (
@@ -60,9 +72,12 @@ export default function LogoutConfirmation() {
         <button
           type="button"
           onClick={handleConfirm}
-          className="absolute left-[418px] top-[296px] bg-[#ad2b21] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer"
+          disabled={isEnding}
+          className="absolute left-[418px] top-[296px] bg-[#ad2b21] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer disabled:cursor-wait disabled:opacity-70"
         >
-          <span className="font-poppins font-bold text-[17px] text-white">Confirm Logout</span>
+          <span className="font-poppins font-bold text-[17px] text-white">
+            {isEnding ? "Logging out..." : "Confirm Logout"}
+          </span>
         </button>
       </div>
     </div>

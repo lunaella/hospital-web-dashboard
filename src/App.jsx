@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import ScaleToFit from "./components/ScaleToFit";
+import AppShell from "./components/AppShell";
 import Login from "./pages/Login";
 import LoginFailed from "./pages/LoginFailed";
 import Dashboard from "./pages/Dashboard";
@@ -24,7 +25,7 @@ const MODAL_ROUTES = (
   <>
     <Route path="/logout-confirmation" element={<LogoutConfirmation />} />
     <Route path="/bd-confirm" element={<BDConfirm />} />
-    <Route path="/view-broadcasts" element={<ScaleToFit><ViewBDPage /></ScaleToFit>} />
+    <Route path="/view-broadcasts" element={<AppShell><ViewBDPage /></AppShell>} />
     <Route path="/new-broadcast" element={<NewBDPage />} />
   </>
 );
@@ -39,11 +40,11 @@ function AppRoutes() {
         <Route path="/" element={<ScaleToFit><Login /></ScaleToFit>} />
         <Route path="/login" element={<ScaleToFit><Login /></ScaleToFit>} />
         <Route path="/login-failed" element={<ScaleToFit><LoginFailed /></ScaleToFit>} />
-        <Route path="/dashboard" element={<ScaleToFit><Dashboard /></ScaleToFit>} />
+        <Route path="/dashboard" element={<AppShell><Dashboard /></AppShell>} />
         <Route path="/dashboard-new" element={<ScaleToFit><DashboardNew /></ScaleToFit>} />
-        <Route path="/reports" element={<ScaleToFit><Reports /></ScaleToFit>} />
-        <Route path="/settings" element={<ScaleToFit><Settings /></ScaleToFit>} />
-        <Route path="/donor-management" element={<ScaleToFit><DonorManagement /></ScaleToFit>} />
+        <Route path="/reports" element={<AppShell><Reports /></AppShell>} />
+        <Route path="/settings" element={<AppShell><Settings /></AppShell>} />
+        <Route path="/donor-management" element={<AppShell><DonorManagement /></AppShell>} />
         {MODAL_ROUTES}
       </Routes>
 

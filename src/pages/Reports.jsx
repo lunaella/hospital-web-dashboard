@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import WebNav from "../components/WebNav";
 import PageHeader from "../components/PageHeader";
+import { api } from "../lib/apiClient";
 
 const imgGroup3 = "https://www.figma.com/api/mcp/asset/b0075d24-ad2e-470c-aa96-18af8ab5b2d2";
 const imgVector2 = "https://www.figma.com/api/mcp/asset/64db5e91-cefa-4b4c-85d0-d07947182c3f";
@@ -16,59 +16,44 @@ const imgEllipse45 = "https://www.figma.com/api/mcp/asset/888899df-726b-418a-a4f
 const imgLine35 = "https://www.figma.com/api/mcp/asset/4528ae71-95a4-4296-9330-f5bea7018979";
 const imgGroup6 = "https://www.figma.com/api/mcp/asset/7a145b6b-5f40-4483-9c33-bfe3c4a1e596";
 
-const kpiCards = [
-  {
-    key: "response-time",
-    left: "left-[277px]",
-    value: "14.2 min",
-    label: "Mean Response Time",
-    trendText: "-4.1m",
-    trendColor: "text-black",
-    badgeIcon: imgGroup4,
-  },
-  {
-    key: "active-donors",
-    left: "left-[554px]",
-    value: "18",
-    label: "Active Donors Reach",
-    trendText: "+124",
-    trendColor: "text-black",
-    badgeIcon: imgGroup5,
-  },
-];
+// Static per-card chrome; value/trend come from the API.
+const KPI_META = {
+  meanResponseTimeMinutes: { key: "response-time", left: "left-[277px]", label: "Mean Response Time", badgeIcon: imgGroup4 },
+  activeDonorsReach: { key: "active-donors", left: "left-[554px]", label: "Active Donors Reach", badgeIcon: imgGroup5 },
+};
 
-const fulfillmentRows = [
-  { reqId: "REQ-8821", priority: "EMERGENCY", priorityColor: "text-[#c26460]", blood: "O-", hasEllipse: true, time: "12 m", rating: "Optimal" },
-  { reqId: "REQ-8819", priority: "URGENT", priorityColor: "text-[#868686]", blood: "A+", hasEllipse: false, time: "12 m", rating: "Good" },
-  { reqId: "REQ-8815", priority: "EMERGENCY", priorityColor: "text-[#c26460]", blood: "B-", hasEllipse: true, time: "12 m", rating: "Acceptable" },
-  { reqId: "REQ-8795", priority: "NORMAL", priorityColor: "text-[#868686]", blood: "AB+", hasEllipse: false, time: "12 m", rating: "Optimal" },
-];
+function priorityColorFor(priority) {
+  return priority === "EMERGENCY" ? "text-[#c26460]" : "text-[#868686]";
+}
 
-const extraFulfillmentRows = [
-  { reqId: "REQ-8790", priority: "NORMAL", priorityColor: "text-[#868686]", blood: "B+", hasEllipse: false, time: "18 m", rating: "Good" },
-  { reqId: "REQ-8788", priority: "URGENT", priorityColor: "text-[#868686]", blood: "O-", hasEllipse: false, time: "9 m", rating: "Optimal" },
-  { reqId: "REQ-8781", priority: "EMERGENCY", priorityColor: "text-[#c26460]", blood: "A-", hasEllipse: true, time: "22 m", rating: "Acceptable" },
-];
+// Same three states/colors as the Dashboard pill (kept in sync since both
+// read from the same live-checked GET .../system-health payload).
+const SYSTEM_HEALTH_BADGE = {
+  OPTIMAL: { label: "Optimal", border: "border-[#bfe3c8]", text: "text-[#1e7d32]" },
+  DEGRADED: { label: "Degraded", border: "border-[#f0dfa8]", text: "text-[#8a6d1f]" },
+  CRITICAL: { label: "Disconnected", border: "border-[#eec3c1]", text: "text-[#b94842]" },
+};
+
+function formatTrend(trendPct) {
+  if (trendPct == null) return "--";
+  return `${trendPct > 0 ? "+" : ""}${trendPct}%`;
+}
 
 const DATE_RANGES = ["Last 7 days", "Last 30 days", "Last 90 days"];
 const PRIORITY_FILTERS = ["all", "EMERGENCY", "URGENT", "NORMAL"];
 
-const fulfillmentBreakdown = [
-  { label: "Emergency", value: "94%", color: "#ad2b21" },
-  { label: "Urgent", value: "88%", color: "#c9a227" },
-  { label: "Normal", value: "76%", color: "#5b8a52" },
+const BREAKDOWN_META = [
+  { key: "emergency", label: "Emergency", color: "#ad2b21" },
+  { key: "urgent", label: "Urgent", color: "#c9a227" },
+  { key: "normal", label: "Normal", color: "#5b8a52" },
 ];
 
 const chartYAxis = ["24", "18", "12", "6", "0"];
-const chartXAxis = ["01 March", "05 March", "10 March", "15 March", "20 March", "25 March", "31 March"];
 
 // Plot geometry: 248px-tall plot area maps value range [0, 24] to y range [248, 0].
 const CHART_MAX = 24;
 const CHART_PLOT_HEIGHT = 248;
-const valueToY = (value) => ((CHART_MAX - value) / CHART_MAX) * CHART_PLOT_HEIGHT;
-
-const chartValues = [17.8, 16, 21.5, 13.5, 12.3, 10.8, 8.8];
-const chartPoints = chartValues.map((value, i) => ({ x: 22 + i * 86, y: valueToY(value) }));
+const valueToY = (value) => ((CHART_MAX - Math.min(value, CHART_MAX)) / CHART_MAX) * CHART_PLOT_HEIGHT;
 const SLA_TARGET_Y = valueToY(20.5);
 
 // Catmull-Rom -> cubic Bezier smoothing so the line reads as a smooth curve
@@ -90,8 +75,6 @@ function buildSmoothPath(points) {
   return d;
 }
 
-const chartLinePath = buildSmoothPath(chartPoints);
-const chartAreaPath = `${chartLinePath} L ${chartPoints[chartPoints.length - 1].x} ${CHART_PLOT_HEIGHT} L ${chartPoints[0].x} ${CHART_PLOT_HEIGHT} Z`;
 const chartGridYs = [0, 62, 124, 186, 248];
 
 export default function Reports() {
@@ -101,6 +84,49 @@ export default function Reports() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [showAllLogs, setShowAllLogs] = useState(false);
 
+  const [kpis, setKpis] = useState(null);
+  const [fulfillmentRatePct, setFulfillmentRatePct] = useState(null);
+  const [responseTimeSeries, setResponseTimeSeries] = useState([]);
+  const [fulfillmentLog, setFulfillmentLog] = useState([]);
+  const [breakdown, setBreakdown] = useState(null);
+  const [systemHealth, setSystemHealth] = useState(null);
+  const [demandForecast, setDemandForecast] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [kpisData, dashboardStats, series, log, breakdownData, health, forecast] = await Promise.all([
+          api.get("/api/reports/kpis"),
+          api.get("/api/dashboard/stats"),
+          api.get("/api/reports/response-time"),
+          api.get("/api/reports/fulfillment-log?limit=20"),
+          api.get("/api/reports/fulfillment-breakdown"),
+          api.get("/api/reports/system-health"),
+          api.get("/api/reports/demand-forecast"),
+        ]);
+        if (cancelled) return;
+
+        setKpis(kpisData);
+        setFulfillmentRatePct(dashboardStats.fulfillmentRatePct);
+        setResponseTimeSeries(series);
+        setFulfillmentLog(log);
+        setBreakdown(breakdownData);
+        setSystemHealth(health);
+        setDemandForecast(forecast);
+      } catch (err) {
+        if (!cancelled) setLoadError(err.message);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   function cycleDateRange() {
     setDateRange((prev) => {
       const idx = DATE_RANGES.indexOf(prev);
@@ -108,15 +134,76 @@ export default function Reports() {
     });
   }
 
-  const allRows = showAllLogs ? [...fulfillmentRows, ...extraFulfillmentRows] : fulfillmentRows;
-  const visibleRows = priorityFilter === "all" ? allRows : allRows.filter((r) => r.priority === priorityFilter);
+  const visibleRows = (
+    priorityFilter === "all" ? fulfillmentLog : fulfillmentLog.filter((r) => r.priority === priorityFilter)
+  ).slice(0, showAllLogs ? undefined : 4);
   const extraRowCount = Math.max(0, visibleRows.length - 4);
   const logCardHeight = 446 + extraRowCount * 62;
   const rootHeight = 1350 + extraRowCount * 62;
 
+  // Chart geometry derived from the fetched 7-day series.
+  const chartPoints = responseTimeSeries.map((d, i) => ({ x: 22 + i * 86, y: valueToY(d.avgMinutes ?? 0) }));
+  const chartLinePath = buildSmoothPath(chartPoints);
+  const chartAreaPath =
+    chartPoints.length > 1
+      ? `${chartLinePath} L ${chartPoints[chartPoints.length - 1].x} ${CHART_PLOT_HEIGHT} L ${chartPoints[0].x} ${CHART_PLOT_HEIGHT} Z`
+      : "";
+  const chartXAxis = responseTimeSeries.map((d) =>
+    new Date(d.date).toLocaleDateString("en-US", { day: "2-digit", month: "short" })
+  );
+
+  const kpiCards = kpis
+    ? [
+        { ...KPI_META.meanResponseTimeMinutes, value: `${kpis.meanResponseTimeMinutes.value} min`, trendText: formatTrend(kpis.meanResponseTimeMinutes.trendPct) },
+        { ...KPI_META.activeDonorsReach, value: String(kpis.activeDonorsReach.value), trendText: formatTrend(kpis.activeDonorsReach.trendPct) },
+      ]
+    : [];
+
+  const fulfillmentBreakdown = breakdown
+    ? BREAKDOWN_META.map((meta) => ({ ...meta, value: `${breakdown[meta.key]}%`, pct: breakdown[meta.key] }))
+    : [];
+  // conic-gradient stop percentages accumulate across the three segments.
+  const breakdownStops = fulfillmentBreakdown.reduce((acc, item) => {
+    const start = acc.length ? acc[acc.length - 1].end : 0;
+    acc.push({ ...item, start, end: start + item.pct });
+    return acc;
+  }, []);
+
+  // System Health card level bars. 200ms mirrors DB_DEGRADED_MS in
+  // server/src/utils/systemHealth.js — used only to scale the latency bar
+  // visually, not to re-derive the OPTIMAL/DEGRADED/CRITICAL classification
+  // (the badge above already reflects the server's own verdict on that).
+  const MAX_EXPECTED_LATENCY_MS = 200;
+  const latencyLevelPct = systemHealth
+    ? Math.min(100, Math.round((systemHealth.minHeapLatencyMs / MAX_EXPECTED_LATENCY_MS) * 100))
+    : 0;
+  const SYNC_LEVEL_BY_STATUS = { OPTIMAL: 100, DEGRADED: 55, CRITICAL: 8 };
+  const syncLevelPct = SYNC_LEVEL_BY_STATUS[systemHealth?.overallStatus] ?? 0;
+  const healthBarFillClass =
+    systemHealth?.overallStatus === "CRITICAL" ? "bg-[#b94842]" : "bg-[#ad2b21]";
+
+  // Demand Forecast card copy, derived from the real 48h-trend payload
+  // (see server getDemandForecast) instead of hardcoded text.
+  const forecastHeadline = (() => {
+    if (!demandForecast) return "Loading demand trends...";
+    const h = demandForecast.headline;
+    if (!h) return "Demand across all blood types has stayed steady over the past 48 hours — no significant shifts detected.";
+    if (h.kind === "new") {
+      return `New demand has emerged for ${h.bloodType} over the past 48 hours (${h.units} units requested), with no prior baseline to compare against.`;
+    }
+    return `Based on the past 48 hours, ${h.bloodType} demand rose ${h.pctChange}% compared to the prior 48 hours — expect continued elevated need if the trend holds.`;
+  })();
+
+  const advisoryText = (() => {
+    if (!demandForecast) return "Checking current stock levels...";
+    const types = demandForecast.advisoryTypes;
+    if (!types?.length) return "No blood types currently require pre-emptive donor outreach.";
+    const list = types.length === 2 ? `${types[0]} and ${types[1]}` : types[0];
+    return `Recommend pre-emptive alerts to scheduled donors for ${list} type${types.length > 1 ? "s" : ""}.`;
+  })();
+
   return (
     <div className="bg-white relative w-[1440px] mx-auto font-poppins" style={{ height: rootHeight }}>
-      <WebNav property1="ReportsNav" className="absolute left-0 top-0 h-full w-[296px] overflow-clip" />
 
       {/* Header bar */}
       <PageHeader title="Analytical Overview" />
@@ -129,6 +216,12 @@ export default function Reports() {
             Strategic performance monitoring and efficiency metrics.
           </p>
         </div>
+
+        {loadError && (
+          <p className="absolute left-0 top-[155px] font-poppins font-medium text-[12px] text-[#d70b07]">
+            Couldn't load report data: {loadError}
+          </p>
+        )}
 
         {/* Action buttons */}
         <button
@@ -183,8 +276,9 @@ export default function Reports() {
           <div className="absolute left-[26px] top-[21px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
             <img alt="" className="w-3.5 h-3.5" src={imgVector5} />
           </div>
-          <span className="absolute left-[192px] top-[16px] font-poppins font-medium text-[11px] text-black">+2.4%</span>
-          <p className="absolute left-[25px] top-[59px] font-poppins font-bold text-[35px] text-black">89.4%</p>
+          <p className="absolute left-[25px] top-[59px] font-poppins font-bold text-[35px] text-black">
+            {fulfillmentRatePct != null ? `${fulfillmentRatePct}%` : "--"}
+          </p>
           <p className="absolute left-[25px] top-[104px] font-poppins font-bold text-[17px] text-[#808080]">Avg Fulfillment Rate</p>
         </div>
 
@@ -195,7 +289,7 @@ export default function Reports() {
             </div>
             <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
               <img alt="" className="w-4 h-4" src={imgVector4} />
-              <span className={`font-poppins font-medium text-[11px] ${card.trendColor}`}>{card.trendText}</span>
+              <span className="font-poppins font-medium text-[11px] text-black">{card.trendText}</span>
             </div>
             <p className="absolute left-[20px] top-[98px] font-poppins font-bold text-[35px] text-black">{card.value}</p>
             <p className="absolute left-[20px] top-[68px] font-poppins font-bold text-[17px] text-[#808080]">{card.label}</p>
@@ -208,9 +302,13 @@ export default function Reports() {
           </div>
           <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
             <img alt="" className="w-4 h-4 rotate-180 -scale-x-100" src={imgVector6} />
-            <span className="font-poppins font-medium text-[11px] text-[#c46865]">-12%</span>
+            <span className="font-poppins font-medium text-[11px] text-[#c46865]">
+              {kpis ? formatTrend(kpis.unitsProcessed.trendPct) : "--"}
+            </span>
           </div>
-          <p className="absolute left-[20px] top-[98px] font-poppins font-bold text-[35px] text-black">428</p>
+          <p className="absolute left-[20px] top-[98px] font-poppins font-bold text-[35px] text-black">
+            {kpis ? kpis.unitsProcessed.value : "--"}
+          </p>
           <p className="absolute left-[20px] top-[68px] font-poppins font-bold text-[17px] text-[#808080]">Units Processed</p>
         </div>
 
@@ -284,7 +382,9 @@ export default function Reports() {
           <div
             className="absolute left-[73px] top-[95px] w-[160px] h-[160px] rounded-full flex items-center justify-center"
             style={{
-              background: `conic-gradient(${fulfillmentBreakdown[0].color} 0% 35%, ${fulfillmentBreakdown[1].color} 35% 65%, ${fulfillmentBreakdown[2].color} 65% 100%)`,
+              background: breakdownStops.length
+                ? `conic-gradient(${breakdownStops.map((s) => `${s.color} ${s.start}% ${s.end}%`).join(", ")})`
+                : "#f0f0f0",
             }}
           >
             <div className="w-[96px] h-[96px] rounded-full bg-white" />
@@ -354,7 +454,7 @@ export default function Reports() {
               {row.hasEllipse ? (
                 <>
                   <img alt="" className="w-[16px] h-[14px]" src={imgEllipse45} />
-                  <span className={`font-poppins font-semibold text-[11px] tracking-wide ${row.priorityColor}`}>{row.priority}</span>
+                  <span className={`font-poppins font-semibold text-[11px] tracking-wide ${priorityColorFor(row.priority)}`}>{row.priority}</span>
                 </>
               ) : (
                 <span className="font-poppins font-medium text-[13px] text-[#868686]">
@@ -365,7 +465,7 @@ export default function Reports() {
             <span className="w-[120px] text-center font-poppins font-semibold text-[13px] text-[#868686]">{row.time}</span>
             <div className="w-[110px] flex justify-center">
               <span className="border-2 border-[#c5c4c4] rounded-full px-3 h-[24px] flex items-center justify-center font-poppins font-semibold text-[13px] text-[#868686] whitespace-nowrap">
-                {row.rating}
+                {row.rating ?? "Pending"}
               </span>
             </div>
             <div className="w-[95px] flex justify-center">
@@ -386,20 +486,41 @@ export default function Reports() {
           <div className="pl-[22px] pr-[22px] pt-[16px] pb-[28px] flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="font-poppins font-bold text-[15px] text-[#808080] tracking-wide">SYSTEM HEALTH</span>
-              <span className="border border-[#b3b3b3] rounded-full px-3 h-[22px] flex items-center justify-center font-poppins font-bold text-[10px] text-[#868686] tracking-wide">
-                STABLE
-              </span>
+              {(() => {
+                const badge = SYSTEM_HEALTH_BADGE[systemHealth?.overallStatus] ?? null;
+                return (
+                  <span
+                    className={`border rounded-full px-3 h-[22px] flex items-center justify-center font-poppins font-bold text-[10px] tracking-wide transition-colors ${
+                      badge ? `${badge.border} ${badge.text}` : "border-[#b3b3b3] text-[#868686]"
+                    }`}
+                  >
+                    {badge ? badge.label.toUpperCase() : "--"}
+                  </span>
+                );
+              })()}
             </div>
             <div className="flex items-center justify-between">
               <span className="font-poppins font-medium text-[12px] text-[#868686]">Min-Heap Latency</span>
-              <span className="font-poppins font-bold text-[12px] text-black">12ms</span>
+              <span className="font-poppins font-bold text-[12px] text-black">
+                {systemHealth ? `${systemHealth.minHeapLatencyMs}ms` : "--"}
+              </span>
             </div>
-            <div className="w-full h-[3px] bg-[#f1dddc] rounded-full" />
+            <div className="w-full h-[3px] bg-[#f1dddc] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${healthBarFillClass}`}
+                style={{ width: `${latencyLevelPct}%` }}
+              />
+            </div>
             <div className="flex items-center justify-between">
               <span className="font-poppins font-medium text-[12px] text-[#868686]">Database Sync</span>
-              <span className="font-poppins font-bold text-[12px] text-black">Real-time</span>
+              <span className="font-poppins font-bold text-[12px] text-black">{systemHealth?.dbSyncStatus ?? "--"}</span>
             </div>
-            <div className="w-full h-[3px] bg-[#f1dddc] rounded-full" />
+            <div className="w-full h-[3px] bg-[#f1dddc] rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${healthBarFillClass}`}
+                style={{ width: `${syncLevelPct}%` }}
+              />
+            </div>
           </div>
         </div>
 
@@ -407,13 +528,13 @@ export default function Reports() {
         <div className="absolute left-[778px] top-[1010px] bg-[rgba(255,245,245,0.85)] rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[215px]">
           <p className="absolute left-[19px] top-[13px] font-poppins font-semibold text-[15px] text-[#ad2b21] tracking-wide">DEMAND FORECAST</p>
           <p className="absolute left-[19px] top-[42px] font-poppins font-medium text-[10px] text-[#868686] w-[265px]">
-            Based on historical trends, we anticipate 15% increase in O- and demand over the next 48 hours.
+            {forecastHeadline}
           </p>
           <div className="absolute left-[19px] top-[92px] bg-white rounded-[10px] w-[265px] h-[67px]">
             <img alt="" className="absolute left-[9px] top-[9px] w-[16px] h-[16px]" src={imgGroup6} />
             <p className="absolute left-[33px] top-[9px] font-poppins font-semibold text-[12px] text-[#ad2b21] tracking-wide">MEDTECH ADVISORY</p>
             <p className="absolute left-[9px] top-[27px] font-poppins font-medium text-[9px] text-[#868686] w-[242px]">
-              Recommend pre-emptive alerts to scheduled donors for O- and B- types.
+              {advisoryText}
             </p>
           </div>
           <button

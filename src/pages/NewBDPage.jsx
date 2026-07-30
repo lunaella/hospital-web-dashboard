@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../lib/apiClient";
 
 // Rebuilt from the "Create New Broadcast" reference screenshot the user provided
 // directly from Figma (node 510:812, "NewBDPage") — the Figma MCP tool quota was
@@ -44,17 +45,36 @@ export default function NewBDPage() {
 
   const [urgency, setUrgency] = useState("Emergency");
   const [bloodType, setBloodType] = useState("O-");
+  const [ward, setWard] = useState("");
   const [units, setUnits] = useState(2);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   function handleCancel() {
     navigate(-1);
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    // No backend wiring yet — log the broadcast request and return to the list.
-    console.log("New blood donation broadcast:", { urgency, bloodType, units });
-    navigate("/view-broadcasts");
+    if (!ward.trim()) {
+      setError("Enter the target ward or unit.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await api.post("/api/requests", {
+        priority: urgency.toUpperCase(),
+        bloodType,
+        ward,
+        unitsNeeded: units,
+      });
+      navigate("/view-broadcasts");
+    } catch (err) {
+      setError(err.message);
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -135,11 +155,28 @@ export default function NewBDPage() {
           </div>
         </div>
 
-        {/* 3. Quota requirement */}
+        {/* 3. Ward / unit */}
+        <div className="mb-5">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="font-poppins font-bold text-[11px] text-[#ad2b21] tracking-wide whitespace-nowrap">
+              3. TARGET WARD / UNIT
+            </span>
+            <div className="flex-1 h-px bg-[#e5e4e7]" />
+          </div>
+          <input
+            type="text"
+            value={ward}
+            onChange={(e) => setWard(e.target.value)}
+            placeholder="e.g. ICU-4, ER-A, Surgery-B"
+            className="w-full h-[42px] rounded-[10px] border border-[#d9d9d9] px-4 font-poppins text-[14px] text-black outline-none"
+          />
+        </div>
+
+        {/* 4. Quota requirement */}
         <div className="mb-7">
           <div className="flex items-center gap-3 mb-3">
             <span className="font-poppins font-bold text-[11px] text-[#ad2b21] tracking-wide whitespace-nowrap">
-              3. QUOTA REQUIREMENT
+              4. QUOTA REQUIREMENT
             </span>
             <div className="flex-1 h-px bg-[#e5e4e7]" />
           </div>
@@ -167,6 +204,8 @@ export default function NewBDPage() {
           </div>
         </div>
 
+        {error && <p className="mb-4 font-poppins text-[13px] text-[#d70b07]">{error}</p>}
+
         {/* Footer */}
         <div className="flex items-center justify-end gap-3">
           <button
@@ -178,9 +217,10 @@ export default function NewBDPage() {
           </button>
           <button
             type="submit"
-            className="h-[45px] px-6 rounded-[16px] bg-[#ad2b21] text-[14px] font-poppins font-bold text-white cursor-pointer hover:bg-[#8f2419] transition-colors"
+            disabled={isSubmitting}
+            className="h-[45px] px-6 rounded-[16px] bg-[#ad2b21] text-[14px] font-poppins font-bold text-white cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
           >
-            Confirm &amp; Broadcast Request
+            {isSubmitting ? "Broadcasting..." : "Confirm & Broadcast Request"}
           </button>
         </div>
       </form>

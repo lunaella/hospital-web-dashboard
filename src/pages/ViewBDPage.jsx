@@ -1,28 +1,9 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
-import WebNav from "../components/WebNav";
+import { useEffect, useState } from "react";
+import { api } from "../lib/apiClient";
 
 const imgEmergencyDot = "https://www.figma.com/api/mcp/asset/d8471049-5af6-4108-9373-e40b77e11f4e";
 const imgClockIcon = "https://www.figma.com/api/mcp/asset/5d062be4-82ce-4311-bdc6-a66e7875acc6";
-
-// Data mirrors the "View All Broadcasts" table (Frame 123 / node 559:832) from the
-// ViewBDPage Figma frame (node 554:3214). Rows are modeled as data rather than
-// individually absolutely-positioned nodes since they are visually identical templates.
-const broadcasts = [
-  { id: "REQ-6782", bloodType: "AB-", priority: "EMERGENCY", ward: "OR-2", units: "0/10 Units", percent: 0, time: "1m" },
-  { id: "REQ-9012", bloodType: "O-", priority: "EMERGENCY", ward: "ICU-4", units: "4/10 Units", percent: 40, time: "12m" },
-  { id: "REQ-8843", bloodType: "A+", priority: "EMERGENCY", ward: "ER-A", units: "2/3 Units", percent: 67, time: "28m" },
-  { id: "REQ-9104", bloodType: "B-", priority: "URGENT", ward: "Surgery-B", units: "1/5 Units", percent: 20, time: "45m" },
-  { id: "REQ-8756", bloodType: "AB+", priority: "URGENT", ward: "DR-5", units: "5/5 Units", percent: 100, time: "1h 05m" },
-  { id: "REQ-9211", bloodType: "O+", priority: "NORMAL", ward: "Dialysis", units: "8/15 Units", percent: 53, time: "35m" },
-  { id: "REQ-3671", bloodType: "B+", priority: "NORMAL", ward: "General - 3", units: "10/15 Units", percent: 67, time: "47m" },
-  { id: "REQ-5231", bloodType: "A-", priority: "NORMAL", ward: "Oncology", units: "5/15 Units", percent: 33, time: "20m" },
-  { id: "REQ-8834", bloodType: "AB+", priority: "NORMAL", ward: "Pre-Op Prep", units: "3/10 Units", percent: 30, time: "13m" },
-  { id: "REQ-5767", bloodType: "O-", priority: "NORMAL", ward: "General - 5", units: "1/5 Units", percent: 20, time: "28m" },
-  { id: "REQ-8534", bloodType: "O+", priority: "NORMAL", ward: "Dialysis", units: "2/15 Units", percent: 13, time: "3m" },
-  { id: "REQ-9341", bloodType: "O+", priority: "NORMAL", ward: "General - 1", units: "4/4 Units", percent: 100, time: "1h 25m" },
-  { id: "REQ-3671", bloodType: "AB-", priority: "NORMAL", ward: "Oncology", units: "2/6 Units", percent: 33, time: "47m" },
-];
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -30,10 +11,91 @@ const priorityTextClass = {
   NORMAL: "text-black",
 };
 
+function formatElapsed(seconds) {
+  if (seconds == null) return "--";
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ${String(mins % 60).padStart(2, "0")}m`;
+}
+
 export default function ViewBDPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [search, setSearch] = useState("");
+  const [broadcasts, setBroadcasts] = useState([]);
+  const [loadError, setLoadError] = useState(null);
+  const [unitsInput, setUnitsInput] = useState({});
+  const [fulfillingId, setFulfillingId] = useState(null);
+  const [fulfillError, setFulfillError] = useState(null);
+
+  function mapBroadcast(r) {
+    return {
+      id: r.id,
+      bloodType: r.bloodType,
+      priority: r.priority,
+      ward: r.ward,
+      unitsNeeded: r.unitsNeeded,
+      unitsFulfilled: r.unitsFulfilled,
+      units: `${r.unitsFulfilled}/${r.unitsNeeded} Units`,
+      percent: r.pct,
+      status: r.status,
+      time: formatElapsed(r.seconds_open),
+    };
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const data = await api.get("/api/requests");
+        if (cancelled) return;
+        setBroadcasts(data.map(mapBroadcast));
+      } catch (err) {
+        if (!cancelled) setLoadError(err.message);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Adds units toward a broadcast's quota. The server auto-resolves the
+  // request (status -> FULFILLED, rating computed) once the quota is met.
+  async function handleFulfill(code) {
+    const raw = unitsInput[code];
+    const units = Number(raw);
+    if (!Number.isInteger(units) || units < 1) {
+      setFulfillError("Enter a whole number of units (1 or more).");
+      return;
+    }
+    setFulfillingId(code);
+    setFulfillError(null);
+    try {
+      const updated = await api.patch(`/api/requests/${code}/fulfill`, { units });
+      setBroadcasts((prev) =>
+        prev.map((b) =>
+          b.id === code
+            ? {
+                ...b,
+                unitsFulfilled: updated.unitsFulfilled,
+                units: `${updated.unitsFulfilled}/${updated.unitsNeeded} Units`,
+                percent: Math.round((updated.unitsFulfilled / updated.unitsNeeded) * 100),
+                status: updated.status,
+              }
+            : b
+        )
+      );
+      setUnitsInput((prev) => ({ ...prev, [code]: "" }));
+    } catch (err) {
+      setFulfillError(err.message);
+    } finally {
+      setFulfillingId(null);
+    }
+  }
 
   const filtered = broadcasts.filter(
     (b) =>
@@ -44,8 +106,6 @@ export default function ViewBDPage() {
 
   return (
     <div className="relative w-[1440px] min-h-[1024px] bg-white font-poppins">
-      <WebNav property1="DMNav" className="absolute left-0 top-0 h-full w-[296px] overflow-clip" />
-
       <div className="absolute left-[314px] top-0 w-[1086px] pb-16">
         {/* Page header */}
         <div className="relative h-[93px] border-b border-[#ececec] flex items-center justify-between px-8">
@@ -74,6 +134,12 @@ export default function ViewBDPage() {
         </div>
 
         <div className="px-8 py-8">
+          {loadError && (
+            <p className="mb-4 text-[13px] font-semibold text-[#d70b07]">Couldn't load broadcasts: {loadError}</p>
+          )}
+          {fulfillError && (
+            <p className="mb-4 text-[13px] font-semibold text-[#d70b07]">{fulfillError}</p>
+          )}
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-[20px] font-semibold text-[#3d1116]">Blood Donation Broadcasts</h2>
@@ -89,13 +155,14 @@ export default function ViewBDPage() {
           </div>
 
           {/* Column headers */}
-          <div className="grid grid-cols-[110px_100px_150px_150px_1fr_90px] items-center px-6 py-3 text-[11px] font-semibold text-[#8a8a8a] tracking-wide uppercase">
+          <div className="grid grid-cols-[100px_90px_130px_130px_1fr_80px_190px] items-center px-6 py-3 text-[11px] font-semibold text-[#8a8a8a] tracking-wide uppercase">
             <span>Request ID</span>
             <span>Blood Type</span>
             <span>Priority Level</span>
             <span>Ward/Unit</span>
             <span>Quota Progress</span>
             <span className="text-right">Time Elapsed</span>
+            <span className="text-right">Action</span>
           </div>
 
           {/* Rows */}
@@ -103,7 +170,7 @@ export default function ViewBDPage() {
             {filtered.map((b, i) => (
               <div
                 key={`${b.id}-${i}`}
-                className="grid grid-cols-[110px_100px_150px_150px_1fr_90px] items-center px-6 py-4 bg-white"
+                className="grid grid-cols-[100px_90px_130px_130px_1fr_80px_190px] items-center px-6 py-4 bg-white"
               >
                 <span className="text-[13px] font-semibold text-[#8f404b]">{b.id}</span>
 
@@ -137,6 +204,33 @@ export default function ViewBDPage() {
                   <img src={imgClockIcon} alt="" className="w-[13px] h-[13px]" />
                   {b.time}
                 </span>
+
+                <div className="flex items-center justify-end gap-1.5">
+                  {b.status === "FULFILLED" || b.status === "CANCELLED" ? (
+                    <span className="text-[11px] font-semibold text-[#8a8a8a] capitalize">
+                      {b.status.toLowerCase()}
+                    </span>
+                  ) : (
+                    <>
+                      <input
+                        type="number"
+                        min="1"
+                        value={unitsInput[b.id] ?? ""}
+                        onChange={(e) => setUnitsInput((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                        placeholder="Units"
+                        className="w-[56px] text-[12px] border border-[#d9d9d9] rounded-[4px] px-2 py-1 outline-none"
+                      />
+                      <button
+                        type="button"
+                        disabled={fulfillingId === b.id}
+                        onClick={() => handleFulfill(b.id)}
+                        className="text-[11px] font-semibold text-white bg-[#ad2b22] rounded-full px-3 py-1.5 hover:bg-[#8f221b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {fulfillingId === b.id ? "..." : "Add"}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
 

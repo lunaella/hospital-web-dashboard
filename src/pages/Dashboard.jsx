@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import WebNav from "../components/WebNav";
 import PageHeader from "../components/PageHeader";
 import { fuzzyMatchAny } from "../utils/fuzzySearch";
+import { api } from "../lib/apiClient";
 
 const imgVector2 = "https://www.figma.com/api/mcp/asset/3031f0bd-02ab-4d5b-94f5-783c80a61a0d";
 const imgEllipse45 = "https://www.figma.com/api/mcp/asset/be8dbb9d-4acc-40d8-be2e-cddf289297e9";
@@ -11,71 +11,75 @@ const imgGroup3 = "https://www.figma.com/api/mcp/asset/31f5a4f4-6a54-4085-a2e8-9
 const imgVector3 = "https://www.figma.com/api/mcp/asset/518af209-2857-43ce-8694-fecc0a072019";
 const imgGroup4 = "https://www.figma.com/api/mcp/asset/9377a367-4ddb-442a-bb36-bba125c218cb";
 const imgGroup76 = "https://www.figma.com/api/mcp/asset/5ecc14d0-1141-4eca-b68a-2947878b6b09";
-const imgVector4 = "https://www.figma.com/api/mcp/asset/980bd49b-a0ad-42eb-a870-e3a2a7f40138";
 const imgGroup5 = "https://www.figma.com/api/mcp/asset/e9c12ea2-57c9-44c4-a47e-c97dc7b45920";
 const imgGroup80 = "https://www.figma.com/api/mcp/asset/094c35f0-cb2f-4113-8279-cf8d030cc5af";
-const imgVector5 = "https://www.figma.com/api/mcp/asset/8cd2576f-04fc-4e95-ae8a-882e3bc63461";
 const imgVector6 = "https://www.figma.com/api/mcp/asset/71fd8a34-01c0-4ec1-8967-b69882dbee20";
 const imgVector7 = "https://www.figma.com/api/mcp/asset/c9267afd-52e8-4fd9-8183-0646122a0258";
 const imgImage6 = "https://www.figma.com/api/mcp/asset/3d4e57f6-114f-4932-af4e-04e248bf7b80";
-const imgImage8 = "https://www.figma.com/api/mcp/asset/5a1065a1-defb-4c9c-a5f1-1d7c7d4dd085";
 const imgGroup6 = "https://www.figma.com/api/mcp/asset/076c49a2-a805-4190-8147-7d8628802934";
 const imgEllipse48 = "https://www.figma.com/api/mcp/asset/21919db4-248c-4476-b4da-52ca1f1bccce";
 const imgGroup7 = "https://www.figma.com/api/mcp/asset/e1fec1d3-9a22-40f1-ad39-e6bd5dc0e2cc";
 
-const statCards = [
-  {
-    icon: imgGroup4,
-    accent: true,
-    label: "CODE RED BROADCASTS",
-    value: "04",
-    sub: "Active emergency requests",
-  },
-  {
-    icon: imgGroup76,
-    trendIcon: imgVector4,
-    trend: "+12% from yesterday",
-    label: "Units Needed",
-    value: "142",
-    sub: "Total volume across all active broadcast",
-  },
-  {
-    icon: imgGroup5,
-    label: "Active Donors",
-    value: "18",
-    sub: "6 Arrived + 12 In-Transit",
-  },
-  {
-    icon: imgGroup80,
-    trendIcon: imgVector4,
-    trend: "+2.4%",
-    label: "Fulfillment Rate",
-    value: "94.2%",
-    sub: "Successful quotas met (Last 24h)",
-  },
-];
+// Static per-card chrome (icon/label/copy) — only the numbers underneath
+// come from the API. Trend badges only render for metrics the backend
+// actually computes a day-over-day comparison for; fabricating a percentage
+// for the others would be worse than just not showing one.
+const STAT_CARD_META = {
+  codeRed: { icon: imgGroup4, accent: true, label: "CODE RED BROADCASTS", sub: "Active emergency requests" },
+  unitsNeeded: { icon: imgGroup76, label: "Units Needed", sub: "Total volume across all active broadcast" },
+  activeDonors: { icon: imgGroup5, label: "Active Donors" },
+  fulfillmentRate: { icon: imgGroup80, label: "Fulfillment Rate", sub: "Successful quotas met (Last 24h)" },
+};
 
-const monitoringRows = [
-  { id: "REQ-9012", bloodType: "O-", priority: "EMERGENCY", ward: "ICU-4", units: "4/10 Units", pct: 40, time: "12m" },
-  { id: "REQ-8843", bloodType: "A+", priority: "EMERGENCY", ward: "ER-A", units: "2/3 Units", pct: 67, time: "28m" },
-  { id: "REQ-9104", bloodType: "B-", priority: "URGENT", ward: "Surgery-B", units: "1/5 Units", pct: 20, time: "45m" },
-  { id: "REQ-8756", bloodType: "AB+", priority: "URGENT", ward: "General-2", units: "5/5 Units", pct: 100, time: "1h 05m" },
-  { id: "REQ-9211", bloodType: "O+", priority: "NORMAL", ward: "Dialysis", units: "8/15 Units", pct: 53, time: "35m" },
-];
+function formatElapsed(seconds) {
+  if (seconds == null) return "--";
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return `${hrs}h ${String(rem).padStart(2, "0")}m`;
+}
 
-const stockCriticality = [
-  { type: "O-", status: "CRITICAL", statusColor: "text-[#b94842] bg-[#f5e8e7]", units: "12U" },
-  { type: "AB-", status: "LOW", statusColor: "text-black", units: "12U" },
-  { type: "A+", status: "STABLE", statusColor: "text-black", units: "12U" },
-  { type: "O+", status: "STABLE", statusColor: "text-black", units: "12U" },
-];
+function formatRelativeTime(isoString) {
+  if (!isoString) return "--";
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const mins = Math.max(0, Math.round(diffMs / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  return `${hrs}h ago`;
+}
 
-const recentArrivals = [
-  { name: "Sarah Jenkins", time: "2m ago", bloodType: "O-", img: imgImage6 },
-  { name: "Marcus Chen", time: "8m ago", bloodType: "A+", img: imgImage8 },
-  { name: "Elena Rodriguez", time: "14m ago", bloodType: "B+", img: imgImage6 },
-  { name: "David Smith", time: "21m ago", bloodType: "O+", img: imgImage6 },
-];
+function stockStatusColor(status) {
+  return status === "CRITICAL" ? "text-[#b94842] bg-[#f5e8e7]" : "text-black";
+}
+
+// Three distinct visual states for the System Health pill, driven by
+// GET /api/dashboard/health (live DB/Redis reachability + latency check —
+// see server/src/utils/systemHealth.js).
+const SYSTEM_HEALTH_META = {
+  OPTIMAL: {
+    label: "System Health: Optimal",
+    border: "border-[#bfe3c8]",
+    bg: "bg-[#f0faf3]",
+    text: "text-[#1e7d32]",
+    dot: "bg-[#1e7d32]",
+  },
+  DEGRADED: {
+    label: "System Health: Degraded",
+    border: "border-[#f0dfa8]",
+    bg: "bg-[#fdf8ea]",
+    text: "text-[#8a6d1f]",
+    dot: "bg-[#c9992a]",
+  },
+  CRITICAL: {
+    label: "System Health: Disconnected",
+    border: "border-[#eec3c1]",
+    bg: "bg-[#fbeeed]",
+    text: "text-[#b94842]",
+    dot: "bg-[#b94842]",
+  },
+};
 
 function PriorityBadge({ priority }) {
   const colorMap = {
@@ -97,6 +101,101 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [stats, setStats] = useState(null);
+  const [monitoringRows, setMonitoringRows] = useState([]);
+  const [stockCriticality, setStockCriticality] = useState([]);
+  const [recentArrivals, setRecentArrivals] = useState([]);
+  const [loadError, setLoadError] = useState(null);
+  const [systemHealth, setSystemHealth] = useState(null);
+
+  // Fetched independently from the rest of the dashboard data: if the API
+  // can't be reached at all, that failure IS the "Critical/Disconnected"
+  // state, so it needs its own catch instead of failing alongside (and
+  // being masked by) the other Promise.all calls below.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHealth() {
+      try {
+        const health = await api.get("/api/dashboard/health");
+        if (!cancelled) setSystemHealth(health);
+      } catch {
+        if (!cancelled) setSystemHealth({ overallStatus: "CRITICAL" });
+      }
+    }
+
+    loadHealth();
+    const interval = setInterval(loadHealth, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [statsData, monitoring, stock, arrivals] = await Promise.all([
+          api.get("/api/dashboard/stats"),
+          api.get("/api/dashboard/monitoring"),
+          api.get("/api/dashboard/stock"),
+          api.get("/api/dashboard/arrivals"),
+        ]);
+        if (cancelled) return;
+
+        setStats(statsData);
+        setMonitoringRows(
+          monitoring.map((row) => ({
+            id: row.id,
+            bloodType: row.bloodType,
+            priority: row.priority,
+            ward: row.ward,
+            units: `${row.unitsFulfilled}/${row.unitsNeeded} Units`,
+            pct: row.pct,
+            time: formatElapsed(row.seconds_open),
+          }))
+        );
+        setStockCriticality(
+          stock.map((item) => ({
+            type: item.type,
+            status: item.status,
+            statusColor: stockStatusColor(item.status),
+            units: `${item.units}U`,
+          }))
+        );
+        setRecentArrivals(
+          arrivals.map((person) => ({
+            name: person.name,
+            bloodType: person.bloodType,
+            time: formatRelativeTime(person.arrivedAt),
+            img: person.avatar || imgImage6,
+          }))
+        );
+      } catch (err) {
+        if (!cancelled) setLoadError(err.message);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statCards = stats
+    ? [
+        { ...STAT_CARD_META.codeRed, value: String(stats.codeRedBroadcasts).padStart(2, "0") },
+        { ...STAT_CARD_META.unitsNeeded, value: String(stats.unitsNeeded) },
+        {
+          ...STAT_CARD_META.activeDonors,
+          value: String(stats.activeDonors.arrived + stats.activeDonors.inTransit),
+          sub: `${stats.activeDonors.arrived} Arrived + ${stats.activeDonors.inTransit} In-Transit`,
+        },
+        { ...STAT_CARD_META.fulfillmentRate, value: `${stats.fulfillmentRatePct}%` },
+      ]
+    : [];
 
   function openModal(path) {
     navigate(path, { state: { backgroundLocation: location } });
@@ -110,9 +209,15 @@ export default function Dashboard() {
   );
   const isSearching = searchQuery.trim().length > 0;
 
+  // The Recent Arrivals card and its "View Full Donor Management" button
+  // were laid out assuming exactly 3 rows; real data can return more (up to
+  // the /api/dashboard/arrivals limit), so both need to grow with the list
+  // instead of the button sitting fixed and overlapping row 3+.
+  const EXTRA_ARRIVALS = Math.max(0, filteredRecentArrivals.length - 3);
+  const ARRIVALS_SHIFT = EXTRA_ARRIVALS * 58; // 45px avatar + 13px row gap
+
   return (
-    <div className="bg-white relative w-[1440px] h-[1335px] mx-auto">
-      <WebNav property1="DashboardNav" className="absolute left-0 top-0 h-full w-[296px] overflow-clip" />
+    <div className="bg-white relative w-[1440px] mx-auto" style={{ height: 1335 + ARRIVALS_SHIFT }}>
 
       {/* Top bar */}
       <PageHeader
@@ -140,12 +245,31 @@ export default function Dashboard() {
           Real-time blood resource logistics for St. Jude Medical Center
         </div>
 
-        <div className="absolute contents left-[578px] top-[138px]">
-          <div className="absolute border-2 border-[#d9d9d9] h-[49px] left-[578px] rounded-[16px] top-[138px] w-[276px] flex items-center gap-2 px-6">
-            <img alt="" className="w-[20px] h-[20px]" src={imgVector5} />
-            <span className="font-poppins font-bold text-[17px] text-black">System Health: Optimal</span>
+        {loadError && (
+          <div className="absolute left-0 top-[228px] font-poppins font-medium text-[12px] text-[#d70b07]">
+            Couldn't load live data: {loadError}
           </div>
-        </div>
+        )}
+
+        {(() => {
+          const health = SYSTEM_HEALTH_META[systemHealth?.overallStatus] ?? null;
+          return (
+            <div className="absolute contents left-[578px] top-[138px]">
+              <div
+                className={`absolute border-2 h-[49px] left-[578px] rounded-[16px] top-[138px] flex items-center gap-2 px-5 whitespace-nowrap transition-colors ${
+                  health ? `${health.border} ${health.bg}` : "border-[#d9d9d9]"
+                }`}
+              >
+                <span
+                  className={`w-[8px] h-[8px] rounded-full shrink-0 ${health ? health.dot : "bg-[#b3b3b3]"}`}
+                />
+                <span className={`font-poppins font-bold text-[14px] whitespace-nowrap ${health ? health.text : "text-black"}`}>
+                  {health ? health.label : "System Health: Checking..."}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         <button
           type="button"
@@ -192,7 +316,7 @@ export default function Dashboard() {
           </div>
           <button
             type="button"
-            onClick={() => openModal("/bd-confirm")}
+            onClick={() => navigate("/view-broadcasts")}
             className="absolute right-[15px] top-[36px] flex items-center gap-1 cursor-pointer"
           >
             <span className="font-poppins font-medium text-[13px] text-[#812a34]">View All Broadcasts</span>
@@ -274,7 +398,10 @@ export default function Dashboard() {
         </div>
 
         {/* Recent Arrivals */}
-        <div className="absolute left-[651px] top-[906px] w-[425px] h-[411px] bg-white rounded-[10px]">
+        <div
+          className="absolute left-[651px] top-[906px] w-[425px] bg-white rounded-[10px]"
+          style={{ height: 411 + ARRIVALS_SHIFT }}
+        >
           <div className="pt-[27px] pl-[71px] font-poppins font-bold text-[17px] text-black">Recent Arrivals</div>
           <div className="pl-[71px] pt-[1px] font-poppins font-medium text-[11px] text-[#808080]">
             Donors detected in facility geofence
@@ -306,7 +433,11 @@ export default function Dashboard() {
             )}
           </div>
 
-          <Link to="/donor-management" className="absolute left-[52px] top-[340px] w-[321px] h-[49px] bg-[#f6f5f4] rounded-[10px] shadow-[0px_2px_2px_0px_rgba(0,0,0,0.1)] flex items-center justify-center cursor-pointer">
+          <Link
+            to="/donor-management"
+            style={{ top: 340 + ARRIVALS_SHIFT }}
+            className="absolute left-[52px] w-[321px] h-[49px] bg-[#f6f5f4] rounded-[10px] shadow-[0px_2px_2px_0px_rgba(0,0,0,0.1)] flex items-center justify-center cursor-pointer"
+          >
             <span className="font-poppins font-bold text-[15px] text-[#808080]">View Full Donor Management</span>
           </Link>
         </div>

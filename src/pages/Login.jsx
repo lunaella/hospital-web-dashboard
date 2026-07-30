@@ -1,20 +1,34 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { api, setToken } from "../lib/apiClient";
+
+import resqLogo from "../assets/resq-logo.png";
 
 const imgRectangle = "https://www.figma.com/api/mcp/asset/e61810b9-08b0-4835-99b1-ae8a7c61db27";
-const imgResQLogo = "https://www.figma.com/api/mcp/asset/6d2bfb8b-b6ef-49fd-ae49-6ea86d87861d";
+const imgResQLogo = resqLogo;
 
 export default function Login() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
-    if (username.trim() && password.trim()) {
-      navigate("/dashboard");
-    } else {
+    if (!username.trim() || !password.trim()) {
       navigate("/login-failed");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const data = await api.post("/api/auth/login", { username, password });
+      setToken(data.token);
+      navigate("/dashboard");
+    } catch {
+      navigate("/login-failed");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -26,10 +40,6 @@ export default function Login() {
           <img alt="" className="block max-w-none size-full" src={imgResQLogo} />
         </div>
       </div>
-      <p className="-translate-x-1/2 absolute font-poppins font-bold h-[45px] leading-[0] left-[469px] not-italic text-[0px] text-center top-[227px] w-[118px]">
-        <span className="leading-[normal] text-[#d9d9d9] text-[45px]">Res</span>
-        <span className="leading-[normal] text-[#81b562] text-[45px]">Q</span>
-      </p>
       <p className="-translate-x-1/2 absolute font-poppins font-medium leading-[normal] left-[521px] not-italic text-[#edfdeb] text-[15px] text-center top-[288px] whitespace-nowrap">
         Connect, Save Lives, On time.
       </p>
@@ -65,10 +75,10 @@ export default function Login() {
           onChange={(e) => setPassword(e.target.value)}
           className="absolute bg-[#d9d9d9] h-[39px] left-[791px] top-[547px] w-[260px] rounded-[3px] px-2 outline-none"
         />
-        <button type="submit" className="absolute contents cursor-pointer left-[929px] top-[615px]">
+        <button type="submit" disabled={isSubmitting} className="absolute contents cursor-pointer left-[929px] top-[615px] disabled:cursor-wait">
           <div className="absolute bg-[#d9d9d9] h-[37px] left-[929px] rounded-[5px] top-[615px] w-[122px] hover:bg-white transition-colors" />
           <p className="-translate-x-1/2 absolute font-poppins font-medium leading-[normal] left-[989.5px] not-italic text-[15px] text-black text-center top-[622px] w-[83px]">
-            Login
+            {isSubmitting ? "..." : "Login"}
           </p>
         </button>
       </form>

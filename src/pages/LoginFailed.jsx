@@ -1,8 +1,10 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 
+import resqLogo from "../assets/resq-logo.png";
+
 const imgRectangle = "https://www.figma.com/api/mcp/asset/7ec8919e-e59d-40ed-9569-8bf00e49c62f";
-const imgResQLogo = "https://www.figma.com/api/mcp/asset/8d00b1cd-6c30-470f-805e-b61efe2f8069";
+const imgResQLogo = resqLogo;
 
 export default function LoginFailed() {
   const navigate = useNavigate();
@@ -26,10 +28,6 @@ export default function LoginFailed() {
           <img alt="" className="block max-w-none size-full" src={imgResQLogo} />
         </div>
       </div>
-      <p className="-translate-x-1/2 absolute font-poppins font-bold h-[45px] leading-[0] left-[469px] not-italic text-[0px] text-center top-[227px] w-[118px]">
-        <span className="leading-[normal] text-[#d9d9d9] text-[45px]">Res</span>
-        <span className="leading-[normal] text-[#81b562] text-[45px]">Q</span>
-      </p>
       <p className="-translate-x-1/2 absolute font-poppins font-medium leading-[normal] left-[521px] not-italic text-[#edfdeb] text-[15px] text-center top-[288px] whitespace-nowrap">
         Connect, Save Lives, On time.
       </p>
