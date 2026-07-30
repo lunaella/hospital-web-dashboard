@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: resq-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-resq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-resq_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-resq}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - resq_postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-resq}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: resq-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-resq_dev_password} --appendonly yes
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - resq_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-resq_dev_password}", "PING"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  resq_postgres_data:
+  resq_redis_data:
