@@ -239,6 +239,7 @@ export default function DonorManagement() {
   const [walkInSelected, setWalkInSelected] = useState(null);
   const [walkInNewName, setWalkInNewName] = useState("");
   const [walkInNewPhone, setWalkInNewPhone] = useState("");
+  const [walkInNewEmail, setWalkInNewEmail] = useState("");
   const [walkInNewBloodType, setWalkInNewBloodType] = useState("O+");
   const [walkInSubmitting, setWalkInSubmitting] = useState(false);
   const [walkInError, setWalkInError] = useState(null);
@@ -251,6 +252,7 @@ export default function DonorManagement() {
     setWalkInSelected(null);
     setWalkInNewName("");
     setWalkInNewPhone("");
+    setWalkInNewEmail("");
     setWalkInNewBloodType("O+");
     setWalkInError(null);
   }
@@ -309,6 +311,7 @@ export default function DonorManagement() {
         const newDonor = await api.post("/api/donors", {
           name: walkInNewName,
           phone: walkInNewPhone,
+          email: walkInNewEmail.trim() || undefined,
           bloodType: walkInNewBloodType,
         });
         donorId = newDonor.id;
@@ -795,6 +798,18 @@ export default function DonorManagement() {
                       value={walkInNewPhone}
                       onChange={(e) => setWalkInNewPhone(e.target.value)}
                       placeholder="+63 9XX XXX XXXX"
+                      className="border border-[#aaa4a0] rounded-[10px] h-[42px] px-4 font-poppins text-[14px] text-black outline-none"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="font-poppins font-medium text-[13px] text-black">
+                      Email <span className="text-[#aaa4a0] font-normal">(optional — enables email alerts)</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={walkInNewEmail}
+                      onChange={(e) => setWalkInNewEmail(e.target.value)}
+                      placeholder="donor@email.com"
                       className="border border-[#aaa4a0] rounded-[10px] h-[42px] px-4 font-poppins text-[14px] text-black outline-none"
                     />
                   </div>

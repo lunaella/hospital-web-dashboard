@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 
 const imgEmergencyDot = "https://www.figma.com/api/mcp/asset/d8471049-5af6-4108-9373-e40b77e11f4e";
@@ -28,6 +28,8 @@ export default function ViewBDPage() {
   const [unitsInput, setUnitsInput] = useState({});
   const [fulfillingId, setFulfillingId] = useState(null);
   const [fulfillError, setFulfillError] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [notifications, setNotifications] = useState({}); // code -> { loading, error, summary, attempts }
 
   function mapBroadcast(r) {
     return {
@@ -94,6 +96,25 @@ export default function ViewBDPage() {
       setFulfillError(err.message);
     } finally {
       setFulfillingId(null);
+    }
+  }
+
+  // Shows who was actually notified (real SMS/email delivery attempts) for
+  // a broadcast, fetched on demand rather than for every row up front.
+  async function toggleNotifications(code) {
+    if (expandedId === code) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(code);
+    if (notifications[code] && !notifications[code].error) return; // already loaded
+
+    setNotifications((prev) => ({ ...prev, [code]: { loading: true, error: null, summary: null, attempts: [] } }));
+    try {
+      const data = await api.get(`/api/requests/${code}/notifications`);
+      setNotifications((prev) => ({ ...prev, [code]: { loading: false, error: null, ...data } }));
+    } catch (err) {
+      setNotifications((prev) => ({ ...prev, [code]: { loading: false, error: err.message, summary: null, attempts: [] } }));
     }
   }
 
@@ -168,11 +189,18 @@ export default function ViewBDPage() {
           {/* Rows */}
           <div className="border border-[#c0bfbf] rounded-[6px] overflow-hidden divide-y divide-[#ececec] shadow-[0px_3px_6px_0px_rgba(0,0,0,0.1)]">
             {filtered.map((b, i) => (
+              <Fragment key={`${b.id}-${i}`}>
               <div
-                key={`${b.id}-${i}`}
                 className="grid grid-cols-[100px_90px_130px_130px_1fr_80px_190px] items-center px-6 py-4 bg-white"
               >
-                <span className="text-[13px] font-semibold text-[#8f404b]">{b.id}</span>
+                <button
+                  type="button"
+                  onClick={() => toggleNotifications(b.id)}
+                  className="text-left text-[13px] font-semibold text-[#8f404b] underline decoration-dotted cursor-pointer"
+                  title="View donor notification status"
+                >
+                  {b.id}
+                </button>
 
                 <span className="inline-flex items-center justify-center w-[58px] h-[24px] bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] text-[11px] font-semibold text-[#8f404b]">
                   {b.bloodType}
@@ -232,6 +260,51 @@ export default function ViewBDPage() {
                   )}
                 </div>
               </div>
+
+              {expandedId === b.id && (
+                <div className="px-6 py-4 bg-[#fafafa]">
+                  {notifications[b.id]?.loading && (
+                    <p className="text-[12px] text-[#8a8a8a]">Loading notification status...</p>
+                  )}
+                  {notifications[b.id]?.error && (
+                    <p className="text-[12px] text-[#d70b07]">Couldn't load notifications: {notifications[b.id].error}</p>
+                  )}
+                  {notifications[b.id]?.summary && (
+                    <>
+                      <p className="text-[12px] font-semibold text-[#3d1116] mb-2">
+                        SMS: {notifications[b.id].summary.smsSent} sent
+                        {notifications[b.id].summary.smsFailed > 0 && `, ${notifications[b.id].summary.smsFailed} failed`}
+                        {" · "}
+                        Email: {notifications[b.id].summary.emailSent} sent
+                        {notifications[b.id].summary.emailFailed > 0 && `, ${notifications[b.id].summary.emailFailed} failed`}
+                      </p>
+                      {notifications[b.id].attempts.length === 0 ? (
+                        <p className="text-[12px] text-[#8a8a8a]">
+                          No eligible donors matched this blood type, or notifications haven't gone out yet.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-1 max-h-[200px] overflow-y-auto">
+                          {notifications[b.id].attempts.map((a, idx) => (
+                            <div key={idx} className="flex items-center justify-between text-[12px] px-2 py-1 bg-white rounded-[4px]">
+                              <span className="text-black">
+                                {a.donorName} <span className="text-[#aaa4a0]">({a.donorCode})</span>
+                              </span>
+                              <span className="text-[#808080] uppercase text-[10px] font-semibold">{a.channel}</span>
+                              <span
+                                className={`text-[11px] font-semibold ${a.status === "sent" ? "text-[#1e7d32]" : "text-[#b94842]"}`}
+                                title={a.errorMessage || ""}
+                              >
+                                {a.status === "sent" ? "Sent" : `Failed${a.errorMessage ? `: ${a.errorMessage}` : ""}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              </Fragment>
             ))}
 
             {filtered.length === 0 && (

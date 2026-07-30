@@ -1,5 +1,6 @@
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { notifyDonorsForRequest } from "../services/notifications.service.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const PRIORITIES = ["EMERGENCY", "URGENT", "NORMAL"];
@@ -64,11 +65,24 @@ export const createRequest = asyncHandler(async (req, res) => {
       const { rows } = await pool.query(
         `INSERT INTO blood_requests (request_code, blood_type, priority, ward, units_needed, units_fulfilled, status)
          VALUES ($1, $2, $3, $4, $5, 0, 'OPEN')
-         RETURNING request_code AS id, blood_type AS "bloodType", priority, ward,
+         RETURNING id AS "dbId", request_code AS id, blood_type AS "bloodType", priority, ward,
                    units_needed AS "unitsNeeded", units_fulfilled AS "unitsFulfilled", status, created_at AS "createdAt"`,
         [code, bloodType, priorityUpper, ward.trim(), units]
       );
-      return res.status(201).json(rows[0]);
+      const created = rows[0];
+      res.status(201).json(created);
+
+      // Fire-and-forget: notifying donors (real SMS/email calls) must never
+      // hold up the broadcast-creation response or fail the request itself.
+      // Every attempt still gets logged in the notifications table.
+      notifyDonorsForRequest({
+        id: created.dbId,
+        requestCode: created.id,
+        bloodType: created.bloodType,
+        priority: created.priority,
+        ward: created.ward,
+      }).catch((err) => console.error(`notifyDonorsForRequest failed for ${created.id}:`, err));
+      return;
     } catch (err) {
       if (err.code === "23505") continue; // unique_violation on request_code — regenerate and retry
       throw err;
@@ -153,4 +167,31 @@ export const fulfillRequest = asyncHandler(async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// Delivery status for a broadcast's donor notifications — lets an admin
+// confirm who was actually reached (and why a send failed) rather than
+// just trusting the broadcast went out.
+export const getRequestNotifications = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT n.channel, n.recipient, n.status, n.error_message AS "errorMessage",
+            n.created_at AS "createdAt", d.name AS "donorName", d.donor_code AS "donorCode"
+     FROM notifications n
+     JOIN blood_requests r ON r.id = n.request_id
+     JOIN donors d ON d.id = n.donor_id
+     WHERE r.request_code = $1
+     ORDER BY n.created_at DESC`,
+    [req.params.code]
+  );
+
+  const summary = rows.reduce(
+    (acc, row) => {
+      const key = `${row.channel}${row.status === "sent" ? "Sent" : "Failed"}`;
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    },
+    { smsSent: 0, smsFailed: 0, emailSent: 0, emailFailed: 0 }
+  );
+
+  res.json({ summary, attempts: rows });
 });

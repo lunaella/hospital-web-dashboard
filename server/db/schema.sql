@@ -24,6 +24,10 @@ CREATE TYPE fulfillment_rating AS ENUM ('Optimal', 'Good', 'Acceptable', 'Poor')
 
 CREATE TYPE clearance_level AS ENUM ('FULL_ROOT_ACCESS_LEVEL_5', 'ADMIN', 'VIEWER');
 
+CREATE TYPE notification_channel AS ENUM ('sms', 'email');
+
+CREATE TYPE notification_status AS ENUM ('sent', 'failed');
+
 -- ---------------------------------------------------------------------------
 -- Admin accounts & sessions (System Settings page)
 -- ---------------------------------------------------------------------------
@@ -115,6 +119,7 @@ CREATE TABLE donors (
   donor_code        VARCHAR(20) UNIQUE NOT NULL, -- e.g. "D-8821"
   name              VARCHAR(150) NOT NULL,
   phone             VARCHAR(30) NOT NULL,
+  email             VARCHAR(255),         -- optional; SMS is the primary channel since every donor has a phone
   blood_type        blood_type NOT NULL,
   avatar_url        TEXT,
   last_donation_at  TIMESTAMPTZ,          -- drives the DOH 90-day cooling rule
@@ -163,6 +168,25 @@ CREATE TABLE donor_arrivals (
 );
 
 CREATE INDEX idx_donor_arrivals_arrived_at ON donor_arrivals(arrived_at DESC);
+
+-- Delivery log for donor-facing SMS/email alerts sent when a broadcast goes
+-- out. One row per attempted send (not per donor) — a donor with both a
+-- phone and an email produces two rows, one per channel. Kept even for
+-- failed attempts so admins can see who wasn't reached and why.
+CREATE TABLE notifications (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  donor_id            UUID NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
+  request_id          UUID REFERENCES blood_requests(id) ON DELETE SET NULL,
+  channel             notification_channel NOT NULL,
+  recipient           TEXT NOT NULL,   -- the phone number or email address actually used
+  status              notification_status NOT NULL,
+  provider_message_id TEXT,            -- Semaphore/Resend's own id, for support lookups
+  error_message        TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_notifications_request_id ON notifications(request_id);
+CREATE INDEX idx_notifications_donor_id ON notifications(donor_id);
 
 -- ---------------------------------------------------------------------------
 -- System health (Reports > System Health card)

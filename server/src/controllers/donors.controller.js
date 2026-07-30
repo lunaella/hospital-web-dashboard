@@ -68,7 +68,7 @@ const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 // (staff shouldn't have to invent a unique ID); collisions are vanishingly
 // unlikely but retried a few times just in case.
 export const createDonor = asyncHandler(async (req, res) => {
-  const { name, phone, bloodType } = req.body;
+  const { name, phone, bloodType, email } = req.body;
   if (!name?.trim() || !phone?.trim() || !bloodType) {
     return res.status(400).json({ error: "name, phone, and bloodType are required." });
   }
@@ -80,10 +80,10 @@ export const createDonor = asyncHandler(async (req, res) => {
     const code = `D-${Math.floor(1000 + Math.random() * 9000)}`;
     try {
       const { rows } = await pool.query(
-        `INSERT INTO donors (donor_code, name, phone, blood_type)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType"`,
-        [code, name.trim(), phone.trim(), bloodType]
+        `INSERT INTO donors (donor_code, name, phone, blood_type, email)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType", email`,
+        [code, name.trim(), phone.trim(), bloodType, email?.trim() || null]
       );
       return res.status(201).json(rows[0]);
     } catch (err) {

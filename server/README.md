@@ -44,6 +44,7 @@ docker compose up -d
 | `donors` (+ `donor_eligibility` view) | Donor Management registered donor list, DOH 90-day cooling rule |
 | `appointments` | Donor Management Appointment View |
 | `donor_arrivals` | Dashboard Recent Arrivals |
+| `notifications` | Delivery log for donor SMS/email alerts sent when a broadcast goes out |
 | `system_health_snapshots` | Reports System Health card |
 
 Derived values (donor eligibility, stock status, response time) are computed
@@ -76,6 +77,24 @@ All routes except `/health` and `POST /api/auth/login` require
 | `PATCH /api/settings/email` | Update admin email |
 | `PATCH /api/settings/password` | Change password (requires current password, 16+ char new password) |
 | `GET /api/settings/session` | Active Terminal Session card data |
+| `POST /api/requests` | Create a broadcast; also fires (without blocking the response) SMS + email alerts to every eligible matching donor |
+| `GET /api/requests/:code/notifications` | Per-donor delivery status (sent/failed, error reason) for a broadcast's notifications |
+
+## Donor notifications (SMS + email)
+
+When a broadcast is created, every donor who matches its blood type *and*
+is currently eligible (`donor_eligibility.is_eligible`) gets notified:
+SMS always (every donor has a phone on file), email only if they have one.
+Every attempt is logged to `notifications` — including failures and why —
+so nothing is silently dropped.
+
+- **SMS** via [Semaphore](https://semaphore.co) (`server/src/utils/sms.js`) — a PH-based SMS API, simple REST call, peso pricing.
+- **Email** via [Resend](https://resend.com) (`server/src/utils/email.js`) — generous free tier, one API key, no domain verification needed while sending from `onboarding@resend.dev`.
+
+Set `SEMAPHORE_API_KEY`, `SEMAPHORE_SENDER_NAME` (optional), `RESEND_API_KEY`,
+and `NOTIFICATION_FROM_EMAIL` in `.env`. Leaving a key blank doesn't crash
+anything — that channel just logs a "not configured" failure per attempt
+instead of sending, so the rest of the system keeps working without them.
 
 ## Where Redis fits in
 
