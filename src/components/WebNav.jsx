@@ -1,9 +1,11 @@
-const imgResQLogo = "https://www.figma.com/api/mcp/asset/861c1b65-883b-4adc-af4e-54d012b5b534";
+import resqLogo from "../assets/resq-logo.png";
+
+const imgResQLogo = resqLogo;
 const imgVector = "https://www.figma.com/api/mcp/asset/ca5dbc1b-b473-4cf1-ba70-7818d0937735";
 const imgGroup = "https://www.figma.com/api/mcp/asset/66e4a534-bf3e-4895-b543-ec99af3dc935";
 const imgGroup1 = "https://www.figma.com/api/mcp/asset/3775bcee-ade1-4525-8a58-e42c43a8feee";
 const imgVector1 = "https://www.figma.com/api/mcp/asset/e8673723-cfa1-4c83-9d2b-e2928b02d232";
-const imgResQLogo1 = "https://www.figma.com/api/mcp/asset/77e945d9-d4a5-4b8d-bcfe-8872ce5379a2";
+const imgResQLogo1 = resqLogo;
 const imgGroup2 = "https://www.figma.com/api/mcp/asset/1d55f653-b7bf-4403-b364-b661539b56ec";
 const imgGroup3 = "https://www.figma.com/api/mcp/asset/ed48664d-29d5-4c56-9013-0f810216bea9";
 const imgGroup4 = "https://www.figma.com/api/mcp/asset/5404f6aa-963a-44bc-8e84-48e1c6d75d69";
@@ -22,9 +24,9 @@ export default function WebNav({ className, property1 = "DashboardNav" }) {
               <img alt="" className="block max-w-none size-full" src={imgResQLogo1} />
             </div>
           </div>
-          <p className="-translate-x-1/2 absolute font-poppins font-bold h-[41px] leading-[0] left-[138.5px] not-italic text-[0px] text-center top-[36.56px] w-[85px]">
-            <span className="leading-[normal] text-[#d9d9d9] text-[30px]">Res</span>
-            <span className="leading-[normal] text-[#81b562] text-[30px]">Q</span>
+          <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
+          <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
+            ADMIN
           </p>
         </div>
         <Link to="/reports" className="absolute contents left-[26px] top-[239px] cursor-pointer">
@@ -76,9 +78,9 @@ export default function WebNav({ className, property1 = "DashboardNav" }) {
               <img alt="" className="block max-w-none size-full" src={imgResQLogo1} />
             </div>
           </div>
-          <p className="-translate-x-1/2 absolute font-poppins font-bold h-[41px] leading-[0] left-[138.5px] not-italic text-[0px] text-center top-[36.56px] w-[85px]">
-            <span className="leading-[normal] text-[#d9d9d9] text-[30px]">Res</span>
-            <span className="leading-[normal] text-[#81b562] text-[30px]">Q</span>
+          <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
+          <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
+            ADMIN
           </p>
         </div>
         <Link to="/settings" className="absolute left-0 bottom-0 w-[279px] h-[60px] cursor-pointer">
@@ -130,9 +132,9 @@ export default function WebNav({ className, property1 = "DashboardNav" }) {
               <img alt="" className="block max-w-none size-full" src={imgResQLogo1} />
             </div>
           </div>
-          <p className="-translate-x-1/2 absolute font-poppins font-bold h-[41px] leading-[0] left-[138.5px] not-italic text-[0px] text-center top-[36.56px] w-[85px]">
-            <span className="leading-[normal] text-[#d9d9d9] text-[30px]">Res</span>
-            <span className="leading-[normal] text-[#81b562] text-[30px]">Q</span>
+          <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
+          <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
+            ADMIN
           </p>
         </div>
         <div className="absolute left-0 bottom-0 w-[279px] h-[60px]">
@@ -182,9 +184,9 @@ export default function WebNav({ className, property1 = "DashboardNav" }) {
             <img alt="" className="block max-w-none size-full" src={imgResQLogo} />
           </div>
         </div>
-        <p className="-translate-x-1/2 absolute font-poppins font-bold h-[41px] leading-[0] left-[138.5px] not-italic text-[0px] text-center top-[36.56px] w-[85px]">
-          <span className="leading-[normal] text-[#d9d9d9] text-[30px]">Res</span>
-          <span className="leading-[normal] text-[#81b562] text-[30px]">Q</span>
+        <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
+        <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
+          ADMIN
         </p>
       </div>
       <Link to="/donor-management" className="absolute contents cursor-pointer left-[24px] top-[185px]">
