@@ -5,12 +5,10 @@ import AppShell from "./components/AppShell";
 import Login from "./pages/Login";
 import LoginFailed from "./pages/LoginFailed";
 import Dashboard from "./pages/Dashboard";
-import DashboardNew from "./pages/DashboardNew";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import LogoutConfirmation from "./pages/LogoutConfirmation";
 import DonorManagement from "./pages/DonorManagement";
-import BDConfirm from "./pages/BDConfirm";
 import ViewBDPage from "./pages/ViewBDPage";
 import NewBDPage from "./pages/NewBDPage";
 
@@ -24,7 +22,6 @@ import NewBDPage from "./pages/NewBDPage";
 const MODAL_ROUTES = (
   <>
     <Route path="/logout-confirmation" element={<LogoutConfirmation />} />
-    <Route path="/bd-confirm" element={<BDConfirm />} />
     <Route path="/view-broadcasts" element={<AppShell><ViewBDPage /></AppShell>} />
     <Route path="/new-broadcast" element={<NewBDPage />} />
   </>
@@ -41,7 +38,6 @@ function AppRoutes() {
         <Route path="/login" element={<ScaleToFit><Login /></ScaleToFit>} />
         <Route path="/login-failed" element={<ScaleToFit><LoginFailed /></ScaleToFit>} />
         <Route path="/dashboard" element={<AppShell><Dashboard /></AppShell>} />
-        <Route path="/dashboard-new" element={<ScaleToFit><DashboardNew /></ScaleToFit>} />
         <Route path="/reports" element={<AppShell><Reports /></AppShell>} />
         <Route path="/settings" element={<AppShell><Settings /></AppShell>} />
         <Route path="/donor-management" element={<AppShell><DonorManagement /></AppShell>} />
