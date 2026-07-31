@@ -8,7 +8,6 @@ const imgVector1 = "https://www.figma.com/api/mcp/asset/e8673723-cfa1-4c83-9d2b-
 const imgResQLogo1 = resqLogo;
 const imgGroup2 = "https://www.figma.com/api/mcp/asset/1d55f653-b7bf-4403-b364-b661539b56ec";
 const imgGroup3 = "https://www.figma.com/api/mcp/asset/ed48664d-29d5-4c56-9013-0f810216bea9";
-const imgGroup4 = "https://www.figma.com/api/mcp/asset/5404f6aa-963a-44bc-8e84-48e1c6d75d69";
 
 import { Link } from "react-router-dom";
 
@@ -138,13 +137,13 @@ export default function WebNav({ className, property1 = "DashboardNav" }) {
           </p>
         </div>
         <div className="absolute left-0 bottom-0 w-[279px] h-[60px]">
-          <div className="absolute bg-[rgba(217,217,217,0.05)] inset-0" />
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[112.21px] not-italic text-[#e0115f] text-[17px] text-center top-[17px] w-[86.126px]">
+          <div className="absolute bg-[rgba(217,217,217,0.25)] h-[47px] left-[11px] rounded-[15px] top-[6px] w-[257px]" />
+          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[112.21px] not-italic text-white text-[17px] text-center top-[17px] w-[86.126px]">
             Settings
           </p>
-          <div className="absolute left-[30px] top-[16px] w-[21px] h-[18px]">
+          <div className="absolute left-[30px] top-[19px] w-[21px] h-[18px]">
             <div className="absolute inset-[-5.56%_-4.69%]">
-              <img alt="" className="block max-w-none size-full" src={imgGroup4} />
+              <img alt="" className="block max-w-none size-full" src={imgGroup1} />
             </div>
           </div>
         </div>
