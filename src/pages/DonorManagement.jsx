@@ -576,7 +576,7 @@ export default function DonorManagement() {
           </div>
         )}
       </div>
-      <div className="absolute left-[1035px] top-[271px] w-[340px] flex items-center justify-between">
+      <div className="absolute left-[1035px] top-[271px] w-[324px] flex items-center justify-between">
         <button
           type="button"
           onClick={() => shiftAppointmentDay(-1)}
