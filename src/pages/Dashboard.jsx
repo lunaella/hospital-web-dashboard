@@ -334,39 +334,46 @@ export default function Dashboard() {
             <span className="font-poppins font-semibold text-[13px] text-[#808080] text-center tracking-wide">TIME ELAPSED</span>
           </div>
 
-          {filteredMonitoringRows.map((row) => (
-            <div
-              key={row.id}
-              className="grid grid-cols-[140px_170px_170px_170px_260px_162px] items-center h-[62px] px-[11px] border border-[#c0bfbf] shadow-[0px_3px_6px_0px_rgba(0,0,0,0.1)]"
-            >
-              <span className="font-poppins font-semibold text-[13px] text-[#8f404b] text-center">{row.id}</span>
-              <div className="flex justify-center">
-                <div className="bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] h-[24px] w-[58px] flex items-center justify-center">
-                  <span className="font-poppins font-semibold text-[11px] text-[#8f404b]">{row.bloodType}</span>
+          {/* Fixed-height scroll region: the card itself stays a constant
+              432px (so Stock Criticality / Recent Arrivals below it never
+              move), but the row list can hold more than the original ~5-row
+              design assumption without spilling out and overlapping those
+              cards. Same pattern used for Donor Management's Appointment View. */}
+          <div className="max-h-[310px] overflow-y-auto">
+            {filteredMonitoringRows.map((row) => (
+              <div
+                key={row.id}
+                className="grid grid-cols-[140px_170px_170px_170px_260px_162px] items-center h-[62px] px-[11px] border border-[#c0bfbf] shadow-[0px_3px_6px_0px_rgba(0,0,0,0.1)]"
+              >
+                <span className="font-poppins font-semibold text-[13px] text-[#8f404b] text-center">{row.id}</span>
+                <div className="flex justify-center">
+                  <div className="bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] h-[24px] w-[58px] flex items-center justify-center">
+                    <span className="font-poppins font-semibold text-[11px] text-[#8f404b]">{row.bloodType}</span>
+                  </div>
+                </div>
+                <PriorityBadge priority={row.priority} />
+                <span className="font-poppins font-semibold text-[11px] text-black text-center">{row.ward}</span>
+                <div className="flex flex-col items-center gap-[3px]">
+                  <div className="flex justify-between w-[134px] text-[7.5px] font-poppins font-semibold">
+                    <span className="text-black">{row.units}</span>
+                    <span className="text-[#808080]">{row.pct}%</span>
+                  </div>
+                  <div className="bg-[#d9d9d9] h-[5px] rounded-[10px] w-[134px]">
+                    <div className="bg-[#ad2b22] h-[5px] rounded-[10px]" style={{ width: `${row.pct}%` }} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-center gap-1">
+                  <img alt="" className="w-[12px] h-[12px]" src={imgGroup2} />
+                  <span className="font-poppins font-medium text-[12px] text-[#aaa4a0]">{row.time}</span>
                 </div>
               </div>
-              <PriorityBadge priority={row.priority} />
-              <span className="font-poppins font-semibold text-[11px] text-black text-center">{row.ward}</span>
-              <div className="flex flex-col items-center gap-[3px]">
-                <div className="flex justify-between w-[134px] text-[7.5px] font-poppins font-semibold">
-                  <span className="text-black">{row.units}</span>
-                  <span className="text-[#808080]">{row.pct}%</span>
-                </div>
-                <div className="bg-[#d9d9d9] h-[5px] rounded-[10px] w-[134px]">
-                  <div className="bg-[#ad2b22] h-[5px] rounded-[10px]" style={{ width: `${row.pct}%` }} />
-                </div>
+            ))}
+            {isSearching && filteredMonitoringRows.length === 0 && (
+              <div className="flex items-center justify-center h-[100px] text-[13px] text-[#aaa4a0] font-poppins font-medium">
+                No broadcasts match "{searchQuery}".
               </div>
-              <div className="flex items-center justify-center gap-1">
-                <img alt="" className="w-[12px] h-[12px]" src={imgGroup2} />
-                <span className="font-poppins font-medium text-[12px] text-[#aaa4a0]">{row.time}</span>
-              </div>
-            </div>
-          ))}
-          {isSearching && filteredMonitoringRows.length === 0 && (
-            <div className="flex items-center justify-center h-[100px] text-[13px] text-[#aaa4a0] font-poppins font-medium">
-              No broadcasts match "{searchQuery}".
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Stock Criticality */}
