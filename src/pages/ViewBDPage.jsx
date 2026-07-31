@@ -22,7 +22,10 @@ function formatElapsed(seconds) {
 export default function ViewBDPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [search, setSearch] = useState("");
+  // Reports' Fulfillment Log "View Broadcast Details" action lands here with
+  // a specific request code to jump straight to, instead of just dropping
+  // the admin on the unfiltered full list.
+  const [search, setSearch] = useState(location.state?.presetSearch || "");
   const [broadcasts, setBroadcasts] = useState([]);
   const [loadError, setLoadError] = useState(null);
   const [unitsInput, setUnitsInput] = useState({});

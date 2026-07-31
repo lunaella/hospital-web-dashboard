@@ -83,6 +83,7 @@ export default function Reports() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [showAllLogs, setShowAllLogs] = useState(false);
+  const [openLogMenu, setOpenLogMenu] = useState(null);
 
   const [kpis, setKpis] = useState(null);
   const [fulfillmentRatePct, setFulfillmentRatePct] = useState(null);
@@ -468,12 +469,38 @@ export default function Reports() {
                 {row.rating ?? "Pending"}
               </span>
             </div>
-            <div className="w-[95px] flex justify-center">
-              <button type="button" className="flex flex-col items-center gap-[2px] cursor-pointer" aria-label="Row actions">
+            <div className="w-[95px] flex justify-center relative">
+              <button
+                type="button"
+                onClick={() => setOpenLogMenu((v) => (v === `${row.reqId}-${i}` ? null : `${row.reqId}-${i}`))}
+                className="flex flex-col items-center gap-[2px] cursor-pointer"
+                aria-label="Row actions"
+              >
                 <span className="w-[3px] h-[3px] rounded-full bg-[#808080]" />
                 <span className="w-[3px] h-[3px] rounded-full bg-[#808080]" />
                 <span className="w-[3px] h-[3px] rounded-full bg-[#808080]" />
               </button>
+              {openLogMenu === `${row.reqId}-${i}` && (
+                <div className="absolute right-0 top-[24px] w-[190px] bg-white rounded-[10px] border border-[#d9d9d9] shadow-[0px_8px_8px_0px_rgba(0,0,0,0.09)] py-1 z-30">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenLogMenu(null);
+                      navigate("/view-broadcasts", { state: { presetSearch: row.reqId } });
+                    }}
+                    className="w-full text-left px-3 py-2 text-[12px] font-poppins font-medium text-black hover:bg-[#fbf3f3] cursor-pointer whitespace-nowrap"
+                  >
+                    View Broadcast Details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpenLogMenu(null)}
+                    className="w-full text-left px-3 py-2 text-[12px] font-poppins font-medium text-[#808080] hover:bg-[#fbf3f3] cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -527,13 +554,16 @@ export default function Reports() {
         {/* Demand Forecast card */}
         <div className="absolute left-[778px] top-[1010px] bg-[rgba(255,245,245,0.85)] rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[215px]">
           <p className="absolute left-[19px] top-[13px] font-poppins font-semibold text-[15px] text-[#ad2b21] tracking-wide">DEMAND FORECAST</p>
-          <p className="absolute left-[19px] top-[42px] font-poppins font-medium text-[10px] text-[#868686] w-[265px]">
+          {/* line-clamp keeps this within its allotted 50px (top-42 to
+              top-92) no matter how long the live-computed sentence is, so it
+              can never grow into the MEDTECH ADVISORY box below it. */}
+          <p className="absolute left-[19px] top-[42px] font-poppins font-medium text-[10px] text-[#868686] w-[265px] leading-[1.4] line-clamp-3">
             {forecastHeadline}
           </p>
           <div className="absolute left-[19px] top-[92px] bg-white rounded-[10px] w-[265px] h-[67px]">
             <img alt="" className="absolute left-[9px] top-[9px] w-[16px] h-[16px]" src={imgGroup6} />
             <p className="absolute left-[33px] top-[9px] font-poppins font-semibold text-[12px] text-[#ad2b21] tracking-wide">MEDTECH ADVISORY</p>
-            <p className="absolute left-[9px] top-[27px] font-poppins font-medium text-[9px] text-[#868686] w-[242px]">
+            <p className="absolute left-[9px] top-[27px] font-poppins font-medium text-[9px] text-[#868686] w-[242px] leading-[1.4] line-clamp-2">
               {advisoryText}
             </p>
           </div>
