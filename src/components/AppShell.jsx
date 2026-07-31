@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import WebNav from "./WebNav";
 
@@ -28,10 +28,29 @@ const NAV_VARIANT_BY_PATH = {
 // not part of the scrolling canvas. transform: scale() (not CSS zoom) is
 // used here since we need precise, independently-computed width and height
 // scaling, not just a uniform reflow.
+//
+// The main content used to use CSS `zoom` here too (like ScaleToFit uses for
+// the login pages), which avoids the height-measuring dance below — but zoom
+// actually re-lays-out text at the zoomed size instead of just repainting
+// scaled pixels, and browsers round glyph widths differently at odd
+// fractional zoom levels (e.g. a 1320px-wide window gives zoom = 0.9167).
+// That rounding accumulates across a sentence and can push text onto an
+// extra line at some window widths but not others, which is exactly the
+// "looks fine maximized, breaks when I shrink the window" bug reported:
+// names/labels that fit on one line at zoom 1 would wrap at zoom 0.9-ish
+// even though nothing about the content changed. transform: scale() lays
+// out every page once at its native 1440px width — text wrapping is
+// computed a single time regardless of window size — and then uniformly
+// resizes the already-final pixels, so wrapping can never differ by zoom
+// level. The tradeoff `zoom` was chosen to avoid (transform doesn't affect
+// layout, so the wrapper needs to be told the scaled height manually) is
+// handled below with a ResizeObserver on the unscaled content.
 export default function AppShell({ children }) {
   const location = useLocation();
   const [zoom, setZoom] = useState(() => (typeof window !== "undefined" ? window.innerWidth / DESIGN_WIDTH : 1));
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 0));
+  const contentRef = useRef(null);
+  const [contentHeight, setContentHeight] = useState(0);
 
   useEffect(() => {
     function update() {
@@ -42,6 +61,21 @@ export default function AppShell({ children }) {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
+
+  // Tracks the content's real (unscaled) height — which varies per page and,
+  // on pages like Reports/Dashboard, per how much live data they're showing
+  // — so the outer wrapper can reserve the correct *scaled* height in the
+  // document's normal flow. Without this the page would either clip content
+  // or leave a leftover gap sized for the wrong page after switching routes.
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      setContentHeight(entries[0].contentRect.height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [location.pathname]);
 
   const property1 = NAV_VARIANT_BY_PATH[location.pathname] || "DashboardNav";
 
@@ -69,7 +103,11 @@ export default function AppShell({ children }) {
           <WebNav property1={property1} />
         </div>
       </div>
-      <div style={{ width: DESIGN_WIDTH, zoom }}>{children}</div>
+      <div style={{ width: DESIGN_WIDTH * zoom, height: contentHeight * zoom, overflow: "hidden" }}>
+        <div ref={contentRef} style={{ width: DESIGN_WIDTH, transform: `scale(${zoom})`, transformOrigin: "top left" }}>
+          {children}
+        </div>
+      </div>
     </>
   );
 }

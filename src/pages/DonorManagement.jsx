@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
 
@@ -673,21 +674,27 @@ export default function DonorManagement() {
         <span className="text-[13px] font-medium text-[#808080]">Add Manual Walk-in</span>
       </button>
 
-      <div className="absolute top-[899px] bg-[#fbfaf9] border border-[#d9d9d9] border-solid h-[75px] left-[1027px] rounded-[10px] shadow-[0px_6px_4px_0px_rgba(0,0,0,0.05),0px_3px_3px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[350px]" />
+      {/* Card height increased from the original 75px: at 11px font the
+          caption below wraps to two lines, which pushed a couple pixels
+          past the old fixed box height and read as overlap against the
+          border below it. Everything else on the page ends above top-899,
+          so growing this card downward is safe. */}
+      <div className="absolute top-[899px] bg-[#fbfaf9] border border-[#d9d9d9] border-solid h-[92px] left-[1027px] rounded-[10px] shadow-[0px_6px_4px_0px_rgba(0,0,0,0.05),0px_3px_3px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[350px]" />
       <p className="absolute top-[908px] font-semibold leading-[normal] left-[1116.25px] not-italic text-[#808080] text-[13px] text-center w-[144.5px]">
         STATION CAPACITY
       </p>
-      <div className="absolute top-[941px] bg-[#d9d9d9] h-[5px] left-[1054px] rounded-[10px] w-[292px]" />
-      <div className="absolute top-[941px] bg-[#ad2b22] h-[5px] left-[1054px] rounded-[10px] w-[224px]" />
-      <p className="absolute top-[930px] font-semibold leading-[normal] left-[1334.5px] not-italic text-[#808080] text-[7.5px] text-center w-[23px]">
+      <p className="absolute top-[926px] font-semibold leading-[normal] left-[1334.5px] not-italic text-[#808080] text-[7.5px] text-center w-[23px]">
         72%
       </p>
-      <p className="absolute top-[950px] font-medium leading-[normal] left-[1091px] not-italic text-[#aaa4a0] text-[11px] w-[212px]">
+      <div className="absolute top-[941px] bg-[#d9d9d9] h-[5px] left-[1054px] rounded-[10px] w-[292px]" />
+      <div className="absolute top-[941px] bg-[#ad2b22] h-[5px] left-[1054px] rounded-[10px] w-[224px]" />
+      <p className="absolute top-[953px] font-medium leading-[1.4] left-[1091px] not-italic text-[#aaa4a0] text-[11px] w-[230px]">
         4 of 6 extraction beds currently in use
       </p>
 
-      {walkInOpen && (
-        <div className="fixed inset-0 z-50 font-poppins">
+      {walkInOpen &&
+        createPortal(
+          <div className="fixed inset-0 z-50 font-poppins">
           <div
             className="absolute inset-0 backdrop-blur-[7.5px] bg-[rgba(217,217,217,0.85)]"
             onClick={closeWalkInModal}
@@ -855,8 +862,9 @@ export default function DonorManagement() {
               </div>
             </form>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
