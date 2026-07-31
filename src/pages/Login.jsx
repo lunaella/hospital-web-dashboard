@@ -25,8 +25,8 @@ export default function Login() {
       const data = await api.post("/api/auth/login", { username, password });
       setToken(data.token);
       navigate("/dashboard");
-    } catch {
-      navigate("/login-failed");
+    } catch (err) {
+      navigate("/login-failed", { state: { error: err.message } });
     } finally {
       setIsSubmitting(false);
     }

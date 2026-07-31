@@ -1,22 +1,42 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { api, setToken } from "../lib/apiClient";
 
 import resqLogo from "../assets/resq-logo.png";
 
 const imgRectangle = "https://www.figma.com/api/mcp/asset/7ec8919e-e59d-40ed-9569-8bf00e49c62f";
 const imgResQLogo = resqLogo;
 
+// Styled as "the login page, but with an error banner showing" — this used
+// to have its own fake handleLogin that let anyone in just by typing any
+// non-empty username/password, completely bypassing real authentication
+// (and making the rate-limit/lockout messaging below pointless, since an
+// attacker could just retry from here forever). It now calls the real
+// login endpoint exactly like Login.jsx does.
 export default function LoginFailed() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(location.state?.error || "Invalid username or password.");
 
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
-    if (username.trim() && password.trim()) {
+    if (!username.trim() || !password.trim()) {
+      setError("Username and password are required.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const data = await api.post("/api/auth/login", { username, password });
+      setToken(data.token);
       navigate("/dashboard");
-    } else {
-      navigate("/login-failed");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -63,14 +83,14 @@ export default function LoginFailed() {
           onChange={(e) => setPassword(e.target.value)}
           className="absolute bg-[#d9d9d9] h-[39px] left-[791px] top-[547px] w-[260px] rounded-[3px] px-2 outline-none"
         />
-        <button type="submit" className="absolute contents cursor-pointer left-[929px] top-[615px]">
+        <button type="submit" disabled={isSubmitting} className="absolute contents cursor-pointer left-[929px] top-[615px] disabled:cursor-wait">
           <div className="absolute bg-[#d9d9d9] h-[37px] left-[929px] rounded-[5px] top-[615px] w-[122px] hover:bg-white transition-colors" />
           <p className="-translate-x-1/2 absolute font-poppins font-medium leading-[normal] left-[989.5px] not-italic text-[15px] text-black text-center top-[622px] w-[83px]">
-            Login
+            {isSubmitting ? "..." : "Login"}
           </p>
         </button>
         <p className="-translate-x-1/2 absolute font-poppins font-medium leading-[normal] left-[852.5px] not-italic text-[18px] text-[red] text-center top-[676px] w-[343px]">
-          Wrong Credentials! Please try again.
+          {error}
         </p>
       </form>
     </div>

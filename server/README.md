@@ -117,9 +117,10 @@ Everything in Redis can be rebuilt from Postgres if it's lost.
   values in Redis with a short TTL (5–10s) so multiple admins loading the
   dashboard don't all hit Postgres with the same aggregate query.
 
-- **Login rate limiting.** Track failed login attempts per username/IP in
-  Redis with `INCR` + `EXPIRE`, to slow down brute-force attempts against the
-  admin account.
+- **Login rate limiting (implemented).** Failed login attempts are tracked
+  per IP+username in Redis (`login_attempts:{ip}:{username}`) with `INCR` +
+  `EXPIRE`. After 5 failures within a 15-minute window, further attempts get
+  a `429` until the window expires; a successful login clears the counter.
 
 - **Appointment day-view cache (optional).** The Appointment View's
   left/right day navigation re-queries appointments per day; cache each day's
