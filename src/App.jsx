@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
-import ScaleToFit from "./components/ScaleToFit";
 import AppShell from "./components/AppShell";
 import Login from "./pages/Login";
 import LoginFailed from "./pages/LoginFailed";
@@ -34,9 +33,9 @@ function AppRoutes() {
   return (
     <>
       <Routes location={backgroundLocation || location}>
-        <Route path="/" element={<ScaleToFit><Login /></ScaleToFit>} />
-        <Route path="/login" element={<ScaleToFit><Login /></ScaleToFit>} />
-        <Route path="/login-failed" element={<ScaleToFit><LoginFailed /></ScaleToFit>} />
+        <Route path="/" element={<Login />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/login-failed" element={<LoginFailed />} />
         <Route path="/dashboard" element={<AppShell><Dashboard /></AppShell>} />
         <Route path="/reports" element={<AppShell><Reports /></AppShell>} />
         <Route path="/settings" element={<AppShell><Settings /></AppShell>} />
