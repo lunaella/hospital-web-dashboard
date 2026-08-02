@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
+import { useHospital } from "../context/HospitalContext";
 
 const imgGroup3 = "https://www.figma.com/api/mcp/asset/b0075d24-ad2e-470c-aa96-18af8ab5b2d2";
 const imgVector2 = "https://www.figma.com/api/mcp/asset/64db5e91-cefa-4b4c-85d0-d07947182c3f";
@@ -79,6 +80,7 @@ const chartGridYs = [0, 62, 124, 186, 248];
 
 export default function Reports() {
   const navigate = useNavigate();
+  const { hospitalId } = useHospital();
   const [dateRange, setDateRange] = useState("Last 30 days");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -126,7 +128,7 @@ export default function Reports() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hospitalId]);
 
   function cycleDateRange() {
     setDateRange((prev) => {

@@ -1,27 +1,37 @@
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getLiveSystemHealth } from "../utils/systemHealth.js";
+import { hospitalIdParam } from "../utils/hospitalScope.js";
 
 // Donor Response Time chart: average minutes-to-resolve per day, last 7 days.
 export const getResponseTimeSeries = asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(`
-    SELECT
+  const hospitalId = hospitalIdParam(req);
+  const hospitalClause = hospitalId ? "AND r.hospital_id = $1" : "";
+  const params = hospitalId ? [hospitalId] : [];
+
+  const { rows } = await pool.query(
+    `SELECT
       d::date AS date,
       coalesce(round(avg(
         extract(epoch FROM (r.resolved_at - r.created_at)) / 60
       )::numeric, 1), NULL) AS "avgMinutes"
     FROM generate_series(current_date - INTERVAL '6 days', current_date, INTERVAL '1 day') d
     LEFT JOIN blood_requests r
-      ON r.resolved_at IS NOT NULL AND r.resolved_at::date = d::date
+      ON r.resolved_at IS NOT NULL AND r.resolved_at::date = d::date ${hospitalClause}
     GROUP BY d
-    ORDER BY d
-  `);
+    ORDER BY d`,
+    params
+  );
   res.json(rows);
 });
 
 // Recent Fulfillment Log
 export const getFulfillmentLog = asyncHandler(async (req, res) => {
+  const hospitalId = hospitalIdParam(req);
   const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const hospitalClause = hospitalId ? "WHERE hospital_id = $2" : "";
+  const params = hospitalId ? [limit, hospitalId] : [limit];
+
   const { rows } = await pool.query(
     `SELECT
        request_code AS "reqId",
@@ -34,9 +44,10 @@ export const getFulfillmentLog = asyncHandler(async (req, res) => {
        END AS time,
        system_rating AS rating
      FROM blood_requests
+     ${hospitalClause}
      ORDER BY created_at DESC
      LIMIT $1`,
-    [limit]
+    params
   );
   res.json(rows);
 });
@@ -45,13 +56,19 @@ export const getFulfillmentLog = asyncHandler(async (req, res) => {
 // priority tier, across all requests (not just resolved ones) so partially
 // fulfilled emergencies still count against the rate.
 export const getFulfillmentBreakdown = asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(`
-    SELECT
+  const hospitalId = hospitalIdParam(req);
+  const hospitalClause = hospitalId ? "WHERE hospital_id = $1" : "";
+  const params = hospitalId ? [hospitalId] : [];
+
+  const { rows } = await pool.query(
+    `SELECT
       priority,
       round(avg(units_fulfilled::numeric / NULLIF(units_needed, 0)) * 100)::int AS pct
     FROM blood_requests
-    GROUP BY priority
-  `);
+    ${hospitalClause}
+    GROUP BY priority`,
+    params
+  );
   const byPriority = Object.fromEntries(rows.map((r) => [r.priority, r.pct]));
   res.json({
     emergency: byPriority.EMERGENCY ?? 0,
@@ -63,7 +80,8 @@ export const getFulfillmentBreakdown = asyncHandler(async (req, res) => {
 // Live-checked, not read from the old static system_health_snapshots table
 // (that table only ever had the one seeded demo row and nothing wrote to
 // it). See utils/systemHealth.js for how OPTIMAL/DEGRADED/CRITICAL is
-// derived from real Postgres/Redis reachability and latency.
+// derived from real Postgres/Redis reachability and latency. Infrastructure
+// health, not per-hospital data, so it isn't hospital-scoped.
 export const getSystemHealth = asyncHandler(async (req, res) => {
   res.json(await getLiveSystemHealth());
 });
@@ -71,26 +89,36 @@ export const getSystemHealth = asyncHandler(async (req, res) => {
 // KPI cards: Units Processed, Mean Response Time, Active Donors Reach —
 // each compared against the prior 24h window for the trend indicator.
 export const getKpis = asyncHandler(async (req, res) => {
+  const hospitalId = hospitalIdParam(req);
+  const params = hospitalId ? [hospitalId] : [];
+  const whereClause = hospitalId ? "WHERE hospital_id = $1" : "";
+  const andClause = hospitalId ? "AND hospital_id = $1" : "";
+
   const [unitsProcessed, meanResponseTime, activeDonors] = await Promise.all([
-    pool.query(`
-      SELECT
+    pool.query(
+      `SELECT
         coalesce(sum(units_fulfilled) FILTER (WHERE created_at >= now() - INTERVAL '24 hours'), 0)::int AS current,
         coalesce(sum(units_fulfilled) FILTER (WHERE created_at >= now() - INTERVAL '48 hours' AND created_at < now() - INTERVAL '24 hours'), 0)::int AS previous
       FROM blood_requests
-    `),
-    pool.query(`
-      SELECT
+      ${whereClause}`,
+      params
+    ),
+    pool.query(
+      `SELECT
         round(avg(extract(epoch FROM (resolved_at - created_at)) / 60) FILTER (WHERE resolved_at >= now() - INTERVAL '24 hours'), 1) AS current,
         round(avg(extract(epoch FROM (resolved_at - created_at)) / 60) FILTER (WHERE resolved_at >= now() - INTERVAL '48 hours' AND resolved_at < now() - INTERVAL '24 hours'), 1) AS previous
       FROM blood_requests
-      WHERE resolved_at IS NOT NULL
-    `),
-    pool.query(`
-      SELECT
+      WHERE resolved_at IS NOT NULL ${andClause}`,
+      params
+    ),
+    pool.query(
+      `SELECT
         count(DISTINCT donor_id) FILTER (WHERE arrived_at >= now() - INTERVAL '24 hours')::int AS current,
         count(DISTINCT donor_id) FILTER (WHERE arrived_at >= now() - INTERVAL '48 hours' AND arrived_at < now() - INTERVAL '24 hours')::int AS previous
       FROM donor_arrivals
-    `),
+      ${whereClause}`,
+      params
+    ),
   ]);
 
   function withTrend(current, previous) {
@@ -112,37 +140,89 @@ export const getKpis = asyncHandler(async (req, res) => {
 // most recent measured swing is assumed to persist) rather than a real
 // statistical forecasting model — an honest, explainable choice appropriate
 // for this system's data volume. The "advisory" pick leans on actual
-// current stock levels (blood_stock_status), not just the trend, so it
-// still makes sense even when demand has been flat.
+// current stock levels, not just the trend, so it still makes sense even
+// when demand has been flat.
+//
+// Written as two separate query bodies (rather than one query with
+// conditionally-interpolated GROUP BYs) because the single-hospital case
+// reads straight from blood_stock_status (already one row per hospital+
+// type) while the all-hospitals case has to SUM blood_inventory rows
+// across hospitals per type — mixing those into one shared GROUP BY was
+// error-prone, so they're kept as two honest, separately-readable queries.
 export const getDemandForecast = asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(`
-    WITH types AS (
-      SELECT unnest(enum_range(NULL::blood_type)) AS blood_type
-    ),
-    recent AS (
-      SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
-      FROM blood_requests
-      WHERE created_at >= now() - INTERVAL '48 hours'
-      GROUP BY blood_type
-    ),
-    previous AS (
-      SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
-      FROM blood_requests
-      WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours'
-      GROUP BY blood_type
-    )
-    SELECT
-      t.blood_type AS "bloodType",
-      coalesce(r.units, 0) AS "recentUnits",
-      coalesce(p.units, 0) AS "previousUnits",
-      s.units_available AS "unitsAvailable",
-      s.status AS "stockStatus"
-    FROM types t
-    LEFT JOIN recent r ON r.blood_type = t.blood_type
-    LEFT JOIN previous p ON p.blood_type = t.blood_type
-    LEFT JOIN blood_stock_status s ON s.blood_type = t.blood_type
-    ORDER BY t.blood_type
-  `);
+  const hospitalId = hospitalIdParam(req);
+
+  const query = hospitalId
+    ? `
+      WITH types AS (
+        SELECT unnest(enum_range(NULL::blood_type)) AS blood_type
+      ),
+      recent AS (
+        SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
+        FROM blood_requests
+        WHERE created_at >= now() - INTERVAL '48 hours' AND hospital_id = $1
+        GROUP BY blood_type
+      ),
+      previous AS (
+        SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
+        FROM blood_requests
+        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND hospital_id = $1
+        GROUP BY blood_type
+      )
+      SELECT
+        t.blood_type AS "bloodType",
+        coalesce(r.units, 0) AS "recentUnits",
+        coalesce(p.units, 0) AS "previousUnits",
+        s.units_available AS "unitsAvailable",
+        s.status AS "stockStatus"
+      FROM types t
+      LEFT JOIN recent r ON r.blood_type = t.blood_type
+      LEFT JOIN previous p ON p.blood_type = t.blood_type
+      LEFT JOIN blood_stock_status s ON s.blood_type = t.blood_type AND s.hospital_id = $1
+      ORDER BY t.blood_type
+    `
+    : `
+      WITH types AS (
+        SELECT unnest(enum_range(NULL::blood_type)) AS blood_type
+      ),
+      recent AS (
+        SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
+        FROM blood_requests
+        WHERE created_at >= now() - INTERVAL '48 hours'
+        GROUP BY blood_type
+      ),
+      previous AS (
+        SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
+        FROM blood_requests
+        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours'
+        GROUP BY blood_type
+      ),
+      stock AS (
+        SELECT
+          blood_type,
+          sum(units_available)::int AS units_available,
+          CASE
+            WHEN sum(units_available) <= sum(critical_threshold) THEN 'CRITICAL'
+            WHEN sum(units_available) <= sum(low_threshold) THEN 'LOW'
+            ELSE 'STABLE'
+          END::stock_status AS status
+        FROM blood_inventory
+        GROUP BY blood_type
+      )
+      SELECT
+        t.blood_type AS "bloodType",
+        coalesce(r.units, 0) AS "recentUnits",
+        coalesce(p.units, 0) AS "previousUnits",
+        s.units_available AS "unitsAvailable",
+        s.status AS "stockStatus"
+      FROM types t
+      LEFT JOIN recent r ON r.blood_type = t.blood_type
+      LEFT JOIN previous p ON p.blood_type = t.blood_type
+      LEFT JOIN stock s ON s.blood_type = t.blood_type
+      ORDER BY t.blood_type
+    `;
+
+  const { rows } = await pool.query(query, hospitalId ? [hospitalId] : []);
 
   const withTrend = rows.map((r) => ({
     ...r,

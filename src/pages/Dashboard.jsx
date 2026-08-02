@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { fuzzyMatchAny } from "../utils/fuzzySearch";
 import { api } from "../lib/apiClient";
+import { useHospital } from "../context/HospitalContext";
 
 const imgVector2 = "https://www.figma.com/api/mcp/asset/3031f0bd-02ab-4d5b-94f5-783c80a61a0d";
 const imgEllipse45 = "https://www.figma.com/api/mcp/asset/be8dbb9d-4acc-40d8-be2e-cddf289297e9";
@@ -100,6 +101,9 @@ function PriorityBadge({ priority }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { hospitalId, hospitals } = useHospital();
+  const selectedHospitalName = hospitals.find((h) => h.id === hospitalId)?.name;
+  const hospitalScopeLabel = hospitalId === "all" ? "all hospitals" : selectedHospitalName || "the selected hospital";
   const [searchQuery, setSearchQuery] = useState("");
   const [stats, setStats] = useState(null);
   const [monitoringRows, setMonitoringRows] = useState([]);
@@ -182,7 +186,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hospitalId]);
 
   const statCards = stats
     ? [
@@ -242,7 +246,7 @@ export default function Dashboard() {
           System Status
         </div>
         <div className="absolute left-0 top-[199px] font-poppins font-semibold text-[17px] text-[#808080] w-[617px]">
-          Real-time blood resource logistics for St. Jude Medical Center
+          Real-time blood resource logistics for {hospitalScopeLabel}
         </div>
 
         {loadError && (

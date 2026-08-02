@@ -1,6 +1,7 @@
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { notifyDonorsForRequest } from "../services/notifications.service.js";
+import { hospitalIdParam } from "../utils/hospitalScope.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const PRIORITIES = ["EMERGENCY", "URGENT", "NORMAL"];
@@ -10,10 +11,15 @@ const PRIORITIES = ["EMERGENCY", "URGENT", "NORMAL"];
 // for the live-tracking widget). Supports the same kind of free-text search
 // as the donor list.
 export const listRequests = asyncHandler(async (req, res) => {
+  const hospitalId = hospitalIdParam(req);
   const search = req.query.q?.trim() || null;
   const conditions = [];
   const params = [];
 
+  if (hospitalId) {
+    params.push(hospitalId);
+    conditions.push(`hospital_id = $${params.length}`);
+  }
   if (search) {
     params.push(`%${search}%`);
     conditions.push(`(request_code ILIKE $${params.length} OR ward ILIKE $${params.length} OR blood_type::text ILIKE $${params.length})`);
@@ -42,8 +48,11 @@ export const listRequests = asyncHandler(async (req, res) => {
 // "+ New Broadcast" — dispatches a new blood request. request_code is
 // generated server-side (matches the REQ-XXXX pattern used throughout).
 export const createRequest = asyncHandler(async (req, res) => {
-  const { priority, bloodType, ward, unitsNeeded } = req.body;
+  const { priority, bloodType, ward, unitsNeeded, hospitalId } = req.body;
 
+  if (!hospitalId) {
+    return res.status(400).json({ error: "hospitalId is required." });
+  }
   const priorityUpper = String(priority || "").toUpperCase();
   if (!PRIORITIES.includes(priorityUpper)) {
     return res.status(400).json({ error: `priority must be one of: ${PRIORITIES.join(", ")}` });
@@ -63,11 +72,11 @@ export const createRequest = asyncHandler(async (req, res) => {
     const code = `REQ-${Math.floor(1000 + Math.random() * 9000)}`;
     try {
       const { rows } = await pool.query(
-        `INSERT INTO blood_requests (request_code, blood_type, priority, ward, units_needed, units_fulfilled, status)
-         VALUES ($1, $2, $3, $4, $5, 0, 'OPEN')
+        `INSERT INTO blood_requests (hospital_id, request_code, blood_type, priority, ward, units_needed, units_fulfilled, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, 'OPEN')
          RETURNING id AS "dbId", request_code AS id, blood_type AS "bloodType", priority, ward,
                    units_needed AS "unitsNeeded", units_fulfilled AS "unitsFulfilled", status, created_at AS "createdAt"`,
-        [code, bloodType, priorityUpper, ward.trim(), units]
+        [hospitalId, code, bloodType, priorityUpper, ward.trim(), units]
       );
       const created = rows[0];
       res.status(201).json(created);
@@ -85,6 +94,9 @@ export const createRequest = asyncHandler(async (req, res) => {
       return;
     } catch (err) {
       if (err.code === "23505") continue; // unique_violation on request_code — regenerate and retry
+      if (err.code === "23503") {
+        return res.status(400).json({ error: "hospitalId does not match a known hospital." });
+      }
       throw err;
     }
   }

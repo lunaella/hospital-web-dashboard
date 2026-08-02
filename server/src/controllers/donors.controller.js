@@ -1,5 +1,6 @@
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { hospitalIdParam } from "../utils/hospitalScope.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
@@ -143,33 +144,50 @@ export const getDonor = asyncHandler(async (req, res) => {
 });
 
 // Appointment View: donations scheduled for a single day, with left/right
-// day navigation on the frontend driving the `date` query param.
+// day navigation on the frontend driving the `date` query param. Also
+// accepts ?hospitalId=<uuid> from the super admin's hospital switcher (or
+// omitted/"all" to show every hospital's appointments for that day).
 export const listAppointmentsForDay = asyncHandler(async (req, res) => {
+  const hospitalId = hospitalIdParam(req);
   const date = req.query.date || new Date().toISOString().slice(0, 10);
+  const hospitalClause = hospitalId ? "AND a.hospital_id = $2" : "";
+  const params = hospitalId ? [date, hospitalId] : [date];
+
   const { rows } = await pool.query(
     `SELECT a.id, a.scheduled_at AS "scheduledAt", a.status,
             d.name, d.blood_type AS "bloodType", d.avatar_url AS avatar
      FROM appointments a
      JOIN donors d ON d.id = a.donor_id
-     WHERE a.scheduled_at::date = $1::date
+     WHERE a.scheduled_at::date = $1::date ${hospitalClause}
      ORDER BY a.scheduled_at ASC`,
-    [date]
+    params
   );
   res.json(rows);
 });
 
+// hospitalId is required here — in the real app this is whichever hospital
+// the donor's geolocation-based nearest-hospital match resolved to for this
+// appointment; this admin's walk-in form asks for it explicitly instead
+// (defaulting to the currently-selected hospital in the switcher).
 export const createAppointment = asyncHandler(async (req, res) => {
-  const { donorId, scheduledAt } = req.body;
-  if (!donorId || !scheduledAt) {
-    return res.status(400).json({ error: "donorId and scheduledAt are required." });
+  const { donorId, scheduledAt, hospitalId } = req.body;
+  if (!donorId || !scheduledAt || !hospitalId) {
+    return res.status(400).json({ error: "donorId, scheduledAt, and hospitalId are required." });
   }
-  const { rows } = await pool.query(
-    `INSERT INTO appointments (donor_id, scheduled_at, status)
-     VALUES ($1, $2, 'pending')
-     RETURNING id, donor_id AS "donorId", scheduled_at AS "scheduledAt", status`,
-    [donorId, scheduledAt]
-  );
-  res.status(201).json(rows[0]);
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO appointments (donor_id, hospital_id, scheduled_at, status)
+       VALUES ($1, $2, $3, 'pending')
+       RETURNING id, donor_id AS "donorId", hospital_id AS "hospitalId", scheduled_at AS "scheduledAt", status`,
+      [donorId, hospitalId, scheduledAt]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    if (err.code === "23503") {
+      return res.status(400).json({ error: "donorId or hospitalId does not match a known record." });
+    }
+    throw err;
+  }
 });
 
 // "completed" is deliberately excluded here — recording a completed donation
@@ -194,17 +212,18 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
 // Records an actual completed donation. This is the one place that closes
 // the loop between "donor showed up" and the rest of the system: it flips
 // the appointment to completed, logs a donor_arrivals row (so the donor
-// shows up in Dashboard's Recent Arrivals), starts the donor's 90-day DOH
-// cooling period, and adds one unit to that blood type's inventory. Wrapped
-// in a single transaction with a row lock so a double-click can't double-
-// count the same donation.
+// shows up in Dashboard's Recent Arrivals) tagged to the same hospital as
+// the appointment, starts the donor's 90-day DOH cooling period, and adds
+// one unit to that hospital's inventory for that blood type. Wrapped in a
+// single transaction with a row lock so a double-click can't double-count
+// the same donation.
 export const completeAppointment = asyncHandler(async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `SELECT a.id, a.status, a.donor_id AS "donorId", d.blood_type AS "bloodType"
+      `SELECT a.id, a.status, a.donor_id AS "donorId", a.hospital_id AS "hospitalId", d.blood_type AS "bloodType"
        FROM appointments a
        JOIN donors d ON d.id = a.donor_id
        WHERE a.id = $1
@@ -230,12 +249,19 @@ export const completeAppointment = asyncHandler(async (req, res) => {
       [appt.donorId]
     );
     await client.query(
-      "INSERT INTO donor_arrivals (donor_id, arrived_at) VALUES ($1, now())",
-      [appt.donorId]
+      "INSERT INTO donor_arrivals (donor_id, hospital_id, arrived_at) VALUES ($1, $2, now())",
+      [appt.donorId, appt.hospitalId]
     );
+    // Upsert rather than a plain UPDATE: a hospital might not have a
+    // pre-seeded inventory row for every blood type, and the first
+    // completed donation of a given type at a given hospital should still
+    // count instead of silently updating zero rows.
     await client.query(
-      "UPDATE blood_inventory SET units_available = units_available + 1, updated_at = now() WHERE blood_type = $1",
-      [appt.bloodType]
+      `INSERT INTO blood_inventory (hospital_id, blood_type, units_available)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (hospital_id, blood_type)
+       DO UPDATE SET units_available = blood_inventory.units_available + 1, updated_at = now()`,
+      [appt.hospitalId, appt.bloodType]
     );
 
     await client.query("COMMIT");

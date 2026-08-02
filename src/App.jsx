@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
+import { HospitalProvider } from "./context/HospitalContext";
 import AppShell from "./components/AppShell";
 import Login from "./pages/Login";
 import LoginFailed from "./pages/LoginFailed";
@@ -51,7 +52,9 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppRoutes />
+      <HospitalProvider>
+        <AppRoutes />
+      </HospitalProvider>
     </BrowserRouter>
   );
 }

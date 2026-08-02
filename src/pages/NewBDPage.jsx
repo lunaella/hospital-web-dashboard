@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/apiClient";
+import { useHospital } from "../context/HospitalContext";
 
 // Rebuilt from the "Create New Broadcast" reference screenshot the user provided
 // directly from Figma (node 510:812, "NewBDPage") — the Figma MCP tool quota was
@@ -42,6 +43,8 @@ const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
 export default function NewBDPage() {
   const navigate = useNavigate();
+  const { hospitalId, hospitals } = useHospital();
+  const selectedHospitalName = hospitals.find((h) => h.id === hospitalId)?.name;
 
   const [urgency, setUrgency] = useState("Emergency");
   const [bloodType, setBloodType] = useState("O-");
@@ -60,11 +63,16 @@ export default function NewBDPage() {
       setError("Enter the target ward or unit.");
       return;
     }
+    if (hospitalId === "all") {
+      setError('Select a specific hospital (not "All Hospitals") in the switcher before broadcasting.');
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
     try {
       await api.post("/api/requests", {
+        hospitalId,
         priority: urgency.toUpperCase(),
         bloodType,
         ward,
@@ -100,6 +108,22 @@ export default function NewBDPage() {
               Dispatch urgent blood request notifications to all eligible donors
             </p>
           </div>
+        </div>
+
+        {/* Which hospital this broadcast is raised for follows the
+            switcher in the top-right corner, not a picker in this modal —
+            surfaced here so it's never ambiguous which hospital is about
+            to go out on a Code Red. */}
+        <div className="mb-5 -mt-2">
+          {hospitalId === "all" ? (
+            <p className="font-poppins font-semibold text-[12px] text-[#b94842]">
+              No specific hospital selected — pick one from the switcher (top right) before broadcasting.
+            </p>
+          ) : (
+            <p className="font-poppins font-semibold text-[12px] text-[#808080]">
+              Broadcasting for <span className="text-black">{selectedHospitalName || "the selected hospital"}</span>
+            </p>
+          )}
         </div>
 
         {/* 1. Urgency level */}

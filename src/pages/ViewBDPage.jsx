@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
+import { useHospital } from "../context/HospitalContext";
 
 const imgEmergencyDot = "https://www.figma.com/api/mcp/asset/d8471049-5af6-4108-9373-e40b77e11f4e";
 const imgClockIcon = "https://www.figma.com/api/mcp/asset/5d062be4-82ce-4311-bdc6-a66e7875acc6";
@@ -22,6 +23,7 @@ function formatElapsed(seconds) {
 export default function ViewBDPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { hospitalId } = useHospital();
   // Reports' Fulfillment Log "View Broadcast Details" action lands here with
   // a specific request code to jump straight to, instead of just dropping
   // the admin on the unfiltered full list.
@@ -66,7 +68,7 @@ export default function ViewBDPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [hospitalId]);
 
   // Adds units toward a broadcast's quota. The server auto-resolves the
   // request (status -> FULFILLED, rating computed) once the quota is met.

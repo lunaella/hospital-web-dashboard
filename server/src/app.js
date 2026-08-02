@@ -6,6 +6,7 @@ import { donorsRouter, appointmentsRouter } from "./routes/donors.routes.js";
 import { reportsRouter } from "./routes/reports.routes.js";
 import { settingsRouter } from "./routes/settings.routes.js";
 import { requestsRouter } from "./routes/requests.routes.js";
+import { hospitalsRouter } from "./routes/hospitals.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -29,6 +30,7 @@ app.use("/api/appointments", appointmentsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/requests", requestsRouter);
+app.use("/api/hospitals", hospitalsRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

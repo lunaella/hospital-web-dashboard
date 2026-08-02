@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
+import { useHospital } from "../context/HospitalContext";
 
 const imgVector2 = "https://www.figma.com/api/mcp/asset/7e6479a9-3801-4be0-9486-c10bebbe2e5a";
 const imgLine29 = "https://www.figma.com/api/mcp/asset/41954495-73df-427e-aa68-f516adeb5bd9";
@@ -65,6 +66,7 @@ function toDateParam(date) {
 const PAGE_SIZE = 5;
 
 export default function DonorManagement() {
+  const { hospitalId } = useHospital();
   const [donors, setDonors] = useState([]);
   const [totalDonors, setTotalDonors] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -127,7 +129,7 @@ export default function DonorManagement() {
     return () => {
       cancelled = true;
     };
-  }, [viewDate]);
+  }, [viewDate, hospitalId]);
 
   const rangeStart = totalDonors === 0 ? 0 : page * PAGE_SIZE + 1;
   const rangeEnd = Math.min((page + 1) * PAGE_SIZE, totalDonors);
@@ -304,6 +306,10 @@ export default function DonorManagement() {
       setWalkInError("Name and phone are required for a new donor.");
       return;
     }
+    if (hospitalId === "all") {
+      setWalkInError("Select a specific hospital (not \"All Hospitals\") before booking a walk-in.");
+      return;
+    }
 
     setWalkInSubmitting(true);
     try {
@@ -320,6 +326,7 @@ export default function DonorManagement() {
 
       const created = await api.post("/api/appointments", {
         donorId,
+        hospitalId,
         scheduledAt: new Date().toISOString(),
       });
       await refreshAppointmentsIfToday(created.scheduledAt);
