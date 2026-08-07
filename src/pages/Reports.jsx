@@ -3,24 +3,24 @@ import { useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
-
-const imgGroup3 = "https://www.figma.com/api/mcp/asset/b0075d24-ad2e-470c-aa96-18af8ab5b2d2";
-const imgVector2 = "https://www.figma.com/api/mcp/asset/64db5e91-cefa-4b4c-85d0-d07947182c3f";
-const imgVector3 = "https://www.figma.com/api/mcp/asset/624866ec-d57c-4b3b-981e-53850dd34056";
-const imgGroup4 = "https://www.figma.com/api/mcp/asset/f3c698c3-ad79-4f2a-94d3-8de1edbf29ba";
-const imgVector4 = "https://www.figma.com/api/mcp/asset/73a54cf5-9b97-451f-832a-c68d57a8aa0c";
-const imgGroup5 = "https://www.figma.com/api/mcp/asset/20e5b6f6-4c62-41be-ba3d-5f074da50ebb";
-const imgVector5 = "https://www.figma.com/api/mcp/asset/a6aef71d-665b-46b1-a811-0258a3d0c87d";
-const imgVector6 = "https://www.figma.com/api/mcp/asset/f0ebdcbc-9c4e-4fcf-bb56-35f76deeefa9";
-const imgGroup153 = "https://www.figma.com/api/mcp/asset/a087c384-4181-4f05-9187-278e41d19a8c";
-const imgEllipse45 = "https://www.figma.com/api/mcp/asset/888899df-726b-418a-a4f4-a78fcc549846";
-const imgLine35 = "https://www.figma.com/api/mcp/asset/4528ae71-95a4-4296-9330-f5bea7018979";
-const imgGroup6 = "https://www.figma.com/api/mcp/asset/7a145b6b-5f40-4483-9c33-bfe3c4a1e596";
+import {
+  IconDownload,
+  IconCalendar,
+  IconFilter,
+  IconClock,
+  IconUsers,
+  IconCheckCircle,
+  IconArrowUp,
+  IconArrowDown,
+  IconDroplet,
+  IconAlert,
+  IconStethoscope,
+} from "../components/icons";
 
 // Static per-card chrome; value/trend come from the API.
 const KPI_META = {
-  meanResponseTimeMinutes: { key: "response-time", left: "left-[277px]", label: "Mean Response Time", badgeIcon: imgGroup4 },
-  activeDonorsReach: { key: "active-donors", left: "left-[554px]", label: "Active Donors Reach", badgeIcon: imgGroup5 },
+  meanResponseTimeMinutes: { key: "response-time", left: "left-[277px]", label: "Mean Response Time", badgeIcon: IconClock },
+  activeDonorsReach: { key: "active-donors", left: "left-[554px]", label: "Active Donors Reach", badgeIcon: IconUsers },
 };
 
 function priorityColorFor(priority) {
@@ -233,14 +233,14 @@ export default function Reports() {
           className="absolute left-[899px] top-[109px] bg-[#ad2b21] rounded-[16px] w-[166px] h-[49px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8f2419] transition-colors"
         >
           <span className="font-poppins font-bold text-[17px] text-white">Export PDF</span>
-          <img alt="" className="w-4 h-4" src={imgGroup3} />
+          <IconDownload className="w-4 h-4 text-white" />
         </button>
         <button
           type="button"
           onClick={cycleDateRange}
           className="absolute left-[573px] top-[109px] border-2 border-[#d9d9d9] rounded-[16px] w-[180px] h-[49px] flex items-center justify-center gap-2 cursor-pointer"
         >
-          <img alt="" className="w-4 h-4" src={imgVector2} />
+          <IconCalendar className="w-4 h-4 text-black" />
           <span className="font-poppins font-bold text-[17px] text-black whitespace-nowrap">{dateRange}</span>
         </button>
         <button
@@ -250,7 +250,7 @@ export default function Reports() {
             filtersOpen ? "border-[#ad2b21] bg-[#fbf3f3]" : "border-[#d9d9d9]"
           }`}
         >
-          <img alt="" className="w-4 h-4" src={imgVector3} />
+          <IconFilter className="w-4 h-4 text-black" />
           <span className="font-poppins font-bold text-[17px] text-black">Filters</span>
         </button>
 
@@ -277,7 +277,7 @@ export default function Reports() {
         {/* KPI cards */}
         <div className="absolute left-[3px] top-[186px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]">
           <div className="absolute left-[26px] top-[21px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
-            <img alt="" className="w-3.5 h-3.5" src={imgVector5} />
+            <IconCheckCircle className="w-3.5 h-3.5 text-[#ad2b21]" />
           </div>
           <p className="absolute left-[25px] top-[59px] font-poppins font-bold text-[35px] text-black">
             {fulfillmentRatePct != null ? `${fulfillmentRatePct}%` : "--"}
@@ -285,26 +285,29 @@ export default function Reports() {
           <p className="absolute left-[25px] top-[104px] font-poppins font-bold text-[17px] text-[#808080]">Avg Fulfillment Rate</p>
         </div>
 
-        {kpiCards.map((card) => (
-          <div key={card.key} className={`absolute ${card.left} top-[193px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]`}>
-            <div className="absolute left-[19px] top-[14px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
-              <img alt="" className="w-3.5 h-3.5" src={card.badgeIcon} />
+        {kpiCards.map((card) => {
+          const BadgeIcon = card.badgeIcon;
+          return (
+            <div key={card.key} className={`absolute ${card.left} top-[193px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]`}>
+              <div className="absolute left-[19px] top-[14px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
+                <BadgeIcon className="w-3.5 h-3.5 text-[#ad2b21]" />
+              </div>
+              <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
+                <IconArrowUp className="w-4 h-4 text-black" />
+                <span className="font-poppins font-medium text-[11px] text-black">{card.trendText}</span>
+              </div>
+              <p className="absolute left-[20px] top-[98px] font-poppins font-bold text-[35px] text-black">{card.value}</p>
+              <p className="absolute left-[20px] top-[68px] font-poppins font-bold text-[17px] text-[#808080]">{card.label}</p>
             </div>
-            <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
-              <img alt="" className="w-4 h-4" src={imgVector4} />
-              <span className="font-poppins font-medium text-[11px] text-black">{card.trendText}</span>
-            </div>
-            <p className="absolute left-[20px] top-[98px] font-poppins font-bold text-[35px] text-black">{card.value}</p>
-            <p className="absolute left-[20px] top-[68px] font-poppins font-bold text-[17px] text-[#808080]">{card.label}</p>
-          </div>
-        ))}
+          );
+        })}
 
         <div className="absolute left-[831px] top-[193px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]">
-          <div className="absolute left-[20px] top-[14px] w-[33px] h-[30px]">
-            <img alt="" className="block max-w-none size-full" src={imgGroup153} />
+          <div className="absolute left-[20px] top-[14px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
+            <IconDroplet className="w-3.5 h-3.5 text-[#ad2b21]" />
           </div>
           <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
-            <img alt="" className="w-4 h-4 rotate-180 -scale-x-100" src={imgVector6} />
+            <IconArrowDown className="w-4 h-4 text-[#c46865]" />
             <span className="font-poppins font-medium text-[11px] text-[#c46865]">
               {kpis ? formatTrend(kpis.unitsProcessed.trendPct) : "--"}
             </span>
@@ -456,7 +459,7 @@ export default function Reports() {
             <div className="w-[95px] flex items-center justify-center gap-1">
               {row.hasEllipse ? (
                 <>
-                  <img alt="" className="w-[16px] h-[14px]" src={imgEllipse45} />
+                  <IconAlert className="w-[16px] h-[14px] text-[#c26460]" />
                   <span className={`font-poppins font-semibold text-[11px] tracking-wide ${priorityColorFor(row.priority)}`}>{row.priority}</span>
                 </>
               ) : (
@@ -509,9 +512,7 @@ export default function Reports() {
 
         {/* System Health card */}
         <div className="absolute left-[778px] top-[813px] bg-white rounded-tr-[10px] rounded-br-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[172px]">
-          <div className="absolute left-0 top-0 w-[3px] h-full bg-[#ad2b21] rounded-tr-[3px] rounded-br-[3px]">
-            <img alt="" className="hidden" src={imgLine35} />
-          </div>
+          <div className="absolute left-0 top-0 w-[3px] h-full bg-[#ad2b21] rounded-tr-[3px] rounded-br-[3px]" />
           <div className="pl-[22px] pr-[22px] pt-[16px] pb-[28px] flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="font-poppins font-bold text-[15px] text-[#808080] tracking-wide">SYSTEM HEALTH</span>
@@ -563,7 +564,7 @@ export default function Reports() {
             {forecastHeadline}
           </p>
           <div className="absolute left-[19px] top-[92px] bg-white rounded-[10px] w-[265px] h-[67px]">
-            <img alt="" className="absolute left-[9px] top-[9px] w-[16px] h-[16px]" src={imgGroup6} />
+            <IconStethoscope className="absolute left-[9px] top-[9px] w-[16px] h-[16px] text-[#ad2b21]" />
             <p className="absolute left-[33px] top-[9px] font-poppins font-semibold text-[12px] text-[#ad2b21] tracking-wide">MEDTECH ADVISORY</p>
             <p className="absolute left-[9px] top-[27px] font-poppins font-medium text-[9px] text-[#868686] w-[242px] leading-[1.4] line-clamp-2">
               {advisoryText}

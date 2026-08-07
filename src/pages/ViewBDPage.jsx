@@ -2,9 +2,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
-
-const imgEmergencyDot = "https://www.figma.com/api/mcp/asset/d8471049-5af6-4108-9373-e40b77e11f4e";
-const imgClockIcon = "https://www.figma.com/api/mcp/asset/5d062be4-82ce-4311-bdc6-a66e7875acc6";
+import { IconAlert, IconClock } from "../components/icons";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -212,9 +210,7 @@ export default function ViewBDPage() {
                 </span>
 
                 <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${priorityTextClass[b.priority]}`}>
-                  {b.priority === "EMERGENCY" && (
-                    <img src={imgEmergencyDot} alt="" className="w-[16px] h-[14px]" />
-                  )}
+                  {b.priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#c26460]" />}
                   {b.priority}
                 </span>
 
@@ -234,7 +230,7 @@ export default function ViewBDPage() {
                 </div>
 
                 <span className="flex items-center justify-end gap-1 text-[12px] text-[#aaa4a0]">
-                  <img src={imgClockIcon} alt="" className="w-[13px] h-[13px]" />
+                  <IconClock className="w-[13px] h-[13px]" />
                   {b.time}
                 </span>
 

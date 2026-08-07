@@ -1,7 +1,9 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 
 import { HospitalProvider } from "./context/HospitalContext";
+import { AuthProvider } from "./context/AuthContext";
 import AppShell from "./components/AppShell";
+import SectionGuard from "./components/SectionGuard";
 import Login from "./pages/Login";
 import LoginFailed from "./pages/LoginFailed";
 import Dashboard from "./pages/Dashboard";
@@ -22,7 +24,16 @@ import NewBDPage from "./pages/NewBDPage";
 const MODAL_ROUTES = (
   <>
     <Route path="/logout-confirmation" element={<LogoutConfirmation />} />
-    <Route path="/view-broadcasts" element={<AppShell><ViewBDPage /></AppShell>} />
+    <Route
+      path="/view-broadcasts"
+      element={
+        <AppShell>
+          <SectionGuard section="broadcasts">
+            <ViewBDPage />
+          </SectionGuard>
+        </AppShell>
+      }
+    />
     <Route path="/new-broadcast" element={<NewBDPage />} />
   </>
 );
@@ -37,10 +48,41 @@ function AppRoutes() {
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/login-failed" element={<LoginFailed />} />
-        <Route path="/dashboard" element={<AppShell><Dashboard /></AppShell>} />
-        <Route path="/reports" element={<AppShell><Reports /></AppShell>} />
+        <Route
+          path="/dashboard"
+          element={
+            <AppShell>
+              <SectionGuard section="dashboard">
+                <Dashboard />
+              </SectionGuard>
+            </AppShell>
+          }
+        />
+        <Route
+          path="/reports"
+          element={
+            <AppShell>
+              <SectionGuard section="reports">
+                <Reports />
+              </SectionGuard>
+            </AppShell>
+          }
+        />
+        {/* Settings itself is always reachable (self-service account/session
+            management applies to every admin); the cards inside it that are
+            real administrative capabilities — Hospital Network, Data Import,
+            Team Access — gate themselves individually. */}
         <Route path="/settings" element={<AppShell><Settings /></AppShell>} />
-        <Route path="/donor-management" element={<AppShell><DonorManagement /></AppShell>} />
+        <Route
+          path="/donor-management"
+          element={
+            <AppShell>
+              <SectionGuard section="donor_management">
+                <DonorManagement />
+              </SectionGuard>
+            </AppShell>
+          }
+        />
         {MODAL_ROUTES}
       </Routes>
 
@@ -52,9 +94,11 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <HospitalProvider>
-        <AppRoutes />
-      </HospitalProvider>
+      <AuthProvider>
+        <HospitalProvider>
+          <AppRoutes />
+        </HospitalProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

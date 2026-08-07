@@ -1,16 +1,15 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { api, clearToken } from "../lib/apiClient";
-
-const imgEllipse66 = "https://www.figma.com/api/mcp/asset/f07e63bf-ab8c-44f6-9e47-24b9229b4d31";
-const imgGroup6 = "https://www.figma.com/api/mcp/asset/7ed43ebc-11a1-429b-a3c3-941f47c6dff6";
-const imgVector7 = "https://www.figma.com/api/mcp/asset/4e70a1e9-3e56-4d85-90cf-dc65b2e456b6";
+import { IconLogout, IconX } from "../components/icons";
+import { useAuth } from "../context/AuthContext";
 
 // Confirmation modal shown when an admin attempts to end their session.
 // Intended to be rendered on top of whatever page triggered it (e.g. Settings),
 // so it only implements the dialog + dimmed backdrop, not the page behind it.
 export default function LogoutConfirmation() {
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   const [isEnding, setIsEnding] = useState(false);
 
   function handleCancel() {
@@ -26,6 +25,7 @@ export default function LogoutConfirmation() {
       // the local token and send the admin back to login.
     } finally {
       clearToken();
+      await refreshProfile(); // clears the cached permissions/profile now that the token is gone
       navigate("/login");
     }
   }
@@ -44,12 +44,12 @@ export default function LogoutConfirmation() {
           aria-label="Close"
           className="absolute right-[24px] top-[24px] cursor-pointer"
         >
-          <img alt="" className="w-5 h-5" src={imgVector7} />
+          <IconX className="w-5 h-5 text-[#808080]" />
         </button>
 
         <div className="absolute left-[41px] top-[57px] w-[66px] h-[58px]">
-          <img alt="" className="absolute inset-0 size-full" src={imgEllipse66} />
-          <img alt="" className="absolute left-[22px] top-[16px] w-[22px] h-[26px]" src={imgGroup6} />
+          <div className="absolute inset-0 rounded-full bg-[#f1dddc]" />
+          <IconLogout className="absolute left-[22px] top-[16px] w-[22px] h-[26px] text-[#ad2b21]" />
         </div>
 
         <h2 className="absolute left-[41px] top-[139px] font-poppins font-bold text-[25px] text-black">

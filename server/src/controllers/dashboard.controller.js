@@ -96,10 +96,12 @@ export const getStock = asyncHandler(async (req, res) => {
 
   if (hospitalId) {
     const { rows } = await pool.query(
-      `SELECT blood_type AS type, units_available AS units, status
-       FROM blood_stock_status
-       WHERE hospital_id = $1
-       ORDER BY blood_type`,
+      `SELECT bss.blood_type AS type, bss.units_available AS units, bss.status,
+              bi.critical_threshold AS "criticalThreshold", bi.low_threshold AS "lowThreshold"
+       FROM blood_stock_status bss
+       JOIN blood_inventory bi ON bi.hospital_id = bss.hospital_id AND bi.blood_type = bss.blood_type
+       WHERE bss.hospital_id = $1
+       ORDER BY bss.blood_type`,
       [hospitalId]
     );
     return res.json(rows);
@@ -124,6 +126,42 @@ export const getStock = asyncHandler(async (req, res) => {
     ORDER BY blood_type
   `);
   res.json(rows);
+});
+
+// Lets an admin tune when a blood type flips to LOW/CRITICAL for a specific
+// hospital, instead of living with the seeded defaults forever. Thresholds
+// are per (hospital, blood type) — there's no single "critical" number that
+// makes sense across every hospital or every blood type (a hospital that
+// transfuses 20 O+ units/day needs a different bar than one that transfuses
+// 2/day), so this intentionally doesn't touch the "All Hospitals" aggregate
+// view, which is a derived rollup, not a row an admin can edit directly.
+export const updateStockThreshold = asyncHandler(async (req, res) => {
+  const { bloodType } = req.params;
+  const { hospitalId, criticalThreshold, lowThreshold } = req.body;
+
+  if (!hospitalId) {
+    return res.status(400).json({ error: "hospitalId is required." });
+  }
+  const critical = Number(criticalThreshold);
+  const low = Number(lowThreshold);
+  if (!Number.isInteger(critical) || critical < 0 || !Number.isInteger(low) || low < 0) {
+    return res.status(400).json({ error: "criticalThreshold and lowThreshold must be non-negative whole numbers." });
+  }
+  if (critical > low) {
+    return res.status(400).json({ error: "criticalThreshold cannot be higher than lowThreshold." });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE blood_inventory
+     SET critical_threshold = $1, low_threshold = $2
+     WHERE hospital_id = $3 AND blood_type = $4
+     RETURNING blood_type AS type, units_available AS units, critical_threshold AS "criticalThreshold", low_threshold AS "lowThreshold"`,
+    [critical, low, hospitalId, bloodType]
+  );
+  if (!rows[0]) {
+    return res.status(404).json({ error: "No inventory row for that hospital and blood type." });
+  }
+  res.json(rows[0]);
 });
 
 // Powers the "System Health" pill at the top of the dashboard. Shares the

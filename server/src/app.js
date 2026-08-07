@@ -7,6 +7,8 @@ import { reportsRouter } from "./routes/reports.routes.js";
 import { settingsRouter } from "./routes/settings.routes.js";
 import { requestsRouter } from "./routes/requests.routes.js";
 import { hospitalsRouter } from "./routes/hospitals.routes.js";
+import { importRouter } from "./routes/import.routes.js";
+import { teamRouter } from "./routes/team.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -31,6 +33,8 @@ app.use("/api/reports", reportsRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/requests", requestsRouter);
 app.use("/api/hospitals", hospitalsRouter);
+app.use("/api/import", importRouter);
+app.use("/api/team", teamRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

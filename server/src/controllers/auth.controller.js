@@ -4,6 +4,8 @@ import { ensureRedisConnected } from "../db/redis.js";
 import { signSessionToken } from "../utils/jwt.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { resolveRegion } from "../utils/geoip.js";
+import { SECTIONS, emptyPermissions } from "../utils/permissionSections.js";
+import { getAllowedHospitalIds } from "../utils/hospitalScope.js";
 
 const EXPIRES_IN_SECONDS = 8 * 60 * 60; // keep in sync with env.jwtExpiresIn ("8h" default)
 
@@ -38,6 +40,30 @@ function parseEngineLabel(userAgent) {
     if (match) return `${name} ${match[1]}`;
   }
   return userAgent.slice(0, 100);
+}
+
+// Pulls a short OS label ("macOS", "Windows", "iOS", "Android", "Linux")
+// out of the same User-Agent string, for the session card's SYSTEM tile.
+// Order matters here too: iOS/Android UAs also contain "Mac OS X"/"Linux"
+// substrings, so the more specific mobile markers must be checked first.
+// Note: modern browser UAs report Windows 11 as "Windows NT 10.0" too (the
+// NT kernel version wasn't bumped), so there's no reliable way to tell 10
+// and 11 apart from User-Agent alone — this reports "Windows" without a
+// version number rather than guessing.
+function parseSystemLabel(userAgent) {
+  if (!userAgent) return null;
+  const patterns = [
+    ["iOS", /iPhone|iPad|iPod/],
+    ["Android", /Android/],
+    ["Windows", /Windows NT/],
+    ["macOS", /Mac OS X/],
+    ["Chrome OS", /CrOS/],
+    ["Linux", /Linux/],
+  ];
+  for (const [name, pattern] of patterns) {
+    if (pattern.test(userAgent)) return name;
+  }
+  return null;
 }
 
 export const login = asyncHandler(async (req, res) => {
@@ -89,7 +115,7 @@ export const login = asyncHandler(async (req, res) => {
       admin.id,
       jti.slice(0, 8).toUpperCase(),
       parseEngineLabel(req.headers["user-agent"]),
-      null,
+      parseSystemLabel(req.headers["user-agent"]),
       req.ip,
       region,
     ]
@@ -114,11 +140,48 @@ export const logout = asyncHandler(async (req, res) => {
   res.status(204).send();
 });
 
+// Used both to hydrate the Settings > Account Credentials card and, via
+// AuthContext on the frontend, to decide what the logged-in admin can see
+// and do across the whole app (nav items, page guards, action buttons).
 export const me = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    "SELECT id, username, email, clearance FROM admins WHERE id = $1",
+    `SELECT id, username, email, clearance, can_manage_team AS "canManageTeam" FROM admins WHERE id = $1`,
     [req.admin.id]
   );
-  if (!rows[0]) return res.status(404).json({ error: "Admin not found." });
-  res.json(rows[0]);
+  const admin = rows[0];
+  if (!admin) return res.status(404).json({ error: "Admin not found." });
+
+  const isSuperAdmin = admin.clearance === "FULL_ROOT_ACCESS_LEVEL_5";
+
+  // Section permissions: super admins bypass admin_permissions entirely and
+  // always have edit access everywhere (reflected here instead of
+  // misleadingly showing 'none' for a super admin with no stored rows).
+  // Team managers are NOT exempt from this — being able to manage the team
+  // roster doesn't imply edit access to every section, so their real
+  // permissions still come from admin_permissions like anyone else's.
+  let permissions;
+  if (isSuperAdmin) {
+    permissions = Object.fromEntries(SECTIONS.map((s) => [s, "edit"]));
+  } else {
+    permissions = emptyPermissions();
+    const { rows: permRows } = await pool.query(
+      "SELECT section, level FROM admin_permissions WHERE admin_id = $1",
+      [admin.id]
+    );
+    for (const row of permRows) permissions[row.section] = row.level;
+  }
+
+  // Hospital scope: super admins and team managers both always see every
+  // hospital (requireHospitalScope bypasses both the same way), so neither
+  // needs a real assignedHospitalIds lookup.
+  const assignedHospitalIds =
+    isSuperAdmin || admin.canManageTeam ? [] : await getAllowedHospitalIds(admin.id);
+
+  res.json({
+    ...admin,
+    isSuperAdmin,
+    permissions,
+    assignedHospitalIds,
+    hospitalRestricted: assignedHospitalIds.length > 0,
+  });
 });

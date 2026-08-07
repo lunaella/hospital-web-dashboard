@@ -24,6 +24,14 @@ CREATE TYPE fulfillment_rating AS ENUM ('Optimal', 'Good', 'Acceptable', 'Poor')
 
 CREATE TYPE clearance_level AS ENUM ('FULL_ROOT_ACCESS_LEVEL_5', 'ADMIN', 'VIEWER');
 
+-- Team Access (Settings page): FULL_ROOT_ACCESS_LEVEL_5 is the super admin —
+-- always has edit access to every section and can manage the team, no row
+-- in admin_permissions needed. Every other admin's actual access is defined
+-- entirely by their admin_permissions rows below, one per section, each
+-- independently set to none/view/edit by whoever manages the team.
+CREATE TYPE permission_section AS ENUM ('dashboard', 'donor_management', 'reports', 'broadcasts', 'settings');
+CREATE TYPE permission_level AS ENUM ('none', 'view', 'edit');
+
 CREATE TYPE notification_channel AS ENUM ('sms', 'email');
 
 CREATE TYPE notification_status AS ENUM ('sent', 'failed');
@@ -59,8 +67,38 @@ CREATE TABLE admins (
   email             VARCHAR(255) UNIQUE NOT NULL,
   password_hash     TEXT NOT NULL,
   clearance         clearance_level NOT NULL DEFAULT 'ADMIN',
+  -- Lets the super admin delegate "add/edit/remove team members and their
+  -- section permissions" to a trusted account without making them a second
+  -- super admin (i.e. without giving them edit access to every section too).
+  can_manage_team   BOOLEAN NOT NULL DEFAULT false,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One row per (admin, section) an admin has been explicitly granted access
+-- to; a missing row means 'none'. Super admins (clearance =
+-- FULL_ROOT_ACCESS_LEVEL_5) skip this table entirely — they always have
+-- edit access everywhere regardless of what's stored here.
+CREATE TABLE admin_permissions (
+  admin_id          UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+  section           permission_section NOT NULL,
+  level             permission_level NOT NULL DEFAULT 'none',
+  PRIMARY KEY (admin_id, section)
+);
+
+-- Which hospitals an admin can see/act on at all (independent of what
+-- sections they can access within those hospitals). No rows for an admin
+-- means unrestricted — they can pick any hospital from the switcher, which
+-- is also what every admin created before this table existed keeps doing
+-- with no migration needed for their data. One row per hospital an admin
+-- has been scoped to; an admin can have more than one (e.g. a regional
+-- supervisor over a few branches), not just the "one admin per hospital"
+-- common case. Super admins and delegated team managers always bypass this
+-- entirely and see every hospital, regardless of any rows here.
+CREATE TABLE admin_hospital_assignments (
+  admin_id          UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+  hospital_id       UUID NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
+  PRIMARY KEY (admin_id, hospital_id)
 );
 
 -- One row per active/past login session. Mirrors the "Active Terminal
@@ -259,17 +297,27 @@ INSERT INTO hospitals (code, name, city, latitude, longitude) VALUES
 INSERT INTO admins (username, email, password_hash, clearance) VALUES
   ('admin', 'admin.root@email.com', '$2b$12$mp/fGqajsql3goX7QsX3Y.SE5MLXlbBZ9tbZiE8zlNFSLKJ7Ja3/u', 'FULL_ROOT_ACCESS_LEVEL_5');
 
+-- Thresholds intentionally vary by blood type, not just a flat number: Rh-
+-- negative types (O-, AB- here) are rare in the Filipino donor population
+-- (~1% combined, vs ~15% in Western populations per Philippine Red Cross /
+-- PJNS frequency studies) and much slower to restock, so they get a higher
+-- critical/low bar than the common Rh-positive types. O- is bumped further
+-- above the other negatives on top of that, since it's also the universal-
+-- donor type used in emergencies before a patient's own type is confirmed —
+-- rarity and demand both cut the same direction for it. These are sensible
+-- starting defaults, not a fixed rule; admins can tune per hospital via
+-- Settings > Inventory Thresholds (PATCH /api/dashboard/stock/:bloodType).
 INSERT INTO blood_inventory (hospital_id, blood_type, units_available, critical_threshold, low_threshold)
-SELECT id, 'O-', 12, 15, 25 FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'AB-', 12, 10, 15 FROM hospitals WHERE code = 'SLMC-QC'
+SELECT id, 'O-', 12, 18, 30 FROM hospitals WHERE code = 'SLMC-QC'
+UNION ALL SELECT id, 'AB-', 12, 15, 25 FROM hospitals WHERE code = 'SLMC-QC'
 UNION ALL SELECT id, 'A+', 12, 10, 15 FROM hospitals WHERE code = 'SLMC-QC'
 UNION ALL SELECT id, 'O+', 12, 10, 15 FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'O-', 6, 15, 25 FROM hospitals WHERE code = 'PGH-MNL'
-UNION ALL SELECT id, 'AB-', 20, 10, 15 FROM hospitals WHERE code = 'PGH-MNL'
+UNION ALL SELECT id, 'O-', 6, 18, 30 FROM hospitals WHERE code = 'PGH-MNL'
+UNION ALL SELECT id, 'AB-', 20, 15, 25 FROM hospitals WHERE code = 'PGH-MNL'
 UNION ALL SELECT id, 'A+', 30, 10, 15 FROM hospitals WHERE code = 'PGH-MNL'
 UNION ALL SELECT id, 'O+', 9, 10, 15 FROM hospitals WHERE code = 'PGH-MNL'
-UNION ALL SELECT id, 'O-', 40, 15, 25 FROM hospitals WHERE code = 'MMC-MKT'
-UNION ALL SELECT id, 'AB-', 8, 10, 15 FROM hospitals WHERE code = 'MMC-MKT'
+UNION ALL SELECT id, 'O-', 40, 18, 30 FROM hospitals WHERE code = 'MMC-MKT'
+UNION ALL SELECT id, 'AB-', 8, 15, 25 FROM hospitals WHERE code = 'MMC-MKT'
 UNION ALL SELECT id, 'A+', 18, 10, 15 FROM hospitals WHERE code = 'MMC-MKT'
 UNION ALL SELECT id, 'O+', 22, 10, 15 FROM hospitals WHERE code = 'MMC-MKT';
 

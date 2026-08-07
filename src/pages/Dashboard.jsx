@@ -4,32 +4,29 @@ import PageHeader from "../components/PageHeader";
 import { fuzzyMatchAny } from "../utils/fuzzySearch";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
-
-const imgVector2 = "https://www.figma.com/api/mcp/asset/3031f0bd-02ab-4d5b-94f5-783c80a61a0d";
-const imgEllipse45 = "https://www.figma.com/api/mcp/asset/be8dbb9d-4acc-40d8-be2e-cddf289297e9";
-const imgGroup2 = "https://www.figma.com/api/mcp/asset/7e89c5be-bb89-494a-b463-eda6645f3683";
-const imgGroup3 = "https://www.figma.com/api/mcp/asset/31f5a4f4-6a54-4085-a2e8-91cb29cd8a82";
-const imgVector3 = "https://www.figma.com/api/mcp/asset/518af209-2857-43ce-8694-fecc0a072019";
-const imgGroup4 = "https://www.figma.com/api/mcp/asset/9377a367-4ddb-442a-bb36-bba125c218cb";
-const imgGroup76 = "https://www.figma.com/api/mcp/asset/5ecc14d0-1141-4eca-b68a-2947878b6b09";
-const imgGroup5 = "https://www.figma.com/api/mcp/asset/e9c12ea2-57c9-44c4-a47e-c97dc7b45920";
-const imgGroup80 = "https://www.figma.com/api/mcp/asset/094c35f0-cb2f-4113-8279-cf8d030cc5af";
-const imgVector6 = "https://www.figma.com/api/mcp/asset/71fd8a34-01c0-4ec1-8967-b69882dbee20";
-const imgVector7 = "https://www.figma.com/api/mcp/asset/c9267afd-52e8-4fd9-8183-0646122a0258";
-const imgImage6 = "https://www.figma.com/api/mcp/asset/3d4e57f6-114f-4932-af4e-04e248bf7b80";
-const imgGroup6 = "https://www.figma.com/api/mcp/asset/076c49a2-a805-4190-8147-7d8628802934";
-const imgEllipse48 = "https://www.figma.com/api/mcp/asset/21919db4-248c-4476-b4da-52ca1f1bccce";
-const imgGroup7 = "https://www.figma.com/api/mcp/asset/e1fec1d3-9a22-40f1-ad39-e6bd5dc0e2cc";
+import Avatar from "../components/Avatar";
+import {
+  IconChevronRight,
+  IconAlert,
+  IconClock,
+  IconMegaphone,
+  IconDroplet,
+  IconUsers,
+  IconCheckCircle,
+  IconMapPin,
+  IconSearch,
+  IconChart,
+} from "../components/icons";
 
 // Static per-card chrome (icon/label/copy) — only the numbers underneath
 // come from the API. Trend badges only render for metrics the backend
 // actually computes a day-over-day comparison for; fabricating a percentage
 // for the others would be worse than just not showing one.
 const STAT_CARD_META = {
-  codeRed: { icon: imgGroup4, accent: true, label: "CODE RED BROADCASTS", sub: "Active emergency requests" },
-  unitsNeeded: { icon: imgGroup76, label: "Units Needed", sub: "Total volume across all active broadcast" },
-  activeDonors: { icon: imgGroup5, label: "Active Donors" },
-  fulfillmentRate: { icon: imgGroup80, label: "Fulfillment Rate", sub: "Successful quotas met (Last 24h)" },
+  codeRed: { icon: IconMegaphone, accent: true, label: "CODE RED BROADCASTS", sub: "Active emergency requests" },
+  unitsNeeded: { icon: IconDroplet, label: "Units Needed", sub: "Total volume across all active broadcast" },
+  activeDonors: { icon: IconUsers, label: "Active Donors" },
+  fulfillmentRate: { icon: IconCheckCircle, label: "Fulfillment Rate", sub: "Successful quotas met (Last 24h)" },
 };
 
 function formatElapsed(seconds) {
@@ -90,9 +87,7 @@ function PriorityBadge({ priority }) {
   };
   return (
     <div className="flex items-center justify-center gap-1">
-      {priority === "EMERGENCY" && (
-        <img alt="" className="w-[16px] h-[14px]" src={imgEllipse45} />
-      )}
+      {priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#c26460]" />}
       <span className={`font-poppins font-semibold text-[11px] tracking-wide ${colorMap[priority]}`}>{priority}</span>
     </div>
   );
@@ -174,7 +169,6 @@ export default function Dashboard() {
             name: person.name,
             bloodType: person.bloodType,
             time: formatRelativeTime(person.arrivedAt),
-            img: person.avatar || imgImage6,
           }))
         );
       } catch (err) {
@@ -228,7 +222,7 @@ export default function Dashboard() {
         title="Hospital Overview"
         right={
           <div className="h-[40.62px] w-[293.783px] bg-[#f6f5f4] rounded-[13px] shadow-[0px_5px_5px_0px_rgba(0,0,0,0.09)] flex items-center gap-2 px-4">
-            <img alt="" className="w-[16px] h-[16px] shrink-0" src={imgGroup7} />
+            <IconSearch className="w-[16px] h-[16px] shrink-0 text-[#b3b3b3]" />
             <input
               type="text"
               value={searchQuery}
@@ -280,39 +274,36 @@ export default function Dashboard() {
           onClick={() => openModal("/new-broadcast")}
           className="absolute bg-[#ad2b21] h-[49px] left-[871px] rounded-[16px] top-[138px] w-[215px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8f2419] transition-colors"
         >
-          <img alt="" className="w-[16px] h-[16px]" src={imgVector3} />
+          <IconMegaphone className="w-5 h-5 text-white" strokeWidth="2.2" />
           <span className="font-poppins font-bold text-[17px] text-white">New Broadcast</span>
         </button>
 
         {/* Stat cards */}
         <div className="absolute left-0 top-[236px] w-full flex items-stretch gap-[27px]">
-          {statCards.map((card, i) => (
-            <div
-              key={card.label}
-              className={`relative w-[247px] min-h-[166px] rounded-[16px] flex flex-col ${
-                i === 0 ? "bg-[#fbf3f3] border-l-[9px] border-l-[#ad2b21]" : "bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)]"
-              } px-[19px] pt-[14px] pb-[10px]`}
-            >
-              <div className="bg-[#f1dddc] h-[30px] w-[33px] rounded-[8px] flex items-center justify-center shrink-0">
-                <img alt="" className="w-[16px] h-[16px]" src={card.icon} />
-              </div>
-              {card.trend && (
-                <div className="absolute top-[19px] right-[19px] flex items-center gap-1 text-[11px] font-poppins text-black">
-                  {card.trendIcon && <img alt="" className="w-[8px] h-[8px]" src={card.trendIcon} />}
-                  <span>{card.trend}</span>
+          {statCards.map((card, i) => {
+            const CardIcon = card.icon;
+            return (
+              <div
+                key={card.label}
+                className={`relative w-[247px] min-h-[166px] rounded-[16px] flex flex-col ${
+                  i === 0 ? "bg-[#fbf3f3] border-l-[9px] border-l-[#ad2b21]" : "bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)]"
+                } px-[19px] pt-[14px] pb-[10px]`}
+              >
+                <div className="bg-[#f1dddc] h-[30px] w-[33px] rounded-[8px] flex items-center justify-center shrink-0">
+                  <CardIcon className="w-[16px] h-[16px] text-[#ad2b21]" />
                 </div>
-              )}
-              <div className="mt-2 font-poppins font-bold text-[17px] text-[#808080] leading-snug">{card.label}</div>
-              <div className="mt-2 font-poppins font-bold text-[35px] text-black leading-none">{card.value}</div>
-              <div className="mt-2 font-poppins font-medium text-[13px] text-[#808080] leading-snug">{card.sub}</div>
-            </div>
-          ))}
+                <div className="mt-2 font-poppins font-bold text-[17px] text-[#808080] leading-snug">{card.label}</div>
+                <div className="mt-2 font-poppins font-bold text-[35px] text-black leading-none">{card.value}</div>
+                <div className="mt-2 font-poppins font-medium text-[13px] text-[#808080] leading-snug">{card.sub}</div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Live Match Monitoring */}
         <div className="absolute left-[11px] top-[439px] w-[1072px] h-[432px] bg-white rounded-[6px] shadow-[0px_5px_5px_0px_rgba(0,0,0,0.09)]">
           <div className="flex items-center gap-2 pt-[22px] pl-[15px]">
-            <img alt="" className="w-[16px] h-[16px]" src={imgGroup3} />
+            <IconChart className="w-[16px] h-[16px] text-[#ad2b21]" />
             <span className="font-poppins font-semibold text-[17px] text-black">Live Match Monitoring</span>
           </div>
           <div className="pl-[42px] font-poppins font-medium text-[11px] text-[#808080]">
@@ -324,7 +315,7 @@ export default function Dashboard() {
             className="absolute right-[15px] top-[36px] flex items-center gap-1 cursor-pointer"
           >
             <span className="font-poppins font-medium text-[13px] text-[#812a34]">View All Broadcasts</span>
-            <img alt="" className="w-[6px] h-[10px]" src={imgVector2} />
+            <IconChevronRight className="w-[6px] h-[10px] text-[#812a34]" />
           </button>
 
           <div className="mt-[19px] border-t border-[#d9d9d9]" />
@@ -367,7 +358,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="flex items-center justify-center gap-1">
-                  <img alt="" className="w-[12px] h-[12px]" src={imgGroup2} />
+                  <IconClock className="w-[12px] h-[12px] text-[#aaa4a0]" />
                   <span className="font-poppins font-medium text-[12px] text-[#aaa4a0]">{row.time}</span>
                 </div>
               </div>
@@ -382,7 +373,10 @@ export default function Dashboard() {
 
         {/* Stock Criticality */}
         <div className="absolute left-[11px] top-[906px] w-[585px] h-[411px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)]">
-          <div className="pt-[27px] pl-[63px] font-poppins font-bold text-[17px] text-black">Stock Criticality</div>
+          <div className="pt-[27px] pl-[27px] flex items-center gap-2 font-poppins font-bold text-[17px] text-black">
+            <IconDroplet className="w-[16px] h-[16px] text-[#ad2b21] shrink-0" />
+            <span>Stock Criticality</span>
+          </div>
           <div className="mt-[16px] border-t border-[#d9d9d9]" />
 
           <div className="grid grid-cols-2 gap-[30px] px-[31px] pt-[26px]">
@@ -404,7 +398,7 @@ export default function Dashboard() {
 
           <Link to="/reports" className="absolute left-[85px] top-[325px] w-[438px] h-[51px] border-[2.5px] border-[#d9d9d9] rounded-[10px] flex items-center justify-center cursor-pointer">
             <span className="font-poppins font-bold text-[15px] text-[#808080]">Full Inventory Report</span>
-            <img alt="" className="w-[8px] h-[13px] ml-2" src={imgVector6} />
+            <IconChevronRight className="w-[8px] h-[13px] ml-2 text-[#808080]" />
           </Link>
         </div>
 
@@ -417,22 +411,22 @@ export default function Dashboard() {
           <div className="pl-[71px] pt-[1px] font-poppins font-medium text-[11px] text-[#808080]">
             Donors detected in facility geofence
           </div>
-          <img alt="" className="absolute left-[20px] top-[26px] w-[24px] h-[24px]" src={imgVector7} />
+          <IconMapPin className="absolute left-[20px] top-[26px] w-[24px] h-[24px] text-[#ad2b21]" />
           <div className="mt-[15px] border-t border-[#d9d9d9]" />
 
           <div className="flex flex-col gap-[13px] px-[25px] pt-[15px]">
             {filteredRecentArrivals.map((person) => (
               <div key={person.name} className="flex items-center gap-3">
-                <img alt="" className="w-[45px] h-[45px] rounded-full object-cover" src={person.img} />
+                <Avatar name={person.name} size={45} />
                 <div className="flex-1">
                   <div className="font-poppins font-medium text-[15px] text-black">{person.name}</div>
                   <div className="flex items-center gap-1 font-poppins font-medium text-[12px] text-[#aaa4a0]">
-                    <img alt="" className="w-[10px] h-[10px]" src={imgGroup6} />
+                    <IconClock className="w-[10px] h-[10px]" />
                     <span>{person.time}</span>
                   </div>
                 </div>
                 <div className="relative w-[26px] h-[25px]">
-                  <img alt="" className="absolute inset-0 size-full" src={imgEllipse48} />
+                  <div className="absolute inset-0 rounded-full bg-[#f1dddc]" />
                   <span className="absolute inset-0 flex items-center justify-center font-poppins font-medium text-[11px] text-black">
                     {person.bloodType}
                   </span>

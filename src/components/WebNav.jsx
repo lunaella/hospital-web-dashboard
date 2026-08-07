@@ -1,186 +1,49 @@
+import { Link, useLocation } from "react-router-dom";
 import resqLogo from "../assets/resq-logo.png";
+import { IconUsers, IconChart, IconGrid, IconGear } from "./icons";
+import { useAuth } from "../context/AuthContext";
 
-const imgResQLogo = resqLogo;
-const imgVector = "https://www.figma.com/api/mcp/asset/ca5dbc1b-b473-4cf1-ba70-7818d0937735";
-const imgGroup = "https://www.figma.com/api/mcp/asset/66e4a534-bf3e-4895-b543-ec99af3dc935";
-const imgGroup1 = "https://www.figma.com/api/mcp/asset/3775bcee-ade1-4525-8a58-e42c43a8feee";
-const imgVector1 = "https://www.figma.com/api/mcp/asset/e8673723-cfa1-4c83-9d2b-e2928b02d232";
-const imgResQLogo1 = resqLogo;
-const imgGroup2 = "https://www.figma.com/api/mcp/asset/1d55f653-b7bf-4403-b364-b661539b56ec";
-const imgGroup3 = "https://www.figma.com/api/mcp/asset/ed48664d-29d5-4c56-9013-0f810216bea9";
+// Nav icons render inline instead of via <img src="figma.com/api/mcp/asset/...">
+// — those were ephemeral Figma design-tool links, not a real asset host, so
+// every sidebar icon 404'd in a real browser.
 
-import { Link } from "react-router-dom";
+// Which sidebar item should look "active" for a given path — /view-broadcasts
+// has no dedicated sidebar item of its own, so it's grouped under Donor
+// Management like before the Team Access rewrite.
+const ACTIVE_PATH_OVERRIDES = { "/view-broadcasts": "/donor-management" };
 
-// property1: "DashboardNav" | "DMNav" | "ReportsNav" | "SettingsNav"
-export default function WebNav({ className, property1 = "DashboardNav" }) {
-  if (property1 === "DMNav") {
-    return (
-      <div className={className || "block h-full overflow-clip relative w-[296px]"}>
-        <div className="absolute bg-[#751423] h-full left-0 top-0 w-[276px]" />
-        <div className="absolute contents left-[36px] top-[36px]">
-          <div className="absolute h-[41.558px] left-[36px] top-[36px] w-[54.481px]">
-            <div className="absolute inset-[-1.21%_-0.92%_-1.2%_-0.92%]">
-              <img alt="" className="block max-w-none size-full" src={imgResQLogo1} />
-            </div>
-          </div>
-          <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
-          <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
-            ADMIN
-          </p>
-        </div>
-        <Link to="/reports" className="absolute contents left-[26px] top-[239px] cursor-pointer">
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[91.5px] not-italic text-[17px] text-center text-white top-[239px] whitespace-nowrap">
-            Reports
-          </p>
-          <div className="absolute left-[26px] top-[241px] w-[18px] h-[20px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgGroup} />
-          </div>
-        </Link>
-        <Link to="/settings" className="absolute left-0 bottom-0 w-[279px] h-[60px] cursor-pointer">
-          <div className="absolute bg-[rgba(217,217,217,0.05)] inset-0" />
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[112.21px] not-italic text-[17px] text-center text-white top-[17px] w-[86.126px]">
-            Settings
-          </p>
-          <div className="absolute left-[30px] top-[16px] w-[21px] h-[18px]">
-            <div className="absolute inset-[-5.56%_-4.69%]">
-              <img alt="" className="block max-w-none size-full" src={imgGroup2} />
-            </div>
-          </div>
-        </Link>
-        <div className="absolute bg-[rgba(217,217,217,0.25)] h-[47px] left-[9px] rounded-[15px] top-[173px] w-[257px]" />
-        <Link to="/dashboard" className="absolute contents left-[24px] top-[129px] cursor-pointer">
-          <div className="absolute left-[24px] top-[131px] w-[20px] h-[20px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector1} />
-          </div>
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[106.5px] not-italic text-[17px] text-center text-white top-[129px] whitespace-nowrap">
-            Dashboard
-          </p>
-        </Link>
-        <div className="absolute contents left-[24px] top-[183px]">
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[145px] not-italic text-[17px] text-center text-white top-[183px] whitespace-nowrap">
-            Donor Management
-          </p>
-          <div className="absolute left-[24px] top-[188px] w-[20px] h-[19px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (property1 === "ReportsNav") {
-    return (
-      <div className={className || "block h-full overflow-clip relative w-[296px]"}>
-        <div className="absolute bg-[#751423] h-full left-0 top-0 w-[276px]" />
-        <div className="absolute contents left-[36px] top-[36px]">
-          <div className="absolute h-[41.558px] left-[36px] top-[36px] w-[54.481px]">
-            <div className="absolute inset-[-1.21%_-0.92%_-1.2%_-0.92%]">
-              <img alt="" className="block max-w-none size-full" src={imgResQLogo1} />
-            </div>
-          </div>
-          <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
-          <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
-            ADMIN
-          </p>
-        </div>
-        <Link to="/settings" className="absolute left-0 bottom-0 w-[279px] h-[60px] cursor-pointer">
-          <div className="absolute bg-[rgba(217,217,217,0.05)] inset-0" />
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[112.21px] not-italic text-[17px] text-center text-white top-[17px] w-[86.126px]">
-            Settings
-          </p>
-          <div className="absolute left-[30px] top-[16px] w-[21px] h-[18px]">
-            <div className="absolute inset-[-5.56%_-4.69%]">
-              <img alt="" className="block max-w-none size-full" src={imgGroup3} />
-            </div>
-          </div>
-        </Link>
-        <div className="absolute bg-[rgba(217,217,217,0.25)] h-[47px] left-[10px] rounded-[15px] top-[229px] w-[257px]" />
-        <Link to="/dashboard" className="absolute contents left-[24px] top-[129px] cursor-pointer">
-          <div className="absolute left-[24px] top-[131px] w-[20px] h-[20px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector1} />
-          </div>
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[106.5px] not-italic text-[17px] text-center text-white top-[129px] whitespace-nowrap">
-            Dashboard
-          </p>
-        </Link>
-        <Link to="/donor-management" className="absolute contents left-[24px] top-[183px] cursor-pointer">
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[145px] not-italic text-[17px] text-center text-white top-[183px] whitespace-nowrap">
-            Donor Management
-          </p>
-          <div className="absolute left-[24px] top-[188px] w-[20px] h-[19px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector} />
-          </div>
-        </Link>
-        <div className="absolute contents left-[26px] top-[239px]">
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[91.5px] not-italic text-[17px] text-center text-white top-[239px] whitespace-nowrap">
-            Reports
-          </p>
-          <div className="absolute left-[26px] top-[241px] w-[18px] h-[20px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgGroup} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (property1 === "SettingsNav") {
-    return (
-      <div className={className || "h-full overflow-clip relative w-[296px]"}>
-        <div className="absolute bg-[#751423] h-full left-0 top-0 w-[276px]" />
-        <div className="absolute contents left-[36px] top-[36px]">
-          <div className="absolute h-[41.558px] left-[36px] top-[36px] w-[54.481px]">
-            <div className="absolute inset-[-1.21%_-0.92%_-1.2%_-0.92%]">
-              <img alt="" className="block max-w-none size-full" src={imgResQLogo1} />
-            </div>
-          </div>
-          <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
-          <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
-            ADMIN
-          </p>
-        </div>
-        <div className="absolute left-0 bottom-0 w-[279px] h-[60px]">
-          <div className="absolute bg-[rgba(217,217,217,0.25)] h-[47px] left-[11px] rounded-[15px] top-[6px] w-[257px]" />
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[112.21px] not-italic text-white text-[17px] text-center top-[17px] w-[86.126px]">
-            Settings
-          </p>
-          <div className="absolute left-[30px] top-[19px] w-[21px] h-[18px]">
-            <div className="absolute inset-[-5.56%_-4.69%]">
-              <img alt="" className="block max-w-none size-full" src={imgGroup1} />
-            </div>
-          </div>
-        </div>
-        <Link to="/dashboard" className="absolute contents left-[24px] top-[129px] cursor-pointer">
-          <div className="absolute left-[24px] top-[131px] w-[20px] h-[20px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector1} />
-          </div>
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[106.5px] not-italic text-[17px] text-center text-white top-[129px] whitespace-nowrap">
-            Dashboard
-          </p>
-        </Link>
-        <Link to="/donor-management" className="absolute contents left-[24px] top-[183px] cursor-pointer">
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[145px] not-italic text-[17px] text-center text-white top-[183px] whitespace-nowrap">
-            Donor Management
-          </p>
-          <div className="absolute left-[24px] top-[188px] w-[20px] h-[19px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector} />
-          </div>
-        </Link>
-        <Link to="/reports" className="absolute contents left-[26px] top-[239px] cursor-pointer">
-          <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[91.5px] not-italic text-[17px] text-center text-white top-[239px] whitespace-nowrap">
-            Reports
-          </p>
-          <div className="absolute left-[26px] top-[241px] w-[18px] h-[20px]">
-            <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgGroup} />
-          </div>
-        </Link>
-      </div>
-    );
-  }
+// One row per top-list nav item. `section` gates visibility: an admin with
+// 'none' on that section doesn't see the link at all, since navigating there
+// would just 403 on every API call anyway. Settings is handled separately,
+// pinned to the bottom — every logged-in admin can always reach it, since
+// Account Credentials/session/logout are self-service regardless of section
+// permissions (see server/src/routes/settings.routes.js).
+const NAV_ITEMS = [
+  { to: "/dashboard", label: "Dashboard", icon: IconGrid, section: "dashboard" },
+  { to: "/donor-management", label: "Donor Management", icon: IconUsers, section: "donor_management" },
+  { to: "/reports", label: "Reports", icon: IconChart, section: "reports" },
+];
+
+const FIRST_ITEM_TOP = 129;
+const ITEM_GAP = 56;
+
+export default function WebNav({ className }) {
+  const location = useLocation();
+  const { permissions } = useAuth();
+
+  const activePath = ACTIVE_PATH_OVERRIDES[location.pathname] || location.pathname;
+  const visibleItems = NAV_ITEMS.filter((item) => permissions[item.section] !== "none");
+  const activeIndex = visibleItems.findIndex((item) => item.to === activePath);
+  const isSettingsActive = activePath === "/settings";
+
   return (
     <div className={className || "h-full overflow-clip relative w-[296px]"}>
       <div className="absolute bg-[#751423] h-full left-0 top-0 w-[276px]" />
+
       <div className="absolute contents left-[36px] top-[36px]">
         <div className="absolute h-[41.558px] left-[36px] top-[36px] w-[54.481px]">
           <div className="absolute inset-[-1.21%_-0.92%_-1.2%_-0.92%]">
-            <img alt="" className="block max-w-none size-full" src={imgResQLogo} />
+            <img alt="" className="block max-w-none size-full" src={resqLogo} />
           </div>
         </div>
         <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
@@ -188,42 +51,43 @@ export default function WebNav({ className, property1 = "DashboardNav" }) {
           ADMIN
         </p>
       </div>
-      <Link to="/donor-management" className="absolute contents cursor-pointer left-[24px] top-[185px]">
-        <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[144px] not-italic text-[17px] text-center text-white top-[185px] whitespace-nowrap">
-          Donor Management
-        </p>
-        <div className="absolute left-[24px] top-[188px] w-[20px] h-[19px]">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector} />
+
+      {activeIndex >= 0 && (
+        <div
+          className="absolute bg-[rgba(217,217,217,0.25)] h-[47px] left-[10px] rounded-[15px] w-[257px]"
+          style={{ top: FIRST_ITEM_TOP + activeIndex * ITEM_GAP - 9 }}
+        />
+      )}
+
+      {visibleItems.map((item, i) => {
+        const ItemIcon = item.icon;
+        return (
+          <Link
+            key={item.to}
+            to={item.to}
+            className="absolute contents left-[24px] cursor-pointer"
+            style={{ top: FIRST_ITEM_TOP + i * ITEM_GAP }}
+          >
+            <div className="absolute left-[24px] flex items-center gap-3" style={{ top: FIRST_ITEM_TOP + i * ITEM_GAP }}>
+              <ItemIcon className="w-[18px] h-[18px] text-white shrink-0" />
+              <p className="font-poppins font-semibold leading-[normal] not-italic text-[17px] text-white whitespace-nowrap">
+                {item.label}
+              </p>
+            </div>
+          </Link>
+        );
+      })}
+
+      <Link to="/settings" className="absolute left-0 bottom-0 w-[279px] h-[60px] cursor-pointer">
+        {isSettingsActive && <div className="absolute bg-[rgba(217,217,217,0.25)] h-[47px] left-[11px] rounded-[15px] top-[6px] w-[257px]" />}
+        {!isSettingsActive && <div className="absolute bg-[rgba(217,217,217,0.05)] inset-0" />}
+        <div className="absolute left-[30px] top-0 h-[60px] flex items-center gap-3">
+          <IconGear className="w-[19px] h-[19px] text-white shrink-0" />
+          <p className="font-poppins font-semibold leading-[normal] not-italic text-[17px] text-white whitespace-nowrap">
+            Settings
+          </p>
         </div>
       </Link>
-      <Link to="/reports" className="absolute contents cursor-pointer left-[26px] top-[239px]">
-        <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[91.5px] not-italic text-[17px] text-center text-white top-[239px] whitespace-nowrap">
-          Reports
-        </p>
-        <div className="absolute left-[26px] top-[241px] w-[18px] h-[20px]">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgGroup} />
-        </div>
-      </Link>
-      <Link to="/settings" className="absolute cursor-pointer left-0 bottom-0 w-[279px] h-[60px]">
-        <div className="absolute bg-[rgba(217,217,217,0.05)] inset-0" />
-        <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[112.21px] not-italic text-[17px] text-center text-white top-[17px] w-[86.126px]">
-          Settings
-        </p>
-        <div className="absolute left-[30px] top-[16px] w-[21px] h-[18px]">
-          <div className="absolute inset-[-5.56%_-4.69%]">
-            <img alt="" className="block max-w-none size-full" src={imgGroup1} />
-          </div>
-        </div>
-      </Link>
-      <div className="absolute bg-[rgba(217,217,217,0.25)] block h-[47px] left-[11px] rounded-[15px] top-[120px] w-[257px]" />
-      <div className="absolute contents left-[24px] top-[129px]">
-        <div className="absolute left-[24px] top-[131px] w-[20px] h-[20px]">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgVector1} />
-        </div>
-        <p className="-translate-x-1/2 absolute font-poppins font-semibold leading-[normal] left-[106.5px] not-italic text-[17px] text-center text-white top-[129px] whitespace-nowrap">
-          Dashboard
-        </p>
-      </div>
     </div>
   );
 }

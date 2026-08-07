@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { api, setToken } from "../lib/apiClient";
+import { useAuth } from "../context/AuthContext";
 
 import resqLogo from "../assets/resq-logo.png";
 
@@ -19,6 +20,7 @@ const imgResQLogo = resqLogo;
 // centered inside the viewport.
 export default function Login() {
   const navigate = useNavigate();
+  const { refreshProfile } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -36,6 +38,7 @@ export default function Login() {
     try {
       const data = await api.post("/api/auth/login", { username, password });
       setToken(data.token);
+      await refreshProfile();
       navigate("/dashboard");
     } catch (err) {
       navigate("/login-failed", { state: { error: err.message } });

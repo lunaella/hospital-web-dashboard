@@ -3,32 +3,10 @@ import { createPortal } from "react-dom";
 import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
-
-const imgVector2 = "https://www.figma.com/api/mcp/asset/7e6479a9-3801-4be0-9486-c10bebbe2e5a";
-const imgLine29 = "https://www.figma.com/api/mcp/asset/41954495-73df-427e-aa68-f516adeb5bd9";
-const imgGroup4 = "https://www.figma.com/api/mcp/asset/670ee25d-4d79-4f53-a568-706188f4ca5a";
-const imgVector6 = "https://www.figma.com/api/mcp/asset/2d623c58-918e-4593-aa8d-60490168e6be";
-const imgVector8 = "https://www.figma.com/api/mcp/asset/0648a58f-1fcf-4aa1-8485-65ec04679647";
-const imgVector9 = "https://www.figma.com/api/mcp/asset/e4cbf09a-a973-4c90-ac39-1e92a2719eaa";
-const imgGroup5 = "https://www.figma.com/api/mcp/asset/acbaab8d-ca79-4bf0-b10e-fb600613c84e";
-const imgGroup145 = "https://www.figma.com/api/mcp/asset/dd596e6b-0e0a-4340-a410-f2d1e125f6a7";
-const imgVector3 = "https://www.figma.com/api/mcp/asset/acb1ae2a-534f-4612-9286-1ce9ff717148";
-const imgImage7 = "https://www.figma.com/api/mcp/asset/633319c7-e0a6-465d-a5a8-58972c81fc99";
-const imgImage9 = "https://www.figma.com/api/mcp/asset/f84b9a89-8483-402a-9e85-e46e3e9f198c";
-const imgImage10 = "https://www.figma.com/api/mcp/asset/2df25c8e-ebe5-4f2d-8dca-56eda6ce9b55";
-const imgImage11 = "https://www.figma.com/api/mcp/asset/1373d634-7ef5-4784-a0d1-085df4192b93";
-const imgImage12 = "https://www.figma.com/api/mcp/asset/c7fd08ae-3178-456a-a0ea-d7a130ec0428";
-const imgImage13 = "https://www.figma.com/api/mcp/asset/604f5194-9e34-4047-88fa-45ce2b7a53cf";
-const imgImage14 = "https://www.figma.com/api/mcp/asset/0adc5e49-d15c-4063-8137-6eb68c9ff20c";
+import Avatar from "../components/Avatar";
+import { IconFilter, IconShield, IconCalendar, IconCheck, IconPlus, IconClock, IconLock } from "../components/icons";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
-
-const FALLBACK_AVATARS = [imgImage7, imgImage9, imgImage10, imgImage11, imgImage12, imgImage13, imgImage14];
-function avatarFor(seedString, explicitUrl) {
-  if (explicitUrl) return explicitUrl;
-  const idx = [...(seedString || "")].reduce((sum, c) => sum + c.charCodeAt(0), 0) % FALLBACK_AVATARS.length;
-  return FALLBACK_AVATARS[idx];
-}
 
 function mapDonor(d) {
   return {
@@ -37,7 +15,6 @@ function mapDonor(d) {
     name: d.name,
     phone: d.phone,
     bloodType: d.bloodType,
-    avatar: avatarFor(d.donorCode, d.avatar),
     status: d.isEligible ? { type: "eligible" } : { type: "locked", days: d.daysUntilEligible },
   };
 }
@@ -49,7 +26,6 @@ function mapAppointment(a) {
     time: scheduled.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }).toLowerCase(),
     name: a.name,
     bloodType: a.bloodType,
-    avatar: avatarFor(a.name, a.avatar),
     status: a.status,
   };
 }
@@ -375,7 +351,7 @@ export default function DonorManagement() {
         }`}
       >
         <div className="w-[16px] h-[13px]">
-          <img alt="" className="block max-w-none size-full" src={imgVector2} />
+          <IconFilter className="block max-w-none size-full text-black" />
         </div>
         <span className="font-bold text-[17px] text-black">Advanced Filters</span>
       </button>
@@ -435,9 +411,7 @@ export default function DonorManagement() {
       <p className="absolute font-semibold leading-[normal] left-[415.5px] not-italic text-[17px] text-black text-center top-[238px] -translate-x-1/2 whitespace-nowrap">
         Donor Database
       </p>
-      <div className="absolute h-0 left-[321px] top-[285px] w-[671px]">
-        <img alt="" className="block max-w-none size-full" src={imgLine29} />
-      </div>
+      <div className="absolute h-px bg-[#d9d9d9] left-[321px] top-[285px] w-[671px]" />
 
       <div className="absolute left-[320px] top-[285px] w-[672px]">
         {/* Table header */}
@@ -469,7 +443,7 @@ export default function DonorManagement() {
           >
             <div className="w-[80px] text-center text-[11px] font-medium text-[#aaa4a0]">{donor.id}</div>
             <div className="w-[224px] flex items-center gap-3 pl-2">
-              <img alt="" className="w-[45px] h-[45px] rounded-full object-cover" src={donor.avatar} />
+              <Avatar name={donor.name} size={45} />
               <div>
                 <p className="text-[13px] font-medium text-black leading-tight">{donor.name}</p>
                 <p className="text-[10px] font-medium text-[#aaa4a0] leading-tight">{donor.phone}</p>
@@ -483,12 +457,12 @@ export default function DonorManagement() {
             <div className="w-[176px] flex items-center justify-center">
               {donor.status.type === "eligible" ? (
                 <span className="border-2 border-[#d9d9d9] border-solid rounded-[10px] h-[24px] w-[120px] flex items-center justify-center gap-1 text-[10px] font-semibold tracking-wide text-black">
-                  <img alt="" className="w-[10px] h-[10px]" src={imgGroup145} />
+                  <IconCheck className="w-[10px] h-[10px] text-[#4c8c4a]" />
                   ELIGIBLE
                 </span>
               ) : (
                 <span className="border-2 border-[#d9d9d9] border-solid rounded-[10px] h-[24px] w-[120px] flex items-center justify-center gap-1 text-[10px] font-semibold tracking-wide text-[#808080]">
-                  <img alt="" className="w-[10px] h-[10px]" src={imgVector3} />
+                  <IconLock className="w-[10px] h-[10px] text-[#808080]" />
                   {donor.status.days} DAYS LOCK
                 </span>
               )}
@@ -559,8 +533,8 @@ export default function DonorManagement() {
 
       {/* DOH 90-Day Cooling Rule card */}
       <div className="absolute bg-white border border-[#d9d9d9] border-solid h-[113px] left-[321px] rounded-[10px] shadow-[0px_9px_6px_0px_rgba(0,0,0,0.05),0px_4px_4px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] top-[823px] w-[671px]" />
-      <div className="absolute w-[28px] h-[28px] left-[355px] top-[845px]">
-        <img alt="" className="block max-w-none size-full" src={imgGroup4} />
+      <div className="absolute w-[28px] h-[28px] left-[355px] top-[845px] text-[#ad2b21]">
+        <IconShield className="block max-w-none size-full" />
       </div>
       <div className="absolute left-[405px] top-[846px] w-[565px] flex flex-col gap-2">
         <p className="font-poppins font-bold text-[17px] text-black">DOH 90-Day Cooling Rule</p>
@@ -574,7 +548,7 @@ export default function DonorManagement() {
       <div className="absolute bg-white border border-[#d9d9d9] border-solid left-[1021px] rounded-[10px] shadow-[0px_9px_5px_0px_rgba(0,0,0,0.05),0px_4px_4px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] top-[225px] w-[352px] h-[659px]" />
       <div className="absolute left-[1049px] top-[238px] w-[303px] h-[22px] flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img alt="" className="w-4 h-4" src={imgVector6} />
+          <IconCalendar className="w-4 h-4 text-black" />
           <p className="font-poppins font-bold text-[17px] text-black whitespace-nowrap">Appointment View</p>
         </div>
         {isToday && (
@@ -627,22 +601,20 @@ export default function DonorManagement() {
               {apt.bloodType}
             </span>
             <p className="absolute left-[17px] top-[15px] flex items-center gap-1 text-[12px] font-medium text-[#aaa4a0]">
-              <img alt="" className="w-[10px] h-[10px]" src={imgGroup5} />
+              <IconClock className="w-[10px] h-[10px]" />
               {apt.time}
             </p>
-            <img
-              alt=""
-              className="absolute left-[17px] top-[47px] w-[45px] h-[45px] rounded-full object-cover"
-              src={apt.avatar}
-            />
+            <div className="absolute left-[17px] top-[47px]">
+              <Avatar name={apt.name} size={45} />
+            </div>
             <div className="absolute left-[71px] top-[47px]">
               <p className="text-[13px] font-medium text-black leading-tight">{apt.name}</p>
               <p className="text-[10px] font-medium text-[#aaa4a0] leading-tight">Regular Donor</p>
             </div>
             {apt.status === "completed" ? (
               <div className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1">
-                <div className="w-[13px] h-[13px]">
-                  <img alt="" className="block max-w-none size-full" src={imgVector8} />
+                <div className="w-[13px] h-[13px] text-black">
+                  <IconCheck className="block max-w-none size-full" />
                 </div>
                 <span className="text-[13px] font-medium text-black">Donation Recorded</span>
               </div>
@@ -652,8 +624,8 @@ export default function DonorManagement() {
                 onClick={() => recordDonation(apt.id)}
                 className="absolute bg-[#ad2b21] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1 cursor-pointer hover:bg-[#8f2419] transition-colors"
               >
-                <div className="w-[13px] h-[13px]">
-                  <img alt="" className="block max-w-none size-full" src={imgVector8} />
+                <div className="w-[13px] h-[13px] text-white">
+                  <IconCheck className="block max-w-none size-full" />
                 </div>
                 <span className="text-[13px] font-medium text-white">Record Donation</span>
               </button>
@@ -675,8 +647,8 @@ export default function DonorManagement() {
         onClick={openWalkInModal}
         className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[1057px] top-[825px] rounded-[4px] w-[289px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#f6f5f4] transition-colors"
       >
-        <div className="w-[15px] h-[15px]">
-          <img alt="" className="block max-w-none size-full" src={imgVector9} />
+        <div className="w-[15px] h-[15px] text-[#808080]">
+          <IconPlus className="block max-w-none size-full" />
         </div>
         <span className="text-[13px] font-medium text-[#808080]">Add Manual Walk-in</span>
       </button>

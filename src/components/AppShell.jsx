@@ -5,14 +5,6 @@ import WebNav from "./WebNav";
 const DESIGN_WIDTH = 1440;
 const SIDEBAR_WIDTH = 296;
 
-const NAV_VARIANT_BY_PATH = {
-  "/dashboard": "DashboardNav",
-  "/donor-management": "DMNav",
-  "/view-broadcasts": "DMNav", // no dedicated sidebar item for broadcasts; grouped under Donor Management like before
-  "/reports": "ReportsNav",
-  "/settings": "SettingsNav",
-};
-
 // Pages using this shell no longer render their own <WebNav> inline — it's
 // rendered once here, pinned to the real viewport via position:fixed, so it
 // stays visible regardless of how tall the current page's content is or how
@@ -77,8 +69,6 @@ export default function AppShell({ children }) {
     return () => observer.disconnect();
   }, [location.pathname]);
 
-  const property1 = NAV_VARIANT_BY_PATH[location.pathname] || "DashboardNav";
-
   return (
     <>
       <div
@@ -100,7 +90,7 @@ export default function AppShell({ children }) {
             transformOrigin: "top left",
           }}
         >
-          <WebNav property1={property1} />
+          <WebNav />
         </div>
       </div>
       <div style={{ width: DESIGN_WIDTH * zoom, height: contentHeight * zoom, overflow: "hidden" }}>

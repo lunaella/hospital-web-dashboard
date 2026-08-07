@@ -72,4 +72,27 @@ export const api = {
   get: (path) => apiFetch(withHospitalParam(path), { method: "GET" }),
   post: (path, data) => apiFetch(path, { method: "POST", body: data ? JSON.stringify(data) : undefined }),
   patch: (path, data) => apiFetch(path, { method: "PATCH", body: data ? JSON.stringify(data) : undefined }),
+  delete: (path) => apiFetch(path, { method: "DELETE" }),
 };
+
+// Multipart file upload (CSV/XLSX data import) — deliberately bypasses
+// apiFetch's JSON Content-Type default. A FormData body needs the browser to
+// set its own multipart boundary, which it can only do if Content-Type is
+// left unset entirely.
+export async function apiUploadFile(path, formData) {
+  const token = getToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, { method: "POST", body: formData, headers });
+  } catch {
+    throw new Error("Could not reach the ResQ server. Is the API running?");
+  }
+
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(body?.error || `Request failed with status ${res.status}`);
+  }
+  return body;
+}
