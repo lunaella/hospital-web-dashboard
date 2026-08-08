@@ -28,6 +28,15 @@ export const requireAuth = asyncHandler(async (req, res, next) => {
     return res.status(401).json({ error: "Invalid or expired token." });
   }
 
+  // Defense in depth: donor tokens (server/src/utils/jwt.js signDonorToken/
+  // signDonorPendingToken) are signed with the same secret but carry a
+  // role claim admin tokens never had — reject them explicitly here
+  // instead of relying solely on their `sub` (a donor id) not matching a
+  // row in `admins`.
+  if (payload.role === "donor" || payload.role === "donor_pending") {
+    return res.status(401).json({ error: "Invalid token for this endpoint." });
+  }
+
   const redis = await ensureRedisConnected();
   const sessionExists = await redis.get(`session:${payload.jti}`);
   if (!sessionExists) {

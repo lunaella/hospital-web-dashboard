@@ -14,6 +14,9 @@ export const env = {
   redisUrl: required("REDIS_URL", "redis://:resq_dev_password@localhost:6379"),
   jwtSecret: required("JWT_SECRET", "change_me_in_production"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
+  // The donor-facing Android app — a consumer app, so "stay logged in" is
+  // the normal expectation, unlike an admin's shared-terminal 8h session.
+  donorJwtExpiresIn: process.env.DONOR_JWT_EXPIRES_IN ?? "30d",
 
   // Donor notifications — intentionally NOT `required()`. A thesis/demo
   // environment shouldn't refuse to boot just because SMS/email isn't

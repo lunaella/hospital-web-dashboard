@@ -9,6 +9,8 @@ import { requestsRouter } from "./routes/requests.routes.js";
 import { hospitalsRouter } from "./routes/hospitals.routes.js";
 import { importRouter } from "./routes/import.routes.js";
 import { teamRouter } from "./routes/team.routes.js";
+import { donorAuthRouter } from "./routes/donorAuth.routes.js";
+import { donorPortalRouter } from "./routes/donorPortal.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -35,6 +37,11 @@ app.use("/api/requests", requestsRouter);
 app.use("/api/hospitals", hospitalsRouter);
 app.use("/api/import", importRouter);
 app.use("/api/team", teamRouter);
+
+// The donor-facing Android app's API surface — separate auth scheme from
+// the admin routes above (see middleware/donorAuth.js), same server.
+app.use("/api/donor-auth", donorAuthRouter);
+app.use("/api/donor", donorPortalRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
