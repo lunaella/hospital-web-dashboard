@@ -81,13 +81,16 @@ const SYSTEM_HEALTH_META = {
 
 function PriorityBadge({ priority }) {
   const colorMap = {
-    EMERGENCY: "text-[#c26460]",
+    // Was #c26460 (an off-family salmon) — the login page's palette only
+    // has one red (#ad2b21 + its #8f2419 hover), so EMERGENCY now uses that
+    // instead of a third, unrelated shade of "red".
+    EMERGENCY: "text-[#ad2b21]",
     URGENT: "text-black",
     NORMAL: "text-black",
   };
   return (
     <div className="flex items-center justify-center gap-1">
-      {priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#c26460]" />}
+      {priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#ad2b21]" />}
       <span className={`font-poppins font-semibold text-[11px] tracking-wide ${colorMap[priority]}`}>{priority}</span>
     </div>
   );
@@ -314,8 +317,8 @@ export default function Dashboard() {
             onClick={() => navigate("/view-broadcasts")}
             className="absolute right-[15px] top-[36px] flex items-center gap-1 cursor-pointer"
           >
-            <span className="font-poppins font-medium text-[13px] text-[#812a34]">View All Broadcasts</span>
-            <IconChevronRight className="w-[6px] h-[10px] text-[#812a34]" />
+            <span className="font-poppins font-medium text-[13px] text-[#ad2b21]">View All Broadcasts</span>
+            <IconChevronRight className="w-[6px] h-[10px] text-[#ad2b21]" />
           </button>
 
           <div className="mt-[19px] border-t border-[#d9d9d9]" />
@@ -354,7 +357,8 @@ export default function Dashboard() {
                     <span className="text-[#808080]">{row.pct}%</span>
                   </div>
                   <div className="bg-[#d9d9d9] h-[5px] rounded-[10px] w-[134px]">
-                    <div className="bg-[#ad2b22] h-[5px] rounded-[10px]" style={{ width: `${row.pct}%` }} />
+                    {/* Was #ad2b22 — one digit off from the actual brand red. */}
+                    <div className="bg-[#ad2b21] h-[5px] rounded-[10px]" style={{ width: `${row.pct}%` }} />
                   </div>
                 </div>
                 <div className="flex items-center justify-center gap-1">

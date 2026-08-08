@@ -43,10 +43,14 @@ function formatTrend(trendPct) {
 const DATE_RANGES = ["Last 7 days", "Last 30 days", "Last 90 days"];
 const PRIORITY_FILTERS = ["all", "EMERGENCY", "URGENT", "NORMAL"];
 
+// Same red/gold/green identity as before, just brighter and more saturated
+// versions — the muted brick/mustard/sage tones read flat next to the
+// login page's vivid gradient red (#d94636), so this brings the donut in
+// line with that punchier feel instead of a desaturated earth-tone set.
 const BREAKDOWN_META = [
-  { key: "emergency", label: "Emergency", color: "#ad2b21" },
-  { key: "urgent", label: "Urgent", color: "#c9a227" },
-  { key: "normal", label: "Normal", color: "#5b8a52" },
+  { key: "emergency", label: "Emergency", color: "#d94636" },
+  { key: "urgent", label: "Urgent", color: "#e8b923" },
+  { key: "normal", label: "Normal", color: "#43a047" },
 ];
 
 const chartYAxis = ["24", "18", "12", "6", "0"];
@@ -274,8 +278,10 @@ export default function Reports() {
           </div>
         )}
 
-        {/* KPI cards */}
-        <div className="absolute left-[3px] top-[186px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]">
+        {/* KPI cards — top-[193px] matches the other three cards below;
+            this one was previously top-[186px], a 7px offset that made the
+            row look uneven. */}
+        <div className="absolute left-[3px] top-[193px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]">
           <div className="absolute left-[26px] top-[21px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
             <IconCheckCircle className="w-3.5 h-3.5 text-[#ad2b21]" />
           </div>
