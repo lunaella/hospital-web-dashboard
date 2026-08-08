@@ -83,7 +83,7 @@ function Field({ label, hint, children }) {
   );
 }
 
-const EMPTY_HOSPITAL_FORM = { name: "", code: "", city: "", address: "", latitude: "", longitude: "" };
+const EMPTY_HOSPITAL_FORM = { name: "", code: "", city: "", address: "", latitude: "", longitude: "", appointmentCapacity: "5" };
 
 function inputClass() {
   return "border border-[#aaa4a0] rounded-[10px] w-full h-[40px] px-4 font-poppins text-[15px] text-black outline-none";
@@ -117,6 +117,13 @@ export default function Settings() {
   const [hospitalFormSaving, setHospitalFormSaving] = useState(false);
 
   const [importType, setImportType] = useState("donors");
+  // Which hospital an import lands in — a dedicated choice inside this card
+  // rather than silently following the global switcher at the top of the
+  // app, so switching hospitals to check something else while this card is
+  // open can't accidentally point an import at the wrong one. Pre-filled
+  // from whatever's currently selected up top purely as a convenience
+  // default; changing it here doesn't touch the global switcher.
+  const [importHospitalId, setImportHospitalId] = useState("");
   const [importFile, setImportFile] = useState(null);
   const [importSubmitting, setImportSubmitting] = useState(false);
   const [importResult, setImportResult] = useState(null);
@@ -170,6 +177,18 @@ export default function Settings() {
 
   useEffect(() => {
     refreshThresholds();
+  }, [hospitalId]);
+
+  // Default the import destination to whatever's currently selected in the
+  // global switcher, once — purely a convenience starting point. Only fires
+  // while nothing's been chosen yet, so it won't clobber a deliberate choice
+  // made inside the import card, and it skips "all" since that was never a
+  // valid import destination.
+  useEffect(() => {
+    if (!importHospitalId && hospitalId && hospitalId !== "all") {
+      setImportHospitalId(hospitalId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hospitalId]);
 
   useLayoutEffect(() => {
@@ -250,6 +269,7 @@ export default function Settings() {
       address: hospital.address ?? "",
       latitude: hospital.latitude ?? "",
       longitude: hospital.longitude ?? "",
+      appointmentCapacity: hospital.appointmentCapacity ?? "5",
     });
     setHospitalFormError(null);
     setShowHospitalForm(true);
@@ -357,8 +377,8 @@ export default function Settings() {
       setImportError("Choose a .csv or .xlsx file first.");
       return;
     }
-    if (meta.needsHospital && hospitalId === "all") {
-      setImportError('Select a specific hospital (not "All Hospitals") before importing this data.');
+    if (meta.needsHospital && !importHospitalId) {
+      setImportError("Select which hospital this data belongs to before importing.");
       return;
     }
 
@@ -366,7 +386,7 @@ export default function Settings() {
     try {
       const formData = new FormData();
       formData.append("file", importFile);
-      if (meta.needsHospital) formData.append("hospitalId", hospitalId);
+      if (meta.needsHospital) formData.append("hospitalId", importHospitalId);
       const result = await apiUploadFile(meta.endpoint, formData);
       setImportResult(result);
       setImportFile(null);
@@ -685,6 +705,22 @@ export default function Settings() {
                   </Field>
                 </div>
 
+                <div className="grid grid-cols-2 gap-x-10 gap-y-8">
+                  <Field
+                    label="APPOINTMENT SLOT CAPACITY"
+                    hint="Max donors that can be booked into the exact same time slot at this hospital"
+                  >
+                    <input
+                      value={hospitalForm.appointmentCapacity}
+                      onChange={(e) => updateHospitalField("appointmentCapacity", e.target.value)}
+                      className={inputClass()}
+                      inputMode="numeric"
+                      type="number"
+                      min="1"
+                    />
+                  </Field>
+                </div>
+
                 <hr className="border-t border-[#efeeed]" />
 
                 <div className="flex items-center justify-between gap-4">
@@ -901,7 +937,6 @@ export default function Settings() {
 
             {(() => {
               const meta = IMPORT_TYPES.find((t) => t.key === importType);
-              const selectedHospitalName = hospitals.find((h) => h.id === hospitalId)?.name;
               return (
                 <>
                   <div className="flex items-center justify-between gap-4 bg-[#f6f5f4] rounded-[10px] px-4 py-3">
@@ -918,12 +953,22 @@ export default function Settings() {
                   </div>
 
                   {meta.needsHospital && (
-                    <p className="font-poppins text-[13px] text-[#808080]">
-                      Importing into:{" "}
-                      <span className="font-semibold text-black">
-                        {hospitalId === "all" ? "No hospital selected — pick one from the switcher above" : selectedHospitalName}
-                      </span>
-                    </p>
+                    <Field label="IMPORTING INTO" hint="This is independent of the hospital switcher at the top of the app.">
+                      <select
+                        value={importHospitalId}
+                        onChange={(e) => setImportHospitalId(e.target.value)}
+                        className={inputClass()}
+                      >
+                        <option value="" disabled>
+                          Select a hospital...
+                        </option>
+                        {hospitals.map((h) => (
+                          <option key={h.id} value={h.id}>
+                            {h.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
                   )}
 
                   <Field label="FILE">

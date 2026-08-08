@@ -38,7 +38,11 @@ export default function WebNav({ className }) {
 
   return (
     <div className={className || "h-full overflow-clip relative w-[296px]"}>
-      <div className="absolute bg-[#751423] h-full left-0 top-0 w-[276px]" />
+      {/* #ad2b21 is the same red used on the login page's "Log in" button
+          (and as the primary brand red everywhere else in the app) — swapped
+          in here from the previous dark maroon #751423 so the sidebar
+          matches. */}
+      <div className="absolute bg-[#ad2b21] h-full left-0 top-0 w-[276px]" />
 
       <div className="absolute contents left-[36px] top-[36px]">
         <div className="absolute h-[41.558px] left-[36px] top-[36px] w-[54.481px]">

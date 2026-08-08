@@ -1,6 +1,7 @@
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { hospitalIdParam } from "../utils/hospitalScope.js";
+import { bookAppointment, AppointmentBookingError } from "../services/appointments.service.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
@@ -169,22 +170,23 @@ export const listAppointmentsForDay = asyncHandler(async (req, res) => {
 // the donor's geolocation-based nearest-hospital match resolved to for this
 // appointment; this admin's walk-in form asks for it explicitly instead
 // (defaulting to the currently-selected hospital in the switcher).
+//
+// Slot-capacity enforcement lives in bookAppointment (services/appointments
+// .service.js) so this admin flow and the donor-facing self-booking
+// endpoint (donorPortal.controller.js, used by the Android app) can never
+// enforce the rule differently.
 export const createAppointment = asyncHandler(async (req, res) => {
   const { donorId, scheduledAt, hospitalId } = req.body;
   if (!donorId || !scheduledAt || !hospitalId) {
     return res.status(400).json({ error: "donorId, scheduledAt, and hospitalId are required." });
   }
+
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO appointments (donor_id, hospital_id, scheduled_at, status)
-       VALUES ($1, $2, $3, 'pending')
-       RETURNING id, donor_id AS "donorId", hospital_id AS "hospitalId", scheduled_at AS "scheduledAt", status`,
-      [donorId, hospitalId, scheduledAt]
-    );
-    res.status(201).json(rows[0]);
+    const appointment = await bookAppointment({ donorId, hospitalId, scheduledAt });
+    res.status(201).json(appointment);
   } catch (err) {
-    if (err.code === "23503") {
-      return res.status(400).json({ error: "donorId or hospitalId does not match a known record." });
+    if (err instanceof AppointmentBookingError) {
+      return res.status(err.status).json({ error: err.message });
     }
     throw err;
   }

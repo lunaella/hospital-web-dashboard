@@ -54,7 +54,11 @@ export async function getLiveSystemHealth() {
     dbSyncStatus,
     dbLatencyMs: dbCheck.ms,
     redisLatencyMs: redisCheck.ms,
-    minHeapLatencyMs: redisCheck.ok ? redisCheck.ms : dbCheck.ms,
+    // Was misleadingly called "minHeapLatencyMs" — it's just the Redis/DB
+    // ping above, no heap involved. The real min-heap lives in
+    // notifications.service.js (see rankDonorsByResponseTime), which powers
+    // the "Min-Heap Optimized" badge on the Donor Response Time chart.
+    broadcastLatencyMs: redisCheck.ok ? redisCheck.ms : dbCheck.ms,
     recordedAt: new Date().toISOString(),
   };
 }

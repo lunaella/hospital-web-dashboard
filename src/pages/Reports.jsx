@@ -178,7 +178,7 @@ export default function Reports() {
   // (the badge above already reflects the server's own verdict on that).
   const MAX_EXPECTED_LATENCY_MS = 200;
   const latencyLevelPct = systemHealth
-    ? Math.min(100, Math.round((systemHealth.minHeapLatencyMs / MAX_EXPECTED_LATENCY_MS) * 100))
+    ? Math.min(100, Math.round((systemHealth.broadcastLatencyMs / MAX_EXPECTED_LATENCY_MS) * 100))
     : 0;
   const SYNC_LEVEL_BY_STATUS = { OPTIMAL: 100, DEGRADED: 55, CRITICAL: 8 };
   const syncLevelPct = SYNC_LEVEL_BY_STATUS[systemHealth?.overallStatus] ?? 0;
@@ -320,6 +320,10 @@ export default function Reports() {
 
         {/* Donor Response Time chart */}
         <div className="absolute left-[15px] top-[370px] bg-white rounded-[10px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[725px] h-[446px]">
+          {/* Genuinely true: broadcast dispatch (server/src/services/notifications.service.js
+              -> rankDonorsByResponseTime) ranks matching donors with a real
+              binary min-heap keyed on their historical average response
+              time, and contacts the fastest-typical responders first. */}
           <div className="absolute left-[543px] top-[18px] bg-[rgba(173,43,33,0.1)] rounded-[10px] w-[145px] h-[19px] flex items-center justify-center">
             <span className="font-poppins font-bold text-[10px] text-[#8f404b]">Min-Heap Optimized</span>
           </div>
@@ -530,9 +534,9 @@ export default function Reports() {
               })()}
             </div>
             <div className="flex items-center justify-between">
-              <span className="font-poppins font-medium text-[12px] text-[#868686]">Min-Heap Latency</span>
+              <span className="font-poppins font-medium text-[12px] text-[#868686]">Broadcast Latency</span>
               <span className="font-poppins font-bold text-[12px] text-black">
-                {systemHealth ? `${systemHealth.minHeapLatencyMs}ms` : "--"}
+                {systemHealth ? `${systemHealth.broadcastLatencyMs}ms` : "--"}
               </span>
             </div>
             <div className="w-full h-[3px] bg-[#f1dddc] rounded-full overflow-hidden">

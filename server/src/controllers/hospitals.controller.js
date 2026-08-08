@@ -15,8 +15,8 @@ export const listHospitals = asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     allowedIds.length > 0
-      ? `SELECT id, code, name, city, address, latitude, longitude FROM hospitals WHERE id = ANY($1) ORDER BY name`
-      : `SELECT id, code, name, city, address, latitude, longitude FROM hospitals ORDER BY name`,
+      ? `SELECT id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity" FROM hospitals WHERE id = ANY($1) ORDER BY name`
+      : `SELECT id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity" FROM hospitals ORDER BY name`,
     allowedIds.length > 0 ? [allowedIds] : []
   );
   res.json(rows);
@@ -28,11 +28,21 @@ function parseCoord(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+// Falls back to the schema default (5) rather than 0/NaN, since 0 would mean
+// "nobody can ever book this hospital" — almost certainly not what a blank
+// or malformed form field means.
+const DEFAULT_APPOINTMENT_CAPACITY = 5;
+function parseCapacity(value) {
+  if (value === undefined || value === null || value === "") return DEFAULT_APPOINTMENT_CAPACITY;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : DEFAULT_APPOINTMENT_CAPACITY;
+}
+
 // Settings > Hospital Network "+ Add Hospital". Hospitals only ever existed
 // via seed data until now — this is the first way to add one from the app
 // itself instead of a SQL script.
 export const createHospital = asyncHandler(async (req, res) => {
-  const { name, code, city, address, latitude, longitude } = req.body;
+  const { name, code, city, address, latitude, longitude, appointmentCapacity } = req.body;
 
   if (!name?.trim()) {
     return res.status(400).json({ error: "name is required." });
@@ -43,10 +53,18 @@ export const createHospital = asyncHandler(async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO hospitals (code, name, city, address, latitude, longitude)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, code, name, city, address, latitude, longitude`,
-      [code.trim(), name.trim(), city?.trim() || null, address?.trim() || null, parseCoord(latitude), parseCoord(longitude)]
+      `INSERT INTO hospitals (code, name, city, address, latitude, longitude, appointment_capacity)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity"`,
+      [
+        code.trim(),
+        name.trim(),
+        city?.trim() || null,
+        address?.trim() || null,
+        parseCoord(latitude),
+        parseCoord(longitude),
+        parseCapacity(appointmentCapacity),
+      ]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -62,7 +80,7 @@ export const createHospital = asyncHandler(async (req, res) => {
 // slug an admin might reasonably want to fix a typo in, not a system-
 // generated id.
 export const updateHospital = asyncHandler(async (req, res) => {
-  const { name, code, city, address, latitude, longitude } = req.body;
+  const { name, code, city, address, latitude, longitude, appointmentCapacity } = req.body;
 
   if (!name?.trim()) {
     return res.status(400).json({ error: "name is required." });
@@ -74,10 +92,19 @@ export const updateHospital = asyncHandler(async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE hospitals
-       SET code = $1, name = $2, city = $3, address = $4, latitude = $5, longitude = $6
-       WHERE id = $7
-       RETURNING id, code, name, city, address, latitude, longitude`,
-      [code.trim(), name.trim(), city?.trim() || null, address?.trim() || null, parseCoord(latitude), parseCoord(longitude), req.params.id]
+       SET code = $1, name = $2, city = $3, address = $4, latitude = $5, longitude = $6, appointment_capacity = $7
+       WHERE id = $8
+       RETURNING id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity"`,
+      [
+        code.trim(),
+        name.trim(),
+        city?.trim() || null,
+        address?.trim() || null,
+        parseCoord(latitude),
+        parseCoord(longitude),
+        parseCapacity(appointmentCapacity),
+        req.params.id,
+      ]
     );
     if (!rows[0]) return res.status(404).json({ error: "Hospital not found." });
     res.json(rows[0]);

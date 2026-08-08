@@ -47,14 +47,19 @@ CREATE TYPE notification_status AS ENUM ('sent', 'failed');
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE hospitals (
-  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code              VARCHAR(20) UNIQUE NOT NULL, -- e.g. "SLMC-QC"
-  name              VARCHAR(150) NOT NULL,
-  city              VARCHAR(100),
-  address           TEXT,
-  latitude          NUMERIC(9,6),
-  longitude         NUMERIC(9,6),
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code                  VARCHAR(20) UNIQUE NOT NULL, -- e.g. "SLMC-QC"
+  name                  VARCHAR(150) NOT NULL,
+  city                  VARCHAR(100),
+  address               TEXT,
+  latitude              NUMERIC(9,6),
+  longitude             NUMERIC(9,6),
+  -- How many donors can be booked into the exact same scheduled_at at this
+  -- hospital (multiple donation stations/chairs run in parallel, so this is
+  -- deliberately not 1). Enforced in createAppointment; see
+  -- server/src/controllers/donors.controller.js.
+  appointment_capacity  INT NOT NULL DEFAULT 5,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ---------------------------------------------------------------------------
