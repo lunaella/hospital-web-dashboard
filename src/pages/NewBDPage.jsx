@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
+import { IconDroplet } from "../components/icons";
 
 // Rebuilt from the "Create New Broadcast" reference screenshot the user provided
 // directly from Figma (node 510:812, "NewBDPage") — the Figma MCP tool quota was
@@ -95,12 +96,10 @@ export default function NewBDPage() {
         {/* Header */}
         <div className="flex items-start gap-3 mb-6">
           <div className="w-[44px] h-[44px] rounded-full bg-[#f8e2e0] flex items-center justify-center shrink-0">
-            <svg viewBox="0 0 24 24" className="w-[22px] h-[22px]" fill="none">
-              <path
-                d="M12 20s-7-4.35-9.5-8.5C.9 8.2 2.3 5 5.6 5c1.9 0 3.3 1 4.4 2.6 1.1-1.6 2.5-2.6 4.4-2.6 3.3 0 4.7 3.2 3.1 6.5C19 15.65 12 20 12 20Z"
-                fill="#ad2b21"
-              />
-            </svg>
+            {/* Blood drop, same shared icon used for Units Needed / Inventory
+                Thresholds elsewhere — was a heart, swapped for the on-theme
+                blood-drop mark. */}
+            <IconDroplet className="w-[22px] h-[22px] text-[#ad2b21]" />
           </div>
           <div>
             <h2 className="font-poppins font-bold text-[20px] text-black leading-tight">Create New Broadcast</h2>
