@@ -9,18 +9,26 @@ import { MinHeap } from "../utils/minHeap.js";
 // letting `NULL` sort as either best or worst.
 const FALLBACK_RESPONSE_MINUTES = 60;
 
-const HOSPITAL_NAME = "St. Jude Medical Center";
-
 const PRIORITY_LABEL = {
   EMERGENCY: "EMERGENCY",
   URGENT: "Urgent",
   NORMAL: "Routine",
 };
 
+// Used only if a broadcast's hospital somehow can't be resolved (shouldn't
+// happen — hospital_id is NOT NULL + FK-constrained on blood_requests) so a
+// notification still goes out with an honest placeholder instead of
+// crashing the whole fire-and-forget flow.
+const FALLBACK_HOSPITAL_NAME = "the requesting hospital";
+
+// request.hospitalName is resolved in notifyDonorsForRequest below — was
+// previously a hardcoded "St. Jude Medical Center" here, which meant every
+// broadcast email/SMS named the same hospital regardless of which one the
+// admin actually selected.
 function buildSmsBody(request) {
   return (
     `ResQ Alert: ${PRIORITY_LABEL[request.priority] ?? request.priority} need for ` +
-    `${request.bloodType} blood at ${HOSPITAL_NAME} (Ward: ${request.ward}). ` +
+    `${request.bloodType} blood at ${request.hospitalName} (Ward: ${request.ward}). ` +
     `Request #${request.requestCode}. If you're able to donate, please contact the hospital.`
   );
 }
@@ -28,7 +36,7 @@ function buildSmsBody(request) {
 function buildEmailHtml(donorName, request) {
   return (
     `<p>Hi ${donorName},</p>` +
-    `<p><strong>${HOSPITAL_NAME}</strong> has an active ${PRIORITY_LABEL[request.priority] ?? request.priority} ` +
+    `<p><strong>${request.hospitalName}</strong> has an active ${PRIORITY_LABEL[request.priority] ?? request.priority} ` +
     `request for <strong>${request.bloodType}</strong> blood (Ward: ${request.ward}, Request #${request.requestCode}).</p>` +
     `<p>Your blood type is a match. If you're eligible and able to donate, please get in touch with the hospital as soon as possible.</p>` +
     `<p>Thank you for being a ResQ donor.</p>`
@@ -83,6 +91,9 @@ function rankDonorsByResponseTime(donors, avgResponseByDonorId) {
 // order. This is the "Min-Heap Optimized" ranking shown against the Donor
 // Response Time chart in Reports.
 export async function notifyDonorsForRequest(request) {
+  const { rows: hospitalRows } = await pool.query("SELECT name FROM hospitals WHERE id = $1", [request.hospitalId]);
+  request.hospitalName = hospitalRows[0]?.name ?? FALLBACK_HOSPITAL_NAME;
+
   const { rows: donors } = await pool.query(
     `SELECT d.id, d.donor_code, d.name, d.phone, d.email, d.last_donation_at AS "lastDonationAt"
      FROM donors d

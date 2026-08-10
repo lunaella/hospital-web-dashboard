@@ -74,7 +74,7 @@ export const createRequest = asyncHandler(async (req, res) => {
       const { rows } = await pool.query(
         `INSERT INTO blood_requests (hospital_id, request_code, blood_type, priority, ward, units_needed, units_fulfilled, status)
          VALUES ($1, $2, $3, $4, $5, $6, 0, 'OPEN')
-         RETURNING id AS "dbId", request_code AS id, blood_type AS "bloodType", priority, ward,
+         RETURNING id AS "dbId", hospital_id AS "hospitalId", request_code AS id, blood_type AS "bloodType", priority, ward,
                    units_needed AS "unitsNeeded", units_fulfilled AS "unitsFulfilled", status, created_at AS "createdAt"`,
         [hospitalId, code, bloodType, priorityUpper, ward.trim(), units]
       );
@@ -86,6 +86,7 @@ export const createRequest = asyncHandler(async (req, res) => {
       // Every attempt still gets logged in the notifications table.
       notifyDonorsForRequest({
         id: created.dbId,
+        hospitalId: created.hospitalId,
         requestCode: created.id,
         bloodType: created.bloodType,
         priority: created.priority,
