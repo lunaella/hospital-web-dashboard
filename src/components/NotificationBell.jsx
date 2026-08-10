@@ -23,12 +23,27 @@ const STATUS_LABEL = {
   CANCELLED: "Cancelled",
 };
 
-// Only OPEN/PARTIALLY_FULFILLED broadcasts still need someone's attention —
-// FULFILLED and CANCELLED ones are resolved, so they don't count toward the
-// badge even though they still show up in the list below.
+// Still used for the small "N active" label inside the dropdown — a
+// separate signal from the unread badge below (a broadcast can be long
+// resolved and still be the thing you haven't looked at yet).
 const UNRESOLVED_STATUSES = new Set(["OPEN", "PARTIALLY_FULFILLED"]);
 const POLL_MS = 30000;
 const MAX_SHOWN = 8;
+
+// Persisted so "seen" survives page navigation (this component remounts on
+// every route change) and browser refreshes, not just this mount.
+const LAST_SEEN_KEY = "resq_notifications_last_seen";
+
+function readLastSeen() {
+  const raw = localStorage.getItem(LAST_SEEN_KEY);
+  if (raw) return Number(raw);
+  // First time this has ever run on this browser — don't retroactively
+  // flag every broadcast that already existed before this feature shipped
+  // as "unread". Only broadcasts created from here on count.
+  const now = Date.now();
+  localStorage.setItem(LAST_SEEN_KEY, String(now));
+  return now;
+}
 
 // GET /api/requests is gated behind the 'broadcasts' section (see
 // requests.routes.js) — an admin with no access there gets exactly this
@@ -51,7 +66,13 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [requests, setRequests] = useState([]);
   const [loadError, setLoadError] = useState(null);
+  const [lastSeenAt, setLastSeenAt] = useState(readLastSeen);
   const containerRef = useRef(null);
+  // Snapshot of lastSeenAt taken the moment the dropdown opens, before it's
+  // bumped to "now" — used only to mark which rows in *this* viewing were
+  // the ones that just piled up, so opening the dropdown doesn't instantly
+  // erase the "these are new" markers before you've actually seen them.
+  const viewingSinceRef = useRef(lastSeenAt);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,7 +81,10 @@ export default function NotificationBell() {
       try {
         const rows = await api.get("/api/requests");
         if (!cancelled) {
-          setRequests(rows);
+          // /api/requests only returns seconds_open (relative), not an
+          // absolute timestamp — reconstruct one so "created since I last
+          // looked" can be compared against lastSeenAt.
+          setRequests(rows.map((r) => ({ ...r, createdAtMs: Date.now() - (r.seconds_open ?? 0) * 1000 })));
           setLoadError(null);
         }
       } catch (err) {
@@ -88,24 +112,42 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
+  function toggleOpen() {
+    setOpen((wasOpen) => {
+      const willOpen = !wasOpen;
+      if (willOpen) {
+        // Opening = "viewed". Remember what counted as new up to this
+        // point (for the row markers below), then immediately clear the
+        // badge by bumping lastSeenAt to now — anything created after this
+        // instant is what piles up toward the next unread count.
+        viewingSinceRef.current = lastSeenAt;
+        const now = Date.now();
+        setLastSeenAt(now);
+        localStorage.setItem(LAST_SEEN_KEY, String(now));
+      }
+      return willOpen;
+    });
+  }
+
   const unresolvedCount = requests.filter((r) => UNRESOLVED_STATUSES.has(r.status)).length;
+  const unseenCount = requests.filter((r) => r.createdAtMs > lastSeenAt).length;
   const shown = requests.slice(0, MAX_SHOWN);
 
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         className="relative w-[20px] h-[22px] flex items-center justify-center cursor-pointer"
-        aria-label={unresolvedCount > 0 ? `Notifications (${unresolvedCount} active broadcasts)` : "Notifications"}
+        aria-label={unseenCount > 0 ? `Notifications (${unseenCount} unviewed)` : "Notifications"}
       >
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
-        {unresolvedCount > 0 && (
+        {unseenCount > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-[3px] rounded-full bg-[#ad2b21] flex items-center justify-center font-poppins font-bold text-[9px] text-white leading-none">
-            {unresolvedCount > 9 ? "9+" : unresolvedCount}
+            {unseenCount > 9 ? "9+" : unseenCount}
           </span>
         )}
       </button>
@@ -131,6 +173,7 @@ export default function NotificationBell() {
             ) : (
               shown.map((r) => {
                 const meta = PRIORITY_META[r.priority] ?? PRIORITY_META.NORMAL;
+                const isNew = r.createdAtMs > viewingSinceRef.current;
                 return (
                   <button
                     key={r.id}
@@ -139,7 +182,9 @@ export default function NotificationBell() {
                       setOpen(false);
                       navigate("/view-broadcasts", { state: { presetSearch: r.id } });
                     }}
-                    className="w-full text-left px-5 py-3 flex items-start gap-3 border-b border-[#f5f4f3] last:border-b-0 hover:bg-[#faf8f8] cursor-pointer"
+                    className={`w-full text-left px-5 py-3 flex items-start gap-3 border-b border-[#f5f4f3] last:border-b-0 hover:bg-[#faf8f8] cursor-pointer ${
+                      isNew ? "bg-[#fbf3f3]" : ""
+                    }`}
                   >
                     <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${meta.dot}`} />
                     <div className="flex-1 min-w-0">
@@ -147,8 +192,9 @@ export default function NotificationBell() {
                         <span className={`font-poppins font-semibold text-[13px] ${meta.text}`}>
                           {meta.label} · {r.bloodType}
                         </span>
-                        <span className="font-poppins text-[11px] text-[#aaa4a0] shrink-0">
-                          {formatElapsed(r.seconds_open)}
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#ad2b21]" aria-label="New" />}
+                          <span className="font-poppins text-[11px] text-[#aaa4a0]">{formatElapsed(r.seconds_open)}</span>
                         </span>
                       </div>
                       <p className="mt-0.5 font-poppins text-[12px] text-[#808080] truncate">
