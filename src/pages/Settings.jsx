@@ -4,6 +4,7 @@ import PageHeader from "../components/PageHeader";
 import TeamAccessCard from "../components/TeamAccessCard";
 import { api, apiUploadFile } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
+import { DIRECTORY_CITIES, hospitalsForCity } from "../data/hospitalDirectory";
 import {
   IconIdCard,
   IconShield,
@@ -284,6 +285,26 @@ export default function Settings() {
 
   function updateHospitalField(key, value) {
     setHospitalForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  // City drives which hospitals show up in the Hospital Name dropdown
+  // below — switching city clears the name, since whatever was picked for
+  // the old city almost certainly isn't in the new one's list.
+  function handleCityChange(city) {
+    setHospitalForm((prev) => ({ ...prev, city, name: "" }));
+  }
+
+  // Picking a real hospital from the directory (src/data/hospitalDirectory.js)
+  // auto-fills its known code/address — still editable afterward, this is
+  // just a starting point, not a lock.
+  function handleHospitalNameChange(name) {
+    const match = hospitalsForCity(hospitalForm.city).find((h) => h.name === name);
+    setHospitalForm((prev) => ({
+      ...prev,
+      name,
+      code: match ? match.code : prev.code,
+      address: match ? match.address : prev.address,
+    }));
   }
 
   async function submitHospitalForm(e) {
@@ -653,27 +674,55 @@ export default function Settings() {
             {showHospitalForm ? (
               <form onSubmit={submitHospitalForm} className="flex flex-col gap-8">
                 <div className="grid grid-cols-2 gap-x-10 gap-y-8">
-                  <Field label="HOSPITAL NAME">
-                    <input
-                      value={hospitalForm.name}
-                      onChange={(e) => updateHospitalField("name", e.target.value)}
+                  <Field label="CITY">
+                    <select
+                      value={hospitalForm.city}
+                      onChange={(e) => handleCityChange(e.target.value)}
                       className={inputClass()}
-                    />
+                    >
+                      <option value="" disabled>
+                        Select a city...
+                      </option>
+                      {DIRECTORY_CITIES.map((city) => (
+                        <option key={city} value={city}>
+                          {city}
+                        </option>
+                      ))}
+                      {/* Preserves an existing hospital's city on edit even if it's
+                          outside the directory above (e.g. older seed data). */}
+                      {hospitalForm.city && !DIRECTORY_CITIES.includes(hospitalForm.city) && (
+                        <option value={hospitalForm.city}>{hospitalForm.city}</option>
+                      )}
+                    </select>
                   </Field>
-                  <Field label="CODE" hint="Short unique identifier, e.g. SLMC-QC">
-                    <input
-                      value={hospitalForm.code}
-                      onChange={(e) => updateHospitalField("code", e.target.value)}
+                  <Field label="HOSPITAL NAME" hint={!hospitalForm.city ? "Select a city first" : undefined}>
+                    <select
+                      value={hospitalForm.name}
+                      onChange={(e) => handleHospitalNameChange(e.target.value)}
                       className={inputClass()}
-                    />
+                      disabled={!hospitalForm.city}
+                    >
+                      <option value="" disabled>
+                        {hospitalForm.city ? "Select a hospital..." : "Select a city first"}
+                      </option>
+                      {hospitalsForCity(hospitalForm.city).map((h) => (
+                        <option key={h.name} value={h.name}>
+                          {h.name}
+                        </option>
+                      ))}
+                      {hospitalForm.name &&
+                        !hospitalsForCity(hospitalForm.city).some((h) => h.name === hospitalForm.name) && (
+                          <option value={hospitalForm.name}>{hospitalForm.name}</option>
+                        )}
+                    </select>
                   </Field>
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-10 gap-y-8">
-                  <Field label="CITY">
+                  <Field label="CODE" hint="Short unique identifier, e.g. SLMC-QC — auto-filled when you pick a hospital, but editable">
                     <input
-                      value={hospitalForm.city}
-                      onChange={(e) => updateHospitalField("city", e.target.value)}
+                      value={hospitalForm.code}
+                      onChange={(e) => updateHospitalField("code", e.target.value)}
                       className={inputClass()}
                     />
                   </Field>

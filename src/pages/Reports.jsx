@@ -40,6 +40,27 @@ function formatTrend(trendPct) {
   return `${trendPct > 0 ? "+" : ""}${trendPct}%`;
 }
 
+// Was previously a hardcoded up arrow on every KPI card (and a hardcoded
+// down arrow, separately, on Units Processed) regardless of which way the
+// number actually moved. Now the icon/color follow the real sign: up +
+// black for an increase, down + red for a decrease, and no icon at all
+// when there's no prior-window data to compare against (trendPct null —
+// the "--" case), since there's nothing to point up or down about yet.
+function TrendBadge({ trendPct }) {
+  if (trendPct == null) {
+    return <span className="font-poppins font-medium text-[11px] text-[#aaa4a0]">--</span>;
+  }
+  const isDown = trendPct < 0;
+  const Arrow = isDown ? IconArrowDown : IconArrowUp;
+  const colorClass = isDown ? "text-[#c46865]" : "text-black";
+  return (
+    <>
+      <Arrow className={`w-4 h-4 ${colorClass}`} />
+      <span className={`font-poppins font-medium text-[11px] ${colorClass}`}>{formatTrend(trendPct)}</span>
+    </>
+  );
+}
+
 const DATE_RANGES = ["Last 7 days", "Last 30 days", "Last 90 days"];
 const PRIORITY_FILTERS = ["all", "EMERGENCY", "URGENT", "NORMAL"];
 
@@ -161,8 +182,8 @@ export default function Reports() {
 
   const kpiCards = kpis
     ? [
-        { ...KPI_META.meanResponseTimeMinutes, value: `${kpis.meanResponseTimeMinutes.value} min`, trendText: formatTrend(kpis.meanResponseTimeMinutes.trendPct) },
-        { ...KPI_META.activeDonorsReach, value: String(kpis.activeDonorsReach.value), trendText: formatTrend(kpis.activeDonorsReach.trendPct) },
+        { ...KPI_META.meanResponseTimeMinutes, value: `${kpis.meanResponseTimeMinutes.value} min`, trendPct: kpis.meanResponseTimeMinutes.trendPct },
+        { ...KPI_META.activeDonorsReach, value: String(kpis.activeDonorsReach.value), trendPct: kpis.activeDonorsReach.trendPct },
       ]
     : [];
 
@@ -299,8 +320,7 @@ export default function Reports() {
                 <BadgeIcon className="w-3.5 h-3.5 text-[#ad2b21]" />
               </div>
               <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
-                <IconArrowUp className="w-4 h-4 text-black" />
-                <span className="font-poppins font-medium text-[11px] text-black">{card.trendText}</span>
+                <TrendBadge trendPct={card.trendPct} />
               </div>
               <p className="absolute left-[20px] top-[98px] font-poppins font-bold text-[35px] text-black">{card.value}</p>
               <p className="absolute left-[20px] top-[68px] font-poppins font-bold text-[17px] text-[#808080]">{card.label}</p>
@@ -313,10 +333,7 @@ export default function Reports() {
             <IconDroplet className="w-3.5 h-3.5 text-[#ad2b21]" />
           </div>
           <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
-            <IconArrowDown className="w-4 h-4 text-[#c46865]" />
-            <span className="font-poppins font-medium text-[11px] text-[#c46865]">
-              {kpis ? formatTrend(kpis.unitsProcessed.trendPct) : "--"}
-            </span>
+            <TrendBadge trendPct={kpis ? kpis.unitsProcessed.trendPct : null} />
           </div>
           <p className="absolute left-[20px] top-[98px] font-poppins font-bold text-[35px] text-black">
             {kpis ? kpis.unitsProcessed.value : "--"}
