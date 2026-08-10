@@ -217,6 +217,9 @@ export default function DonorManagement() {
   const [walkInResults, setWalkInResults] = useState([]);
   const [walkInSelected, setWalkInSelected] = useState(null);
   const [walkInNewName, setWalkInNewName] = useState("");
+  // Holds only the digits after the fixed "+63 9" prefix (up to 9 more:
+  // XX XXX XXXX) — the prefix itself is rendered as non-editable so staff
+  // never have to type the country code/carrier digit for every walk-in.
   const [walkInNewPhone, setWalkInNewPhone] = useState("");
   const [walkInNewEmail, setWalkInNewEmail] = useState("");
   const [walkInNewBloodType, setWalkInNewBloodType] = useState("O+");
@@ -278,8 +281,12 @@ export default function DonorManagement() {
       setWalkInError("Search for and select a donor first.");
       return;
     }
-    if (walkInMode === "new" && (!walkInNewName.trim() || !walkInNewPhone.trim())) {
-      setWalkInError("Name and phone are required for a new donor.");
+    if (walkInMode === "new" && !walkInNewName.trim()) {
+      setWalkInError("Name is required for a new donor.");
+      return;
+    }
+    if (walkInMode === "new" && walkInNewPhone.length !== 9) {
+      setWalkInError("Enter the full 9 digits after +63 9.");
       return;
     }
     if (hospitalId === "all") {
@@ -293,7 +300,7 @@ export default function DonorManagement() {
       if (walkInMode === "new") {
         const newDonor = await api.post("/api/donors", {
           name: walkInNewName,
-          phone: walkInNewPhone,
+          phone: `+639${walkInNewPhone}`,
           email: walkInNewEmail.trim() || undefined,
           bloodType: walkInNewBloodType,
         });
@@ -779,13 +786,24 @@ export default function DonorManagement() {
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="font-poppins font-medium text-[13px] text-black">Phone Number</label>
-                    <input
-                      type="tel"
-                      value={walkInNewPhone}
-                      onChange={(e) => setWalkInNewPhone(e.target.value)}
-                      placeholder="+63 9XX XXX XXXX"
-                      className="border border-[#aaa4a0] rounded-[10px] h-[42px] px-4 font-poppins text-[14px] text-black outline-none"
-                    />
+                    {/* "+63 9" is fixed/non-editable — every Philippine mobile
+                        number starts with it, so retyping it per walk-in was
+                        just wasted keystrokes at the front desk. Only the
+                        remaining 9 digits are ever entered or stored in state;
+                        they're rejoined with the prefix at submit time. */}
+                    <div className="flex items-center border border-[#aaa4a0] rounded-[10px] h-[42px] px-4 gap-1 focus-within:border-black">
+                      <span className="font-poppins text-[14px] text-[#808080] select-none shrink-0">+63 9</span>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={walkInNewPhone}
+                        onChange={(e) => setWalkInNewPhone(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                        placeholder="XX XXX XXXX"
+                        maxLength={9}
+                        className="flex-1 min-w-0 font-poppins text-[14px] text-black outline-none placeholder:text-[#c7c2be]"
+                      />
+                    </div>
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="font-poppins font-medium text-[13px] text-black">
