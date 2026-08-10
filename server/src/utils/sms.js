@@ -10,6 +10,24 @@ import { env } from "../config/env.js";
 const SEMAPHORE_URL = "https://api.semaphore.co/api/v4/messages";
 const SEND_TIMEOUT_MS = 8000;
 
+// Semaphore only documents three accepted formats for `number`: 9998887777,
+// 09998887777, or 639998887777 — plain digits, no "+" and no spaces. Every
+// phone number in this app so far is stored with a leading "+" (walk-in
+// registration writes "+639XXXXXXXXX", the seed data has "+63 9XXXXXXXXX"
+// with a space, and the donor mobile app's signup number comes through
+// as-is, unnormalized, from whatever the phone's contact picker produced).
+// Sending any of those straight through as `number` risks Semaphore
+// rejecting it as malformed — this strips it down to one of the three
+// accepted shapes regardless of how it was entered upstream, rather than
+// requiring every call site to agree on a format.
+function normalizePhForSemaphore(raw) {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("63") && digits.length === 12) return digits; // 639XXXXXXXXX
+  if (digits.startsWith("0") && digits.length === 11) return digits; // 09XXXXXXXXX
+  if (digits.startsWith("9") && digits.length === 10) return `63${digits}`; // 9XXXXXXXXX -> 639XXXXXXXXX
+  return digits; // unrecognized shape — let Semaphore's own validation reject it with a real error
+}
+
 export async function sendSms(to, message) {
   if (!env.semaphoreApiKey) {
     return { ok: false, messageId: null, error: "SEMAPHORE_API_KEY is not configured." };
@@ -24,7 +42,7 @@ export async function sendSms(to, message) {
   try {
     const body = new URLSearchParams({
       apikey: env.semaphoreApiKey,
-      number: to,
+      number: normalizePhForSemaphore(to),
       message,
     });
     if (env.semaphoreSenderName) body.set("sendername", env.semaphoreSenderName);
