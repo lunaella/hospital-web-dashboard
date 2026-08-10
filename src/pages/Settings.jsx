@@ -103,11 +103,14 @@ export default function Settings() {
   const [profile, setProfile] = useState(null);
   const [session, setSession] = useState(null);
 
-  const { hospitalId, hospitals, refreshHospitals } = useHospital();
+  const { hospitalId, hospitals, refreshHospitals, setHospitalId } = useHospital();
   const [showHospitalForm, setShowHospitalForm] = useState(false);
   const [editingHospitalId, setEditingHospitalId] = useState(null);
   const [hospitalForm, setHospitalForm] = useState(EMPTY_HOSPITAL_FORM);
   const [hospitalFormError, setHospitalFormError] = useState(null);
+  const [confirmDeleteHospitalId, setConfirmDeleteHospitalId] = useState(null);
+  const [hospitalDeleteError, setHospitalDeleteError] = useState(null);
+  const [hospitalDeleting, setHospitalDeleting] = useState(false);
 
   const [thresholdRows, setThresholdRows] = useState([]);
   const [thresholdsError, setThresholdsError] = useState(null);
@@ -329,6 +332,24 @@ export default function Settings() {
       setHospitalFormError(err.message);
     } finally {
       setHospitalFormSaving(false);
+    }
+  }
+
+  async function confirmDeleteHospital(id) {
+    setHospitalDeleteError(null);
+    setHospitalDeleting(true);
+    try {
+      await api.delete(`/api/hospitals/${id}`);
+      // The hospital switcher can't be left pointed at a hospital that no
+      // longer exists — every hospital-scoped GET would just come back
+      // empty with no obvious explanation why.
+      if (hospitalId === id) setHospitalId("all");
+      setConfirmDeleteHospitalId(null);
+      await refreshHospitals();
+    } catch (err) {
+      setHospitalDeleteError(err.message);
+    } finally {
+      setHospitalDeleting(false);
     }
   }
 
@@ -810,14 +831,56 @@ export default function Settings() {
                         {h.code}
                         {h.city ? `  •  ${h.city}` : ""}
                       </p>
+                      {confirmDeleteHospitalId === h.id && hospitalDeleteError && (
+                        <p className="mt-1 font-poppins text-[12px] text-[#d70b07]">{hospitalDeleteError}</p>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => openEditHospital(h)}
-                      className="border border-[#aaa4a0] rounded-[16px] h-[40px] px-5 flex items-center justify-center cursor-pointer"
-                    >
-                      <span className="font-poppins font-semibold text-[13px] text-black">Edit</span>
-                    </button>
+                    {confirmDeleteHospitalId === h.id ? (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-poppins text-[12px] text-[#d70b07]">Delete this hospital?</span>
+                        <button
+                          type="button"
+                          onClick={() => confirmDeleteHospital(h.id)}
+                          disabled={hospitalDeleting}
+                          className="bg-[#d70b07] rounded-[16px] h-[40px] px-4 flex items-center justify-center cursor-pointer disabled:cursor-wait disabled:opacity-70"
+                        >
+                          <span className="font-poppins font-semibold text-[13px] text-white">
+                            {hospitalDeleting ? "Deleting..." : "Confirm"}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmDeleteHospitalId(null);
+                            setHospitalDeleteError(null);
+                          }}
+                          disabled={hospitalDeleting}
+                          className="border border-[#aaa4a0] rounded-[16px] h-[40px] px-4 flex items-center justify-center cursor-pointer"
+                        >
+                          <span className="font-poppins font-semibold text-[13px] text-black">Cancel</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => openEditHospital(h)}
+                          className="border border-[#aaa4a0] rounded-[16px] h-[40px] px-5 flex items-center justify-center cursor-pointer"
+                        >
+                          <span className="font-poppins font-semibold text-[13px] text-black">Edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHospitalDeleteError(null);
+                            setConfirmDeleteHospitalId(h.id);
+                          }}
+                          className="border border-[#ce4444] rounded-[16px] h-[40px] px-5 flex items-center justify-center cursor-pointer"
+                        >
+                          <span className="font-poppins font-semibold text-[13px] text-[#d70b07]">Delete</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

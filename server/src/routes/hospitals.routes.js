@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listHospitals, createHospital, updateHospital } from "../controllers/hospitals.controller.js";
+import { listHospitals, createHospital, updateHospital, deleteHospital } from "../controllers/hospitals.controller.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireSection } from "../middleware/permissions.js";
 
@@ -15,3 +15,4 @@ hospitalsRouter.use(requireAuth);
 hospitalsRouter.get("/", listHospitals);
 hospitalsRouter.post("/", requireSection("settings", "edit"), createHospital);
 hospitalsRouter.patch("/:id", requireSection("settings", "edit"), updateHospital);
+hospitalsRouter.delete("/:id", requireSection("settings", "edit"), deleteHospital);

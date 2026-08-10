@@ -115,3 +115,39 @@ export const updateHospital = asyncHandler(async (req, res) => {
     throw err;
   }
 });
+
+// Every FK pointing at hospitals(id) is ON DELETE CASCADE — necessary so the
+// row can be removed at all, but that also means a plain DELETE would
+// silently wipe every broadcast, appointment, and arrival ever logged
+// against this hospital along with it. Blocking deletion while any of that
+// history exists is the honest tradeoff: admin scoping (which has no
+// historical value once the hospital is gone) is fine to cascade away, but
+// real activity records aren't something a delete button should be able to
+// erase by accident.
+export const deleteHospital = asyncHandler(async (req, res) => {
+  const { rows: exists } = await pool.query("SELECT id FROM hospitals WHERE id = $1", [req.params.id]);
+  if (!exists[0]) return res.status(404).json({ error: "Hospital not found." });
+
+  const { rows: counts } = await pool.query(
+    `SELECT
+       (SELECT count(*) FROM blood_requests WHERE hospital_id = $1) AS requests,
+       (SELECT count(*) FROM appointments WHERE hospital_id = $1) AS appointments,
+       (SELECT count(*) FROM donor_arrivals WHERE hospital_id = $1) AS arrivals`,
+    [req.params.id]
+  );
+  const { requests, appointments, arrivals } = counts[0];
+  const blockers = [
+    Number(requests) > 0 && `${requests} broadcast${requests === "1" ? "" : "s"}`,
+    Number(appointments) > 0 && `${appointments} appointment${appointments === "1" ? "" : "s"}`,
+    Number(arrivals) > 0 && `${arrivals} arrival${arrivals === "1" ? "" : "s"}`,
+  ].filter(Boolean);
+
+  if (blockers.length > 0) {
+    return res.status(400).json({
+      error: `Can't delete — this hospital has ${blockers.join(", ")} on record. Historical data can't be removed this way.`,
+    });
+  }
+
+  await pool.query("DELETE FROM hospitals WHERE id = $1", [req.params.id]);
+  res.status(204).end();
+});
