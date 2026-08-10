@@ -1,4 +1,5 @@
 import HospitalSwitcher from "./HospitalSwitcher";
+import NotificationBell from "./NotificationBell";
 
 // Shared top header bar used by every main page (Dashboard, Donor Management,
 // Reports, Settings) so the title placement, divider, and notification bell
@@ -20,12 +21,7 @@ export default function PageHeader({ title, right }) {
         {right}
         <HospitalSwitcher />
         <div className="h-[50px] w-px bg-[#d9d9d9]" />
-        <button type="button" className="w-[20px] h-[22px] flex items-center justify-center cursor-pointer" aria-label="Notifications">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-        </button>
+        <NotificationBell />
       </div>
     </div>
   );
