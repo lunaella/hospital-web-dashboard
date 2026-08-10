@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
 import { IconAlert, IconClock } from "../components/icons";
+import NotificationBell from "../components/NotificationBell";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -147,13 +148,11 @@ export default function ViewBDPage() {
                 className="bg-transparent outline-none text-[13px] text-[#3d1116] placeholder:text-[#aaaaaa] w-full"
               />
             </div>
-            <button
-              type="button"
-              aria-label="Notifications"
-              className="w-[30px] h-[30px] rounded-full bg-[#f8f3f4] flex items-center justify-center text-[#8f404b] text-[15px]"
-            >
-              &#128276;
-            </button>
+            {/* Was a static 🔔 emoji in a plain <button> with no onClick —
+                looked different from every other page's bell (they all use
+                PageHeader) and did nothing when clicked. Same shared,
+                working bell as everywhere else now. */}
+            <NotificationBell />
           </div>
         </div>
 
