@@ -263,6 +263,7 @@ CREATE TABLE notifications (
   status              notification_status NOT NULL,
   provider_message_id TEXT,            -- Semaphore/Resend's own id, for support lookups
   error_message        TEXT,
+  read_at             TIMESTAMPTZ,     -- NULL = unread; set when the donor views it in-app (see migration 006)
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -1,10 +1,14 @@
 import { Router } from "express";
 import {
   getMyProfile,
+  updateMyProfile,
   listHospitalsForDonors,
   listMyAppointments,
   bookMyAppointment,
   cancelMyAppointment,
+  listMyDonations,
+  listMyNotifications,
+  markMyNotificationsRead,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
 
@@ -14,7 +18,11 @@ export const donorPortalRouter = Router();
 donorPortalRouter.use(requireDonorAuth);
 
 donorPortalRouter.get("/me", getMyProfile);
+donorPortalRouter.patch("/me", updateMyProfile);
 donorPortalRouter.get("/hospitals", listHospitalsForDonors);
 donorPortalRouter.get("/appointments", listMyAppointments);
 donorPortalRouter.post("/appointments", bookMyAppointment);
 donorPortalRouter.patch("/appointments/:id/cancel", cancelMyAppointment);
+donorPortalRouter.get("/donations", listMyDonations);
+donorPortalRouter.get("/notifications", listMyNotifications);
+donorPortalRouter.patch("/notifications/read", markMyNotificationsRead);
