@@ -2,8 +2,10 @@ import { pool } from "../db/pool.js";
 import { ensureRedisConnected } from "../db/redis.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSms } from "../utils/sms.js";
+import { sendEmail } from "../utils/email.js";
 import { issueOtp, verifyOtp } from "../utils/otp.js";
 import { signDonorToken, signDonorPendingToken } from "../utils/jwt.js";
+import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -28,8 +30,17 @@ async function startDonorSession(donorId) {
 // profile", so a stranger probing phone numbers here learns nothing either
 // way, just that *a* code was sent.
 export const requestOtp = asyncHandler(async (req, res) => {
-  const phone = req.body.phone?.trim();
-  if (!phone) return res.status(400).json({ error: "phone is required." });
+  const rawPhone = req.body.phone?.trim();
+  if (!rawPhone) return res.status(400).json({ error: "phone is required." });
+
+  // Normalized once, here, so the OTP is issued under the same key that
+  // verifyOtpAndLogin below will look it up under, and so the eventual
+  // donors.phone lookup/insert always uses one canonical shape regardless
+  // of what format the mobile client's phone picker handed back.
+  const phone = normalizePhoneForStorage(rawPhone);
+  if (!isValidPhDigits(phoneDigits(rawPhone))) {
+    return res.status(400).json({ error: "Enter a valid Philippine mobile number." });
+  }
 
   const result = await issueOtp(phone);
   if (!result.allowed) {
@@ -51,9 +62,12 @@ export const requestOtp = asyncHandler(async (req, res) => {
 // below — the app should treat needsProfile: true as "show the signup
 // form", not an error.
 export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
-  const phone = req.body.phone?.trim();
+  const rawPhone = req.body.phone?.trim();
   const code = req.body.code?.trim();
-  if (!phone || !code) return res.status(400).json({ error: "phone and code are required." });
+  if (!rawPhone || !code) return res.status(400).json({ error: "phone and code are required." });
+  // Same normalization as requestOtp — must match exactly for the OTP
+  // lookup and the donors.phone lookup below to find what step 1 stored.
+  const phone = normalizePhoneForStorage(rawPhone);
 
   const valid = await verifyOtp(phone, code);
   if (!valid) return res.status(401).json({ error: "Invalid or expired code." });
@@ -80,6 +94,10 @@ export const completeProfile = asyncHandler(async (req, res) => {
 
   const { rows: existingRows } = await pool.query(`SELECT ${DONOR_SELECT} FROM donors WHERE phone = $1`, [phone]);
   let donor = existingRows[0];
+  // Only a genuinely brand-new signup gets a welcome email — the
+  // "attach to an existing admin-created record" branch below is really a
+  // first login, not a registration, so it stays silent.
+  const isNewDonor = !donor;
 
   if (!donor) {
     const { name, bloodType, email } = req.body;
@@ -113,6 +131,22 @@ export const completeProfile = asyncHandler(async (req, res) => {
 
   const token = await startDonorSession(donor.id);
   res.status(201).json({ token, expiresIn: DONOR_SESSION_EXPIRES_SECONDS, donor });
+
+  // Fire-and-forget, same pattern as notifyDonorsForRequest — a slow or
+  // failed welcome email should never hold up the signup response, and
+  // there's nowhere to surface its failure to the donor anyway. Silently
+  // skipped (not an error) when no email was given, since it's optional.
+  if (isNewDonor && donor.email) {
+    sendEmail({
+      to: donor.email,
+      subject: "Welcome to ResQ",
+      html:
+        `<p>Hi ${donor.name},</p>` +
+        `<p>Your ResQ donor account is ready. You're registered as blood type <strong>${donor.bloodType}</strong>.</p>` +
+        `<p>When a hospital needs your blood type, we'll text and email you here — open the app to respond.</p>` +
+        `<p>Thank you for being a ResQ donor.</p>`,
+    }).catch((err) => console.error(`Welcome email failed for donor ${donor.id}:`, err));
+  }
 });
 
 export const donorLogout = asyncHandler(async (req, res) => {
