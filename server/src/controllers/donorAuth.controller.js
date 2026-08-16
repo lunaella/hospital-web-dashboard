@@ -16,7 +16,8 @@ const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const DONOR_SESSION_EXPIRES_SECONDS = 30 * 24 * 60 * 60;
 
 const DONOR_SELECT = `id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
-  age, weight_kg AS "weightKg", health_screening AS "healthScreening"`;
+  age, weight_kg AS "weightKg", health_screening AS "healthScreening",
+  notify_sms AS "notifySms", notify_email AS "notifyEmail"`;
 
 async function startDonorSession(donorId) {
   const redis = await ensureRedisConnected();

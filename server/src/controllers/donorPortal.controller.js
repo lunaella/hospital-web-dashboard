@@ -15,6 +15,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
     `SELECT id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
             last_donation_at AS "lastDonationAt",
             age, weight_kg AS "weightKg", health_screening AS "healthScreening",
+            notify_sms AS "notifySms", notify_email AS "notifyEmail",
             CASE
               WHEN last_donation_at IS NULL THEN true
               WHEN now() - last_donation_at >= INTERVAL '90 days' THEN true
@@ -36,7 +37,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
 // to which broadcast, so a correction has to go through an admin (Donor
 // Management), not a raw self-edit a donor could fat-finger.
 export const updateMyProfile = asyncHandler(async (req, res) => {
-  const { name, phone, email, age, weightKg, healthScreening } = req.body;
+  const { name, phone, email, age, weightKg, healthScreening, notifySms, notifyEmail } = req.body;
   const updates = [];
   const params = [];
 
@@ -89,6 +90,21 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     updates.push(`health_screening = $${params.length}`);
   }
 
+  // Settings > Notification Preferences toggle — which channel(s) an
+  // eligible, blood-type-matching donor actually gets contacted on for a
+  // broadcast (see notifyDonorsForRequest, notifications.service.js). Plain
+  // booleans, not something an admin needs to touch, so this endpoint is
+  // the only place they're ever written.
+  if (notifySms !== undefined) {
+    params.push(Boolean(notifySms));
+    updates.push(`notify_sms = $${params.length}`);
+  }
+
+  if (notifyEmail !== undefined) {
+    params.push(Boolean(notifyEmail));
+    updates.push(`notify_email = $${params.length}`);
+  }
+
   if (updates.length === 0) {
     return res.status(400).json({ error: "Nothing to update." });
   }
@@ -98,7 +114,8 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     `UPDATE donors SET ${updates.join(", ")}, updated_at = now()
      WHERE id = $${params.length}
      RETURNING id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
-               age, weight_kg AS "weightKg", health_screening AS "healthScreening"`,
+               age, weight_kg AS "weightKg", health_screening AS "healthScreening",
+               notify_sms AS "notifySms", notify_email AS "notifyEmail"`,
     params
   );
   res.json(rows[0]);

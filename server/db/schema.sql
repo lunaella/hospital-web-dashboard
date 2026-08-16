@@ -200,6 +200,8 @@ CREATE TABLE donors (
   age               INT,                  -- self-reported at mobile registration; see migration 007
   weight_kg         NUMERIC(5,2),         -- self-reported; the mobile app's decision-tree screening reads this
   health_screening  JSONB,                -- mobile app's raw intake answers — the decision tree itself lives client-side
+  notify_sms        BOOLEAN NOT NULL DEFAULT true,  -- per-channel opt-out; see migration 008
+  notify_email      BOOLEAN NOT NULL DEFAULT true,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );

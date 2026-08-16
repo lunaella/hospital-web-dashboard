@@ -95,7 +95,8 @@ export async function notifyDonorsForRequest(request) {
   request.hospitalName = hospitalRows[0]?.name ?? FALLBACK_HOSPITAL_NAME;
 
   const { rows: donors } = await pool.query(
-    `SELECT d.id, d.donor_code, d.name, d.phone, d.email, d.last_donation_at AS "lastDonationAt"
+    `SELECT d.id, d.donor_code, d.name, d.phone, d.email, d.last_donation_at AS "lastDonationAt",
+            d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail"
      FROM donors d
      JOIN donor_eligibility de ON de.id = d.id
      WHERE d.blood_type = $1 AND de.is_eligible = true`,
@@ -116,16 +117,23 @@ export async function notifyDonorsForRequest(request) {
 
   const rankedDonors = rankDonorsByResponseTime(donors, avgResponseByDonorId);
 
+  // notify_sms/notify_email are the donor's own Settings > Notification
+  // Preferences toggle (see migration 008) — a donor who's still a match
+  // (right blood type, still eligible) but has opted a channel off simply
+  // gets no attempt logged for it, same as if they had no email on file.
   const attempts = rankedDonors.flatMap(({ donor }) => {
-    const jobs = [
-      sendSms(donor.phone, buildSmsBody(request)).then((result) => ({
-        donor,
-        channel: "sms",
-        recipient: donor.phone,
-        result,
-      })),
-    ];
-    if (donor.email) {
+    const jobs = [];
+    if (donor.notifySms) {
+      jobs.push(
+        sendSms(donor.phone, buildSmsBody(request)).then((result) => ({
+          donor,
+          channel: "sms",
+          recipient: donor.phone,
+          result,
+        }))
+      );
+    }
+    if (donor.email && donor.notifyEmail) {
       jobs.push(
         sendEmail({
           to: donor.email,
