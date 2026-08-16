@@ -9,10 +9,12 @@ import {
   createAppointment,
   updateAppointmentStatus,
   completeAppointment,
+  checkInByQr,
 } from "../controllers/donors.controller.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireSection, requireHospitalScope } from "../middleware/permissions.js";
 import { pool } from "../db/pool.js";
+import { verifySessionToken } from "../utils/jwt.js";
 
 // Donors themselves are hospital-agnostic (a shared pool — see schema.sql),
 // so donorsRouter is intentionally NOT hospital-scoped, only section-gated.
@@ -37,11 +39,33 @@ async function appointmentHospitalId(req) {
   return rows[0]?.hospital_id ?? null;
 }
 
+// checkInByQr identifies its target via a signed token in the body, not a
+// URL param — decode it here (defensively; a bad/expired token just
+// resolves to null, which requireHospitalScope treats as "not one of your
+// hospitals" for a scoped admin and denies, while checkInByQr itself
+// re-verifies the token and returns the real "invalid or expired" error
+// for everyone else).
+async function checkinTokenHospitalId(req) {
+  try {
+    const payload = verifySessionToken(req.body?.token);
+    const { rows } = await pool.query("SELECT hospital_id FROM appointments WHERE id = $1", [payload.appointmentId]);
+    return rows[0]?.hospital_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export const appointmentsRouter = Router();
 appointmentsRouter.use(requireAuth, requireSection("donor_management", "view"));
 
 appointmentsRouter.get("/", requireHospitalScope(), listAppointmentsForDay);
 appointmentsRouter.post("/", requireSection("donor_management", "edit"), requireHospitalScope(), createAppointment);
+appointmentsRouter.post(
+  "/checkin",
+  requireSection("donor_management", "edit"),
+  requireHospitalScope(checkinTokenHospitalId),
+  checkInByQr
+);
 appointmentsRouter.patch(
   "/:id",
   requireSection("donor_management", "edit"),

@@ -15,7 +15,8 @@ const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 // JWT lib's expiresIn accepts a duration string instead.
 const DONOR_SESSION_EXPIRES_SECONDS = 30 * 24 * 60 * 60;
 
-const DONOR_SELECT = `id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType"`;
+const DONOR_SELECT = `id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
+  age, weight_kg AS "weightKg", health_screening AS "healthScreening"`;
 
 async function startDonorSession(donorId) {
   const redis = await ensureRedisConnected();
@@ -100,22 +101,40 @@ export const completeProfile = asyncHandler(async (req, res) => {
   const isNewDonor = !donor;
 
   if (!donor) {
-    const { name, bloodType, email } = req.body;
+    const { name, bloodType, email, age, weightKg, healthScreening } = req.body;
     if (!name?.trim() || !bloodType) {
       return res.status(400).json({ error: "name and bloodType are required." });
     }
     if (!BLOOD_TYPES.includes(bloodType)) {
       return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}` });
     }
+    // age/weightKg/healthScreening are all optional — the mobile app's
+    // screening wizard is a separate step from this bare-minimum signup,
+    // and older admin-created donor records never had them either.
+    if (age !== undefined && age !== null && !Number.isInteger(age)) {
+      return res.status(400).json({ error: "age must be an integer." });
+    }
+    if (weightKg !== undefined && weightKg !== null && !(Number(weightKg) > 0)) {
+      return res.status(400).json({ error: "weightKg must be a positive number." });
+    }
 
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = `D-${Math.floor(1000 + Math.random() * 9000)}`;
       try {
         const { rows } = await pool.query(
-          `INSERT INTO donors (donor_code, name, phone, blood_type, email)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO donors (donor_code, name, phone, blood_type, email, age, weight_kg, health_screening)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
            RETURNING ${DONOR_SELECT}`,
-          [code, name.trim(), phone, bloodType, email?.trim() || null]
+          [
+            code,
+            name.trim(),
+            phone,
+            bloodType,
+            email?.trim() || null,
+            age ?? null,
+            weightKg ?? null,
+            healthScreening ? JSON.stringify(healthScreening) : null,
+          ]
         );
         donor = rows[0];
         break;

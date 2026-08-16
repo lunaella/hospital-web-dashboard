@@ -2,6 +2,9 @@ import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { bookAppointment, AppointmentBookingError } from "../services/appointments.service.js";
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
+import { signAppointmentCheckinToken } from "../utils/jwt.js";
+
+const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 
 // Same 90-day DOH cooling-rule math as the donor_eligibility view (schema.sql)
 // and exportDonors (donors.controller.js) — duplicated as a WHERE id = $1
@@ -11,6 +14,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
             last_donation_at AS "lastDonationAt",
+            age, weight_kg AS "weightKg", health_screening AS "healthScreening",
             CASE
               WHEN last_donation_at IS NULL THEN true
               WHEN now() - last_donation_at >= INTERVAL '90 days' THEN true
@@ -24,12 +28,15 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   res.json(rows[0]);
 });
 
-// Self-service profile edit: name, phone, email. Blood type is deliberately
-// NOT editable here — it's a safety-critical field that drives which
-// donors get matched to which broadcast, so a correction has to go through
-// an admin (Donor Management), not a raw self-edit a donor could fat-finger.
+// Self-service profile edit: name, phone, email, and the mobile app's
+// screening inputs (age/weightKg/healthScreening — these can legitimately
+// change over time, e.g. re-answering the screener before a new donation
+// attempt, unlike blood type). Blood type is deliberately NOT editable
+// here — it's a safety-critical field that drives which donors get matched
+// to which broadcast, so a correction has to go through an admin (Donor
+// Management), not a raw self-edit a donor could fat-finger.
 export const updateMyProfile = asyncHandler(async (req, res) => {
-  const { name, phone, email } = req.body;
+  const { name, phone, email, age, weightKg, healthScreening } = req.body;
   const updates = [];
   const params = [];
 
@@ -61,6 +68,27 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     updates.push(`email = $${params.length}`);
   }
 
+  if (age !== undefined) {
+    if (age !== null && !Number.isInteger(age)) {
+      return res.status(400).json({ error: "age must be an integer." });
+    }
+    params.push(age);
+    updates.push(`age = $${params.length}`);
+  }
+
+  if (weightKg !== undefined) {
+    if (weightKg !== null && !(Number(weightKg) > 0)) {
+      return res.status(400).json({ error: "weightKg must be a positive number." });
+    }
+    params.push(weightKg);
+    updates.push(`weight_kg = $${params.length}`);
+  }
+
+  if (healthScreening !== undefined) {
+    params.push(healthScreening === null ? null : JSON.stringify(healthScreening));
+    updates.push(`health_screening = $${params.length}`);
+  }
+
   if (updates.length === 0) {
     return res.status(400).json({ error: "Nothing to update." });
   }
@@ -69,10 +97,63 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE donors SET ${updates.join(", ")}, updated_at = now()
      WHERE id = $${params.length}
-     RETURNING id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType"`,
+     RETURNING id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
+               age, weight_kg AS "weightKg", health_screening AS "healthScreening"`,
     params
   );
   res.json(rows[0]);
+});
+
+// Home screen "Priority Request Feed" — open broadcasts matching this
+// donor's exact blood type (same exact-match rule notifyDonorsForRequest
+// already uses; this app has no ABO/Rh compatibility matrix anywhere, so a
+// feed that suddenly showed "compatible" types would be a new, undiscussed
+// matching rule, not this endpoint's call to make). Ranked by urgency tier
+// first always, then by proximity to ?lat=&lng= (the donor's current GPS
+// position, passed as query params since donors don't have a fixed stored
+// location — a hospital does) when supplied, falling back to most-recent
+// first when it isn't.
+export const listOpenRequestsForDonor = asyncHandler(async (req, res) => {
+  const lat = req.query.lat !== undefined ? Number(req.query.lat) : null;
+  const lng = req.query.lng !== undefined ? Number(req.query.lng) : null;
+  const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+
+  // Haversine distance in km — only computed when the app actually sent a
+  // position; NULL (and therefore last in NULLS LAST ordering) otherwise
+  // rather than pretending everyone is equidistant.
+  const distanceExpr = hasLocation
+    ? `6371 * acos(least(1, greatest(-1,
+         cos(radians($2)) * cos(radians(h.latitude)) * cos(radians(h.longitude) - radians($3))
+         + sin(radians($2)) * sin(radians(h.latitude))
+       )))`
+    : "NULL";
+
+  const { rows } = await pool.query(
+    `SELECT
+       r.request_code AS "requestCode",
+       r.blood_type AS "bloodType",
+       r.priority,
+       r.ward,
+       r.units_needed AS "unitsNeeded",
+       r.units_fulfilled AS "unitsFulfilled",
+       r.status,
+       extract(epoch FROM (now() - r.created_at))::int AS "secondsOpen",
+       h.id AS "hospitalId",
+       h.name AS "hospitalName",
+       h.address AS "hospitalAddress",
+       h.latitude,
+       h.longitude,
+       round((${distanceExpr})::numeric, 1) AS "distanceKm"
+     FROM blood_requests r
+     JOIN hospitals h ON h.id = r.hospital_id
+     WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED') AND r.blood_type = $1
+     ORDER BY
+       CASE r.priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END,
+       (${distanceExpr}) ASC NULLS LAST,
+       r.created_at DESC`,
+    hasLocation ? [req.donor.bloodType, lat, lng] : [req.donor.bloodType]
+  );
+  res.json(rows);
 });
 
 // Powers the app's hospital picker when booking an appointment — public
@@ -194,4 +275,25 @@ export const cancelMyAppointment = asyncHandler(async (req, res) => {
     return res.status(404).json({ error: "Appointment not found, already cancelled, or already completed." });
   }
   res.json(rows[0]);
+});
+
+// Issues the short-lived signed token the mobile app renders as a QR code
+// for hospital check-in (see utils/jwt.js and the admin-side
+// POST /api/appointments/checkin that consumes it in donors.controller.js).
+// Only issuable for the donor's own appointment, and only while it's still
+// pending/confirmed — no point generating a check-in pass for a visit
+// that's already happened or been cancelled.
+export const getAppointmentQrToken = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(`SELECT id, status FROM appointments WHERE id = $1 AND donor_id = $2`, [
+    req.params.id,
+    req.donor.id,
+  ]);
+  const appt = rows[0];
+  if (!appt) return res.status(404).json({ error: "Appointment not found." });
+  if (!["pending", "confirmed"].includes(appt.status)) {
+    return res.status(400).json({ error: `Can't generate a check-in pass for a ${appt.status} appointment.` });
+  }
+
+  const token = signAppointmentCheckinToken(appt.id, req.donor.id);
+  res.json({ token, expiresIn: CHECKIN_TOKEN_TTL_SECONDS });
 });

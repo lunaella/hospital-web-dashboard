@@ -2,6 +2,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { hospitalIdParam } from "../utils/hospitalScope.js";
 import { bookAppointment, AppointmentBookingError } from "../services/appointments.service.js";
+import { verifySessionToken } from "../utils/jwt.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
@@ -274,4 +275,54 @@ export const completeAppointment = asyncHandler(async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// QR check-in: the donor's mobile app shows GET /api/donor/appointments/:id/qr
+// as a QR code; front-desk staff scan it (or, until the web UI has an actual
+// camera-based scanner, paste the decoded text into a plain input — a QR
+// scanner "typing" into a focused field is a common, legitimate pattern, not
+// a placeholder hack) and this endpoint does the same thing confirmArrival
+// already does: flips the appointment to 'confirmed'. It deliberately does
+// NOT call completeAppointment's full donation-recording flow (inventory,
+// last_donation_at, donor_arrivals) — check-in means "they've shown up",
+// not "the donation happened", which still needs a staff member's actual
+// medical sign-off afterward.
+export const checkInByQr = asyncHandler(async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "token is required." });
+
+  let payload;
+  try {
+    payload = verifySessionToken(token);
+  } catch {
+    return res.status(400).json({ error: "This check-in code is invalid or has expired." });
+  }
+  if (payload.role !== "appointment_checkin") {
+    return res.status(400).json({ error: "This is not a valid check-in code." });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT a.id, a.status, a.scheduled_at AS "scheduledAt",
+            d.name AS "donorName", d.donor_code AS "donorCode", d.blood_type AS "bloodType"
+     FROM appointments a
+     JOIN donors d ON d.id = a.donor_id
+     WHERE a.id = $1 AND a.donor_id = $2`,
+    [payload.appointmentId, payload.donorId]
+  );
+  const appt = rows[0];
+  if (!appt) return res.status(404).json({ error: "Appointment not found." });
+  if (!["pending", "confirmed"].includes(appt.status)) {
+    return res.status(400).json({ error: `This appointment is already ${appt.status}.` });
+  }
+
+  await pool.query("UPDATE appointments SET status = 'confirmed', updated_at = now() WHERE id = $1", [appt.id]);
+
+  res.json({
+    id: appt.id,
+    status: "confirmed",
+    donorName: appt.donorName,
+    donorCode: appt.donorCode,
+    bloodType: appt.bloodType,
+    scheduledAt: appt.scheduledAt,
+  });
 });

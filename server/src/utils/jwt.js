@@ -39,3 +39,18 @@ export function signDonorPendingToken(phone) {
 export function verifySessionToken(token) {
   return jwt.verify(token, env.jwtSecret); // throws if invalid/expired
 }
+
+// QR check-in pass: the mobile app renders this token as a QR code for a
+// specific upcoming appointment; a hospital admin scans (or, today, pastes
+// — see appointments.routes.js) it to confirm the donor's arrival. Signed
+// and short-lived rather than just encoding the raw appointment id, so a
+// screenshotted/leaked QR code can't be replayed after it expires and
+// can't be hand-crafted by guessing an id. Deliberately carries no
+// Redis-revocable session (unlike a login token) — there's nothing to log
+// out of, it's a single-purpose pass that's either still valid or isn't.
+const CHECKIN_TOKEN_TTL = "10m";
+export function signAppointmentCheckinToken(appointmentId, donorId) {
+  return jwt.sign({ appointmentId, donorId, role: "appointment_checkin" }, env.jwtSecret, {
+    expiresIn: CHECKIN_TOKEN_TTL,
+  });
+}

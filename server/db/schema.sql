@@ -197,6 +197,9 @@ CREATE TABLE donors (
   blood_type        blood_type NOT NULL,
   avatar_url        TEXT,
   last_donation_at  TIMESTAMPTZ,          -- drives the DOH 90-day cooling rule
+  age               INT,                  -- self-reported at mobile registration; see migration 007
+  weight_kg         NUMERIC(5,2),         -- self-reported; the mobile app's decision-tree screening reads this
+  health_screening  JSONB,                -- mobile app's raw intake answers — the decision tree itself lives client-side
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
