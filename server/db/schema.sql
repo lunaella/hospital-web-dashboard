@@ -202,6 +202,7 @@ CREATE TABLE donors (
   health_screening  JSONB,                -- mobile app's raw intake answers — the decision tree itself lives client-side
   notify_sms        BOOLEAN NOT NULL DEFAULT true,  -- per-channel opt-out; see migration 008
   notify_email      BOOLEAN NOT NULL DEFAULT true,
+  password_hash     TEXT,                 -- nullable; OTP-only donors have never set one — see migration 009
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );

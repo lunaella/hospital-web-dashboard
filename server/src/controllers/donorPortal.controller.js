@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { bookAppointment, AppointmentBookingError } from "../services/appointments.service.js";
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
 import { signAppointmentCheckinToken } from "../utils/jwt.js";
+import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 
@@ -37,7 +38,8 @@ export const getMyProfile = asyncHandler(async (req, res) => {
 // to which broadcast, so a correction has to go through an admin (Donor
 // Management), not a raw self-edit a donor could fat-finger.
 export const updateMyProfile = asyncHandler(async (req, res) => {
-  const { name, phone, email, age, weightKg, healthScreening, notifySms, notifyEmail } = req.body;
+  const { name, phone, email, age, weightKg, healthScreening, notifySms, notifyEmail, password, currentPassword } =
+    req.body;
   const updates = [];
   const params = [];
 
@@ -103,6 +105,30 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   if (notifyEmail !== undefined) {
     params.push(Boolean(notifyEmail));
     updates.push(`notify_email = $${params.length}`);
+  }
+
+  // Sets or changes the donor's password login (see migration 009 and
+  // POST /api/donor-auth/login). If they already have one, currentPassword
+  // must match it first — proves whoever's holding this session actually
+  // knows the old password, so a left-open/stolen session can't silently
+  // lock the real owner out by swapping the password out from under them.
+  // A donor who's never set one yet (still OTP-only) can set their first
+  // one here with no currentPassword required — there's nothing to prove
+  // knowledge of.
+  if (password !== undefined) {
+    if (!isValidPassword(password)) {
+      return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+    }
+    const { rows: pwRows } = await pool.query(`SELECT password_hash AS "passwordHash" FROM donors WHERE id = $1`, [
+      req.donor.id,
+    ]);
+    const existingHash = pwRows[0]?.passwordHash;
+    if (existingHash) {
+      const matches = await verifyPassword(currentPassword, existingHash);
+      if (!matches) return res.status(400).json({ error: "currentPassword is incorrect." });
+    }
+    params.push(await hashPassword(password));
+    updates.push(`password_hash = $${params.length}`);
   }
 
   if (updates.length === 0) {

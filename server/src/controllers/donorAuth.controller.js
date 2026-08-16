@@ -6,6 +6,7 @@ import { sendEmail } from "../utils/email.js";
 import { issueOtp, verifyOtp } from "../utils/otp.js";
 import { signDonorToken, signDonorPendingToken } from "../utils/jwt.js";
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
+import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -18,6 +19,17 @@ const DONOR_SESSION_EXPIRES_SECONDS = 30 * 24 * 60 * 60;
 const DONOR_SELECT = `id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
   age, weight_kg AS "weightKg", health_screening AS "healthScreening",
   notify_sms AS "notifySms", notify_email AS "notifyEmail"`;
+
+// Password login rate limiting — same per-IP+identifier lockout shape as
+// the admin login (auth.controller.js), keyed by phone instead of
+// username so one attacker can't grind a single donor's password from one
+// source, without penalizing a shared IP guessing many different phones.
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_WINDOW_SECONDS = 15 * 60;
+
+function donorLoginAttemptsKey(ip, phone) {
+  return `donor_login_attempts:${ip}:${phone}`;
+}
 
 async function startDonorSession(donorId) {
   const redis = await ensureRedisConnected();
@@ -86,6 +98,50 @@ export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
   res.json({ needsProfile: false, token, expiresIn: DONOR_SESSION_EXPIRES_SECONDS, donor });
 });
 
+// Alternate, faster return login for a donor who's already set a password
+// (at signup via complete-profile, or later via PATCH /api/donor/me) —
+// doesn't replace the OTP flow above, which still works for anyone at any
+// time (e.g. a donor who forgot their password, or one who's never set
+// one). Same "don't reveal which part was wrong" shape as the admin login:
+// unknown phone, no password set yet, and a wrong password all return the
+// identical 401 message.
+export const donorPasswordLogin = asyncHandler(async (req, res) => {
+  const rawPhone = req.body.phone?.trim();
+  const password = req.body.password;
+  if (!rawPhone || !password) return res.status(400).json({ error: "phone and password are required." });
+  const phone = normalizePhoneForStorage(rawPhone);
+
+  const redis = await ensureRedisConnected();
+  const attemptsKey = donorLoginAttemptsKey(req.ip, phone);
+  const attempts = Number((await redis.get(attemptsKey)) ?? 0);
+  if (attempts >= MAX_LOGIN_ATTEMPTS) {
+    const ttl = await redis.ttl(attemptsKey);
+    const waitMinutes = Math.max(1, Math.ceil(ttl / 60));
+    return res.status(429).json({
+      error: `Too many failed login attempts. Try again in ${waitMinutes} minute${waitMinutes === 1 ? "" : "s"}.`,
+    });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT ${DONOR_SELECT}, password_hash AS "passwordHash" FROM donors WHERE phone = $1`,
+    [phone]
+  );
+  const donor = rows[0];
+  const passwordMatches = await verifyPassword(password, donor?.passwordHash);
+
+  if (!donor || !passwordMatches) {
+    const newCount = await redis.incr(attemptsKey);
+    if (newCount === 1) await redis.expire(attemptsKey, LOCKOUT_WINDOW_SECONDS);
+    return res.status(401).json({ error: "Invalid phone number or password." });
+  }
+
+  await redis.del(attemptsKey);
+  delete donor.passwordHash;
+
+  const token = await startDonorSession(donor.id);
+  res.json({ token, expiresIn: DONOR_SESSION_EXPIRES_SECONDS, donor });
+});
+
 // Step 3 (only reached when verify-otp returned needsProfile: true): create
 // the donor record for this phone, or — if an admin already created one in
 // the meantime (a walk-in, an import) — just log into that existing record
@@ -102,12 +158,20 @@ export const completeProfile = asyncHandler(async (req, res) => {
   const isNewDonor = !donor;
 
   if (!donor) {
-    const { name, bloodType, email, age, weightKg, healthScreening } = req.body;
+    const { name, bloodType, email, age, weightKg, healthScreening, password } = req.body;
     if (!name?.trim() || !bloodType) {
       return res.status(400).json({ error: "name and bloodType are required." });
     }
     if (!BLOOD_TYPES.includes(bloodType)) {
       return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}` });
+    }
+    // The phone itself was already OTP-verified to reach this step, but a
+    // password is still required here so the donor has a way to log back
+    // in afterward without waiting on another SMS every time — see
+    // migration 009. Not optional: a signup with no password would leave
+    // that donor OTP-only forever unless they later find PATCH /me.
+    if (!isValidPassword(password)) {
+      return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
     }
     // age/weightKg/healthScreening are all optional — the mobile app's
     // screening wizard is a separate step from this bare-minimum signup,
@@ -119,12 +183,14 @@ export const completeProfile = asyncHandler(async (req, res) => {
       return res.status(400).json({ error: "weightKg must be a positive number." });
     }
 
+    const passwordHash = await hashPassword(password);
+
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = `D-${Math.floor(1000 + Math.random() * 9000)}`;
       try {
         const { rows } = await pool.query(
-          `INSERT INTO donors (donor_code, name, phone, blood_type, email, age, weight_kg, health_screening)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO donors (donor_code, name, phone, blood_type, email, age, weight_kg, health_screening, password_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING ${DONOR_SELECT}`,
           [
             code,
@@ -135,6 +201,7 @@ export const completeProfile = asyncHandler(async (req, res) => {
             age ?? null,
             weightKg ?? null,
             healthScreening ? JSON.stringify(healthScreening) : null,
+            passwordHash,
           ]
         );
         donor = rows[0];
