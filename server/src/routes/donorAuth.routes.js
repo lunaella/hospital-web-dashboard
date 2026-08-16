@@ -13,7 +13,9 @@ import { requireDonorPendingAuth, requireDonorAuth } from "../middleware/donorAu
 //   2. POST /verify-otp      { phone, code }         -> token (+ needsProfile)
 //   3. POST /complete-profile{ name, bloodType, password, ... } -> only if step 2 said needsProfile: true
 //   OR, once a donor has set a password (at step 3 or later via PATCH /api/donor/me):
-//      POST /login           { phone, password }     -> token, no SMS round trip
+//      POST /login           { identifier, password } -> token, no SMS round trip
+//                             (identifier = email or phone; matches the real
+//                             app's login screen, which lets the donor pick either)
 export const donorAuthRouter = Router();
 
 donorAuthRouter.post("/request-otp", requestOtp);

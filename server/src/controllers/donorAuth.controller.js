@@ -17,18 +17,21 @@ const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const DONOR_SESSION_EXPIRES_SECONDS = 30 * 24 * 60 * 60;
 
 const DONOR_SELECT = `id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
-  age, weight_kg AS "weightKg", health_screening AS "healthScreening",
+  age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
   notify_sms AS "notifySms", notify_email AS "notifyEmail"`;
 
+const GENDERS = ["male", "female"];
+
 // Password login rate limiting — same per-IP+identifier lockout shape as
-// the admin login (auth.controller.js), keyed by phone instead of
-// username so one attacker can't grind a single donor's password from one
-// source, without penalizing a shared IP guessing many different phones.
+// the admin login (auth.controller.js), keyed by whatever identifier
+// (normalized phone or lowercased email) they logged in with, so one
+// attacker can't grind a single donor's password from one source, without
+// penalizing a shared IP guessing many different accounts.
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_WINDOW_SECONDS = 15 * 60;
 
-function donorLoginAttemptsKey(ip, phone) {
-  return `donor_login_attempts:${ip}:${phone}`;
+function donorLoginAttemptsKey(ip, identifier) {
+  return `donor_login_attempts:${ip}:${identifier}`;
 }
 
 async function startDonorSession(donorId) {
@@ -103,16 +106,28 @@ export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
 // doesn't replace the OTP flow above, which still works for anyone at any
 // time (e.g. a donor who forgot their password, or one who's never set
 // one). Same "don't reveal which part was wrong" shape as the admin login:
-// unknown phone, no password set yet, and a wrong password all return the
-// identical 401 message.
+// unknown identifier, no password set yet, and a wrong password all return
+// the identical 401 message.
+//
+// Accepts either an email or a phone number as the login identifier — the
+// real mobile app's login screen (login_view.dart) has an explicit
+// email/phone toggle and sends whichever one the donor picked, it's not
+// phone-only like the OTP flow above. Field is named `identifier` to match
+// that screen's own AuthService.signInWithCredentials() shape, with `email`
+// and `phone` accepted as aliases for callers (e.g. a Postman test) that
+// already know which kind they're sending.
 export const donorPasswordLogin = asyncHandler(async (req, res) => {
-  const rawPhone = req.body.phone?.trim();
+  const rawIdentifier = (req.body.identifier ?? req.body.email ?? req.body.phone)?.trim();
   const password = req.body.password;
-  if (!rawPhone || !password) return res.status(400).json({ error: "phone and password are required." });
-  const phone = normalizePhoneForStorage(rawPhone);
+  if (!rawIdentifier || !password) {
+    return res.status(400).json({ error: "identifier (email or phone) and password are required." });
+  }
+
+  const isEmail = rawIdentifier.includes("@");
+  const lookupValue = isEmail ? rawIdentifier.toLowerCase() : normalizePhoneForStorage(rawIdentifier);
 
   const redis = await ensureRedisConnected();
-  const attemptsKey = donorLoginAttemptsKey(req.ip, phone);
+  const attemptsKey = donorLoginAttemptsKey(req.ip, lookupValue);
   const attempts = Number((await redis.get(attemptsKey)) ?? 0);
   if (attempts >= MAX_LOGIN_ATTEMPTS) {
     const ttl = await redis.ttl(attemptsKey);
@@ -123,16 +138,21 @@ export const donorPasswordLogin = asyncHandler(async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT ${DONOR_SELECT}, password_hash AS "passwordHash" FROM donors WHERE phone = $1`,
-    [phone]
+    `SELECT ${DONOR_SELECT}, password_hash AS "passwordHash" FROM donors WHERE ${isEmail ? "lower(email) = $1" : "phone = $1"}`,
+    [lookupValue]
   );
-  const donor = rows[0];
+  // donors.email has no DB-level UNIQUE constraint (same as phone — see
+  // updateMyProfile's app-level check in donorPortal.controller.js). If two
+  // rows somehow share an email, logging in by email would be genuinely
+  // ambiguous, so treat that the same as "no match" rather than picking one
+  // at random.
+  const donor = rows.length === 1 ? rows[0] : undefined;
   const passwordMatches = await verifyPassword(password, donor?.passwordHash);
 
   if (!donor || !passwordMatches) {
     const newCount = await redis.incr(attemptsKey);
     if (newCount === 1) await redis.expire(attemptsKey, LOCKOUT_WINDOW_SECONDS);
-    return res.status(401).json({ error: "Invalid phone number or password." });
+    return res.status(401).json({ error: "Invalid email/phone or password." });
   }
 
   await redis.del(attemptsKey);
@@ -158,7 +178,7 @@ export const completeProfile = asyncHandler(async (req, res) => {
   const isNewDonor = !donor;
 
   if (!donor) {
-    const { name, bloodType, email, age, weightKg, healthScreening, password } = req.body;
+    const { name, bloodType, email, age, weightKg, gender, healthScreening, password } = req.body;
     if (!name?.trim() || !bloodType) {
       return res.status(400).json({ error: "name and bloodType are required." });
     }
@@ -173,14 +193,29 @@ export const completeProfile = asyncHandler(async (req, res) => {
     if (!isValidPassword(password)) {
       return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
     }
-    // age/weightKg/healthScreening are all optional — the mobile app's
-    // screening wizard is a separate step from this bare-minimum signup,
-    // and older admin-created donor records never had them either.
+    // age/weightKg/gender/healthScreening are all optional — the mobile
+    // app's screening wizard is a separate step from this bare-minimum
+    // signup, and older admin-created donor records never had them either.
     if (age !== undefined && age !== null && !Number.isInteger(age)) {
       return res.status(400).json({ error: "age must be an integer." });
     }
     if (weightKg !== undefined && weightKg !== null && !(Number(weightKg) > 0)) {
       return res.status(400).json({ error: "weightKg must be a positive number." });
+    }
+    if (gender !== undefined && gender !== null && !GENDERS.includes(gender)) {
+      return res.status(400).json({ error: `gender must be one of: ${GENDERS.join(", ")}` });
+    }
+    // Email is optional here, same as always, but now that it also works as
+    // a login identifier (donorPasswordLogin above), a duplicate would make
+    // that login ambiguous — same reasoning as the phone uniqueness check
+    // in updateMyProfile, just enforced at creation time instead of edit
+    // time since a brand-new signup has no existing row to collide into.
+    const normalizedEmail = email?.trim().toLowerCase() || null;
+    if (normalizedEmail) {
+      const { rows: emailClash } = await pool.query("SELECT id FROM donors WHERE lower(email) = $1", [
+        normalizedEmail,
+      ]);
+      if (emailClash[0]) return res.status(400).json({ error: "That email is already in use by another account." });
     }
 
     const passwordHash = await hashPassword(password);
@@ -189,8 +224,8 @@ export const completeProfile = asyncHandler(async (req, res) => {
       const code = `D-${Math.floor(1000 + Math.random() * 9000)}`;
       try {
         const { rows } = await pool.query(
-          `INSERT INTO donors (donor_code, name, phone, blood_type, email, age, weight_kg, health_screening, password_hash)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO donors (donor_code, name, phone, blood_type, email, age, weight_kg, gender, health_screening, password_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING ${DONOR_SELECT}`,
           [
             code,
@@ -200,6 +235,7 @@ export const completeProfile = asyncHandler(async (req, res) => {
             email?.trim() || null,
             age ?? null,
             weightKg ?? null,
+            gender ?? null,
             healthScreening ? JSON.stringify(healthScreening) : null,
             passwordHash,
           ]

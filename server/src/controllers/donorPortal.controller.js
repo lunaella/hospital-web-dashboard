@@ -6,6 +6,7 @@ import { signAppointmentCheckinToken } from "../utils/jwt.js";
 import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
+const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
 
 // Same 90-day DOH cooling-rule math as the donor_eligibility view (schema.sql)
 // and exportDonors (donors.controller.js) — duplicated as a WHERE id = $1
@@ -15,7 +16,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
             last_donation_at AS "lastDonationAt",
-            age, weight_kg AS "weightKg", health_screening AS "healthScreening",
+            age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
             notify_sms AS "notifySms", notify_email AS "notifyEmail",
             CASE
               WHEN last_donation_at IS NULL THEN true
@@ -38,8 +39,19 @@ export const getMyProfile = asyncHandler(async (req, res) => {
 // to which broadcast, so a correction has to go through an admin (Donor
 // Management), not a raw self-edit a donor could fat-finger.
 export const updateMyProfile = asyncHandler(async (req, res) => {
-  const { name, phone, email, age, weightKg, healthScreening, notifySms, notifyEmail, password, currentPassword } =
-    req.body;
+  const {
+    name,
+    phone,
+    email,
+    age,
+    weightKg,
+    gender,
+    healthScreening,
+    notifySms,
+    notifyEmail,
+    password,
+    currentPassword,
+  } = req.body;
   const updates = [];
   const params = [];
 
@@ -67,7 +79,19 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   }
 
   if (email !== undefined) {
-    params.push(email?.trim() || null);
+    const normalizedEmail = email?.trim().toLowerCase() || null;
+    // Email now works as a login identifier too (donorPasswordLogin,
+    // donorAuth.controller.js), so a duplicate here would make that login
+    // ambiguous — same app-level guard as phone above, since donors.email
+    // has no DB-level UNIQUE constraint either.
+    if (normalizedEmail) {
+      const { rows: clash } = await pool.query("SELECT id FROM donors WHERE lower(email) = $1 AND id != $2", [
+        normalizedEmail,
+        req.donor.id,
+      ]);
+      if (clash[0]) return res.status(400).json({ error: "That email is already in use by another account." });
+    }
+    params.push(normalizedEmail);
     updates.push(`email = $${params.length}`);
   }
 
@@ -85,6 +109,14 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     }
     params.push(weightKg);
     updates.push(`weight_kg = $${params.length}`);
+  }
+
+  if (gender !== undefined) {
+    if (gender !== null && !GENDERS.includes(gender)) {
+      return res.status(400).json({ error: `gender must be one of: ${GENDERS.join(", ")}` });
+    }
+    params.push(gender);
+    updates.push(`gender = $${params.length}`);
   }
 
   if (healthScreening !== undefined) {
@@ -140,7 +172,7 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     `UPDATE donors SET ${updates.join(", ")}, updated_at = now()
      WHERE id = $${params.length}
      RETURNING id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
-               age, weight_kg AS "weightKg", health_screening AS "healthScreening",
+               age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
                notify_sms AS "notifySms", notify_email AS "notifyEmail"`,
     params
   );

@@ -36,6 +36,11 @@ CREATE TYPE notification_channel AS ENUM ('sms', 'email');
 
 CREATE TYPE notification_status AS ENUM ('sent', 'failed');
 
+-- Binary, matching the mobile app's own BioSex model exactly (see migration
+-- 010) — feeds its client-side eligibility decision tree, which asks
+-- different screening questions by sex.
+CREATE TYPE donor_gender AS ENUM ('male', 'female');
+
 -- ---------------------------------------------------------------------------
 -- Hospitals — this web app is a super-admin surface overseeing multiple
 -- hospitals; the donor-facing mobile app recommends the nearest hospital to
@@ -199,6 +204,7 @@ CREATE TABLE donors (
   last_donation_at  TIMESTAMPTZ,          -- drives the DOH 90-day cooling rule
   age               INT,                  -- self-reported at mobile registration; see migration 007
   weight_kg         NUMERIC(5,2),         -- self-reported; the mobile app's decision-tree screening reads this
+  gender            donor_gender,         -- self-reported; see migration 010
   health_screening  JSONB,                -- mobile app's raw intake answers — the decision tree itself lives client-side
   notify_sms        BOOLEAN NOT NULL DEFAULT true,  -- per-channel opt-out; see migration 008
   notify_email      BOOLEAN NOT NULL DEFAULT true,
