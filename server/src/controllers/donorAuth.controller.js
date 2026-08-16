@@ -105,9 +105,17 @@ export const verifyOtpAndLogin = asyncHandler(async (req, res) => {
 // (at signup via complete-profile, or later via PATCH /api/donor/me) —
 // doesn't replace the OTP flow above, which still works for anyone at any
 // time (e.g. a donor who forgot their password, or one who's never set
-// one). Same "don't reveal which part was wrong" shape as the admin login:
-// unknown identifier, no password set yet, and a wrong password all return
-// the identical 401 message.
+// one).
+//
+// Deliberately returns a distinct error per failure reason (account not
+// found / no password set yet / wrong password) rather than one generic
+// "invalid credentials" — this is exactly what the original checklist's
+// Account Verification item asked for ("Account does not exist. Please
+// register first."). That trades away some of the "don't reveal whether an
+// account exists" caution a generic message would give, which is a
+// deliberate, requested choice here, not an oversight. Every branch still
+// counts toward the same rate limit below, so it doesn't make the account
+// any faster to brute-force enumerate than the lockout already allows.
 //
 // Accepts either an email or a phone number as the login identifier — the
 // real mobile app's login screen (login_view.dart) has an explicit
@@ -147,12 +155,28 @@ export const donorPasswordLogin = asyncHandler(async (req, res) => {
   // ambiguous, so treat that the same as "no match" rather than picking one
   // at random.
   const donor = rows.length === 1 ? rows[0] : undefined;
-  const passwordMatches = await verifyPassword(password, donor?.passwordHash);
 
-  if (!donor || !passwordMatches) {
+  async function recordFailure() {
     const newCount = await redis.incr(attemptsKey);
     if (newCount === 1) await redis.expire(attemptsKey, LOCKOUT_WINDOW_SECONDS);
-    return res.status(401).json({ error: "Invalid email/phone or password." });
+  }
+
+  if (!donor) {
+    await recordFailure();
+    return res.status(404).json({ error: "Account does not exist. Please register first." });
+  }
+
+  if (!donor.passwordHash) {
+    await recordFailure();
+    return res.status(400).json({
+      error: "This account hasn't set up a password yet. Log in with your phone's SMS code instead, or set a password from Settings.",
+    });
+  }
+
+  const passwordMatches = await verifyPassword(password, donor.passwordHash);
+  if (!passwordMatches) {
+    await recordFailure();
+    return res.status(401).json({ error: "Incorrect password." });
   }
 
   await redis.del(attemptsKey);
