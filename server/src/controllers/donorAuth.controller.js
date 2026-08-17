@@ -81,14 +81,19 @@ export const requestOtp = asyncHandler(async (req, res) => {
     });
   }
 
+  // Same number the app's own countdown badge uses (see the expiresIn
+  // field on the response below) — one constant (OTP_TTL_SECONDS, otp.js)
+  // now drives both, instead of this text and that countdown each having
+  // their own hardcoded "5 minutes" that could quietly drift apart.
+  const expiryMinutes = Math.round(OTP_TTL_SECONDS / 60);
   const deliveryResult =
     channel === "email"
       ? await sendEmail({
           to: email,
           subject: "Your ResQ verification code",
-          html: `<p>Your ResQ verification code is <strong>${result.code}</strong>. It expires in 5 minutes.</p>`,
+          html: `<p>Your ResQ verification code is <strong>${result.code}</strong>. It expires in ${expiryMinutes} minutes.</p>`,
         })
-      : await sendSms(phone, `Your ResQ verification code is ${result.code}. It expires in 5 minutes.`);
+      : await sendSms(phone, `Your ResQ verification code is ${result.code}. It expires in ${expiryMinutes} minutes.`);
 
   if (!deliveryResult.ok) {
     return res.status(502).json({ error: deliveryResult.error || "Could not send verification code." });
