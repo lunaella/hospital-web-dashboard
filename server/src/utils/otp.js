@@ -1,6 +1,9 @@
 import { ensureRedisConnected } from "../db/redis.js";
 
-const OTP_TTL_SECONDS = 5 * 60;
+// Exported so requestOtp (donorAuth.controller.js) can hand the exact
+// figure back to the app for its expiry countdown, instead of a duplicated
+// "5 minutes" hardcoded on both sides that could quietly drift apart.
+export const OTP_TTL_SECONDS = 5 * 60;
 // SMS costs real money per send — cap how many codes one phone number can
 // request in a window, same spirit as the login-attempt limiter in
 // auth.controller.js.

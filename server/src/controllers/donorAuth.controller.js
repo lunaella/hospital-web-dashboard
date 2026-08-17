@@ -3,7 +3,7 @@ import { ensureRedisConnected } from "../db/redis.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { sendSms } from "../utils/sms.js";
 import { sendEmail } from "../utils/email.js";
-import { issueOtp, verifyOtp } from "../utils/otp.js";
+import { issueOtp, verifyOtp, OTP_TTL_SECONDS } from "../utils/otp.js";
 import { signDonorToken, signDonorPendingToken } from "../utils/jwt.js";
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
 import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
@@ -93,7 +93,7 @@ export const requestOtp = asyncHandler(async (req, res) => {
   if (!deliveryResult.ok) {
     return res.status(502).json({ error: deliveryResult.error || "Could not send verification code." });
   }
-  res.json({ ok: true, channel });
+  res.json({ ok: true, channel, expiresIn: OTP_TTL_SECONDS });
 });
 
 // Step 2: verify the code. An existing donor gets a full session token
