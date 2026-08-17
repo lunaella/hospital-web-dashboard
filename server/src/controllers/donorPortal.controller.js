@@ -196,12 +196,18 @@ export const listOpenRequestsForDonor = asyncHandler(async (req, res) => {
   // Haversine distance in km — only computed when the app actually sent a
   // position; NULL (and therefore last in NULLS LAST ordering) otherwise
   // rather than pretending everyone is equidistant.
+  // Cast, not a bare "NULL" — an untyped NULL literal sitting alone in
+  // ORDER BY makes Postgres try to parse it as an ordinal column reference
+  // ("ORDER BY 1") instead of a value, and throws "non-integer constant in
+  // ORDER BY" since NULL isn't an integer. Never caught before because
+  // nothing actually called this endpoint without lat/lng until the mobile
+  // app's Priority Request Feed was wired up.
   const distanceExpr = hasLocation
     ? `6371 * acos(least(1, greatest(-1,
          cos(radians($2)) * cos(radians(h.latitude)) * cos(radians(h.longitude) - radians($3))
          + sin(radians($2)) * sin(radians(h.latitude))
        )))`
-    : "NULL";
+    : "NULL::numeric";
 
   const { rows } = await pool.query(
     `SELECT
