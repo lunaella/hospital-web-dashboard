@@ -289,6 +289,10 @@ export const listMyNotifications = asyncHandler(async (req, res) => {
        r.blood_type AS "bloodType",
        r.priority,
        r.ward,
+       r.status,
+       r.units_needed AS "unitsNeeded",
+       r.units_fulfilled AS "unitsFulfilled",
+       h.id AS "hospitalId",
        h.name AS "hospitalName",
        min(n.created_at) AS "createdAt",
        bool_and(n.read_at IS NOT NULL) AS "isRead"
@@ -296,7 +300,8 @@ export const listMyNotifications = asyncHandler(async (req, res) => {
      JOIN blood_requests r ON r.id = n.request_id
      JOIN hospitals h ON h.id = r.hospital_id
      WHERE n.donor_id = $1
-     GROUP BY n.request_id, r.request_code, r.blood_type, r.priority, r.ward, h.name
+     GROUP BY n.request_id, r.request_code, r.blood_type, r.priority, r.ward, r.status,
+              r.units_needed, r.units_fulfilled, h.id, h.name
      ORDER BY min(n.created_at) DESC
      LIMIT 50`,
     [req.donor.id]
