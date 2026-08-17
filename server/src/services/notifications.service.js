@@ -2,6 +2,7 @@ import { pool } from "../db/pool.js";
 import { sendSms } from "../utils/sms.js";
 import { sendEmail } from "../utils/email.js";
 import { MinHeap } from "../utils/minHeap.js";
+import { wrapBrandedEmail, buildBroadcastAlertEmailBody } from "../utils/emailTemplate.js";
 
 // Donors with no arrival history have no measured response time yet. They
 // still get notified, but a min-heap keyed on response time needs *some*
@@ -34,12 +35,15 @@ function buildSmsBody(request) {
 }
 
 function buildEmailHtml(donorName, request) {
-  return (
-    `<p>Hi ${donorName},</p>` +
-    `<p><strong>${request.hospitalName}</strong> has an active ${PRIORITY_LABEL[request.priority] ?? request.priority} ` +
-    `request for <strong>${request.bloodType}</strong> blood (Ward: ${request.ward}, Request #${request.requestCode}).</p>` +
-    `<p>Your blood type is a match. If you're eligible and able to donate, please get in touch with the hospital as soon as possible.</p>` +
-    `<p>Thank you for being a ResQ donor.</p>`
+  return wrapBrandedEmail(
+    buildBroadcastAlertEmailBody({
+      donorName,
+      priorityLabel: PRIORITY_LABEL[request.priority] ?? request.priority,
+      bloodType: request.bloodType,
+      hospitalName: request.hospitalName,
+      ward: request.ward,
+      requestCode: request.requestCode,
+    })
   );
 }
 

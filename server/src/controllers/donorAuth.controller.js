@@ -7,6 +7,7 @@ import { issueOtp, verifyOtp, OTP_TTL_SECONDS } from "../utils/otp.js";
 import { signDonorToken, signDonorPendingToken } from "../utils/jwt.js";
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
 import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
+import { wrapBrandedEmail, buildOtpEmailBody, buildWelcomeEmailBody } from "../utils/emailTemplate.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -91,7 +92,7 @@ export const requestOtp = asyncHandler(async (req, res) => {
       ? await sendEmail({
           to: email,
           subject: "Your ResQ verification code",
-          html: `<p>Your ResQ verification code is <strong>${result.code}</strong>. It expires in ${expiryMinutes} minutes.</p>`,
+          html: wrapBrandedEmail(buildOtpEmailBody(result.code, expiryMinutes)),
         })
       : await sendSms(phone, `Your ResQ verification code is ${result.code}. It expires in ${expiryMinutes} minutes.`);
 
@@ -315,11 +316,7 @@ export const completeProfile = asyncHandler(async (req, res) => {
     sendEmail({
       to: donor.email,
       subject: "Welcome to ResQ",
-      html:
-        `<p>Hi ${donor.name},</p>` +
-        `<p>Your ResQ donor account is ready. You're registered as blood type <strong>${donor.bloodType}</strong>.</p>` +
-        `<p>When a hospital needs your blood type, we'll text and email you here — open the app to respond.</p>` +
-        `<p>Thank you for being a ResQ donor.</p>`,
+      html: wrapBrandedEmail(buildWelcomeEmailBody(donor.name, donor.bloodType)),
     }).catch((err) => console.error(`Welcome email failed for donor ${donor.id}:`, err));
   }
 });
