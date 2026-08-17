@@ -1,3 +1,7 @@
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
 // Shared branded wrapper for every transactional email this backend sends
 // (OTP codes, welcome email, broadcast alerts — see donorAuth.controller.js
 // and notifications.service.js). One template so all of them look like
@@ -8,18 +12,22 @@
 // external CSS/fonts) — email clients (Gmail, Outlook, Apple Mail) strip or
 // mis-render anything else, so this is the actual portable subset for
 // HTML email, not a stylistic choice.
-//
-// Brand mark is a plain red circle + "RQ" + "ResQ" text, matching the exact
-// fallback badge already used in the mobile app's login screen
-// (login_view.dart's Image.asset errorBuilder) — deliberately not an
-// external <img>, since a hosted logo image needs a public URL this
-// project doesn't have yet, and most email clients block remote images by
-// default until the recipient clicks "show images" anyway.
 
 const BRAND_RED = "#7D1B22";
 const TEXT_DARK = "#1E1E1E";
 const TEXT_MUTED = "#6B7280";
 const BORDER = "#EAEAEA";
+
+// The real ResQ logo (same file as resq_app's assets/images/rq_coloredLogo.png),
+// copied into this project so the backend doesn't depend on the mobile
+// repo. Embedded as a base64 data URI rather than a normal <img src="https://...">
+// — the backend isn't deployed anywhere public yet, so a real hosted URL
+// wouldn't be reachable by whoever's actual inbox opens this email. Read
+// once at startup, not per-email; it's a fixed 6KB file, not something
+// that changes at runtime.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const LOGO_BASE64 = fs.readFileSync(path.join(__dirname, "../assets/rq-logo.png")).toString("base64");
+const LOGO_DATA_URI = `data:image/png;base64,${LOGO_BASE64}`;
 
 /**
  * Wraps `bodyHtml` (already-built inner content) in the ResQ branded
@@ -31,8 +39,8 @@ export function wrapBrandedEmail(bodyHtml) {
 <div style="max-width:480px;margin:0 auto;padding:32px 24px;font-family:-apple-system,Helvetica,Arial,sans-serif;background-color:#ffffff;">
   <table cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
     <tr>
-      <td style="width:40px;height:40px;background-color:${BRAND_RED};border-radius:50%;text-align:center;vertical-align:middle;">
-        <span style="color:#ffffff;font-weight:bold;font-size:15px;font-family:-apple-system,Helvetica,Arial,sans-serif;">RQ</span>
+      <td style="vertical-align:middle;">
+        <img src="${LOGO_DATA_URI}" width="36" height="29" alt="ResQ" style="display:block;" />
       </td>
       <td style="padding-left:10px;vertical-align:middle;">
         <span style="font-size:19px;font-weight:bold;color:${TEXT_DARK};">ResQ</span>
