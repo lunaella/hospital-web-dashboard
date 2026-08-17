@@ -22,6 +22,8 @@ const DONOR_SELECT = `id, donor_code AS "donorCode", name, phone, email, blood_t
 
 const GENDERS = ["male", "female"];
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // Password login rate limiting — same per-IP+identifier lockout shape as
 // the admin login (auth.controller.js), keyed by whatever identifier
 // (normalized phone or lowercased email) they logged in with, so one
@@ -41,11 +43,18 @@ async function startDonorSession(donorId) {
   return token;
 }
 
-// Step 1 of donor login/signup: send a 6-digit SMS code to a phone number.
-// Deliberately doesn't reveal whether that phone already belongs to a
-// donor — verify-otp is where that branches into "log in" vs "needs a
+// Step 1 of donor login/signup: send a 6-digit code, by SMS (default) or
+// email. Deliberately doesn't reveal whether that phone already belongs to
+// a donor — verify-otp is where that branches into "log in" vs "needs a
 // profile", so a stranger probing phone numbers here learns nothing either
 // way, just that *a* code was sent.
+//
+// The code itself is always issued and looked up under the phone number
+// (see otp.js's otpKey) regardless of which channel delivers it — this
+// isn't a separate "verify by email instead of phone" identity, it's the
+// same phone-bound code, just sent somewhere else the donor can actually
+// read it right now. That's why verify-otp and complete-profile below
+// don't need any changes at all: they only ever see {phone, code}.
 export const requestOtp = asyncHandler(async (req, res) => {
   const rawPhone = req.body.phone?.trim();
   if (!rawPhone) return res.status(400).json({ error: "phone is required." });
@@ -59,6 +68,12 @@ export const requestOtp = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Enter a valid Philippine mobile number." });
   }
 
+  const channel = req.body.channel === "email" ? "email" : "sms";
+  const email = req.body.email?.trim();
+  if (channel === "email" && !EMAIL_REGEX.test(email ?? "")) {
+    return res.status(400).json({ error: "Enter a valid email address." });
+  }
+
   const result = await issueOtp(phone);
   if (!result.allowed) {
     return res.status(429).json({
@@ -66,11 +81,19 @@ export const requestOtp = asyncHandler(async (req, res) => {
     });
   }
 
-  const smsResult = await sendSms(phone, `Your ResQ verification code is ${result.code}. It expires in 5 minutes.`);
-  if (!smsResult.ok) {
-    return res.status(502).json({ error: smsResult.error || "Could not send verification code." });
+  const deliveryResult =
+    channel === "email"
+      ? await sendEmail({
+          to: email,
+          subject: "Your ResQ verification code",
+          html: `<p>Your ResQ verification code is <strong>${result.code}</strong>. It expires in 5 minutes.</p>`,
+        })
+      : await sendSms(phone, `Your ResQ verification code is ${result.code}. It expires in 5 minutes.`);
+
+  if (!deliveryResult.ok) {
+    return res.status(502).json({ error: deliveryResult.error || "Could not send verification code." });
   }
-  res.json({ ok: true });
+  res.json({ ok: true, channel });
 });
 
 // Step 2: verify the code. An existing donor gets a full session token
