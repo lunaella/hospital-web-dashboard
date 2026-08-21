@@ -487,7 +487,7 @@ export default function Settings() {
               <p className="mt-1 flex items-center gap-2 font-poppins font-semibold text-[15px] text-[#808080]">
                 <span className="w-2 h-2 rounded-full bg-[#4c8c4a] shrink-0" />
                 {session
-                  ? `Last login from ${session.region ?? "unknown region"}    ${formatRelativeTime(session.createdAt)}`
+                  ? `Last login from ${session.region ?? "unknown region"} · ${formatRelativeTime(session.createdAt)}`
                   : "Loading session info..."}
               </p>
             </div>
