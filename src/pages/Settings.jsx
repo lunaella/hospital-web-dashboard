@@ -227,8 +227,8 @@ export default function Settings() {
         setSaveMessage({ type: "error", text: "Enter your current password to change it." });
         return;
       }
-      if (newPassword.length < 16) {
-        setSaveMessage({ type: "error", text: "New password must be at least 16 characters." });
+      if (newPassword.length < 8) {
+        setSaveMessage({ type: "error", text: "New password must be at least 8 characters." });
         return;
       }
       if (newPassword !== confirmPassword) {
@@ -545,7 +545,7 @@ export default function Settings() {
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Min. 16 characters required"
+                    placeholder="Min. 8 characters required"
                     className="border border-[#aaa4a0] rounded-[10px] w-full h-[40px] px-4 font-poppins text-[15px] text-[#aaa4a0] outline-none"
                   />
                 </Field>

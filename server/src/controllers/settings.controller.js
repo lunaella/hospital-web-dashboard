@@ -22,8 +22,8 @@ export const updatePassword = asyncHandler(async (req, res) => {
   if (!currentPassword) {
     return res.status(400).json({ error: "Enter your current password to change it." });
   }
-  if (!newPassword || newPassword.length < 16) {
-    return res.status(400).json({ error: "New password must be at least 16 characters." });
+  if (!newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: "New password must be at least 8 characters." });
   }
 
   const { rows } = await pool.query("SELECT password_hash FROM admins WHERE id = $1", [req.admin.id]);
