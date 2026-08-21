@@ -392,8 +392,8 @@ export default function DonorManagement() {
                 onClick={() => toggleBloodTypeFilter(type)}
                 className={`h-[30px] rounded-[8px] border text-[12px] font-poppins font-semibold cursor-pointer ${
                   bloodTypeFilter.includes(type)
-                    ? "bg-[#8f404b] border-[#8f404b] text-white"
-                    : "bg-[#f8f3f4] border-[#ebdfe1] text-[#8f404b]"
+                    ? "bg-[#9B1B20] border-[#9B1B20] text-white"
+                    : "bg-[#f8f3f4] border-[#ebdfe1] text-[#9B1B20]"
                 }`}
               >
                 {type}
@@ -475,7 +475,7 @@ export default function DonorManagement() {
               </div>
             </div>
             <div className="w-[128px] flex items-center justify-center">
-              <span className="bg-[#f8f3f4] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#8f404b]">
+              <span className="bg-[#f8f3f4] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#9B1B20]">
                 {donor.bloodType}
               </span>
             </div>
@@ -622,7 +622,7 @@ export default function DonorManagement() {
             key={apt.id}
             className="relative shrink-0 rounded-[10px] w-[280px] h-[148px] bg-[#f8f3f4] border-[1.5px] border-[#f1dddc] border-solid"
           >
-            <span className="absolute bg-[#eadbdd] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#8f404b] left-[209px] top-[11px]">
+            <span className="absolute bg-[#eadbdd] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#9B1B20] left-[209px] top-[11px]">
               {apt.bloodType}
             </span>
             <p className="absolute left-[17px] top-[15px] flex items-center gap-1 text-[12px] font-medium text-[#aaa4a0]">
@@ -858,8 +858,8 @@ export default function DonorManagement() {
                           onClick={() => setWalkInNewBloodType(type)}
                           className={`h-[36px] rounded-[8px] border text-[13px] font-poppins font-semibold cursor-pointer ${
                             walkInNewBloodType === type
-                              ? "bg-[#8f404b] border-[#8f404b] text-white"
-                              : "bg-[#f8f3f4] border-[#ebdfe1] text-[#8f404b]"
+                              ? "bg-[#9B1B20] border-[#9B1B20] text-white"
+                              : "bg-[#f8f3f4] border-[#ebdfe1] text-[#9B1B20]"
                           }`}
                         >
                           {type}

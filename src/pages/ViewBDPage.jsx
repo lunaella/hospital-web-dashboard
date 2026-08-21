@@ -198,13 +198,13 @@ export default function ViewBDPage() {
                 <button
                   type="button"
                   onClick={() => toggleNotifications(b.id)}
-                  className="text-left text-[13px] font-semibold text-[#8f404b] underline decoration-dotted cursor-pointer"
+                  className="text-left text-[13px] font-semibold text-[#9B1B20] underline decoration-dotted cursor-pointer"
                   title="View donor notification status"
                 >
                   {b.id}
                 </button>
 
-                <span className="inline-flex items-center justify-center w-[58px] h-[24px] bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] text-[11px] font-semibold text-[#8f404b]">
+                <span className="inline-flex items-center justify-center w-[58px] h-[24px] bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] text-[11px] font-semibold text-[#9B1B20]">
                   {b.bloodType}
                 </span>
 

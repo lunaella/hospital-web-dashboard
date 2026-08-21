@@ -348,7 +348,7 @@ export default function Reports() {
               binary min-heap keyed on their historical average response
               time, and contacts the fastest-typical responders first. */}
           <div className="absolute left-[543px] top-[18px] bg-[rgba(173,43,33,0.1)] rounded-[10px] w-[145px] h-[19px] flex items-center justify-center">
-            <span className="font-poppins font-bold text-[10px] text-[#8f404b]">Min-Heap Optimized</span>
+            <span className="font-poppins font-bold text-[10px] text-[#9B1B20]">Min-Heap Optimized</span>
           </div>
           <p className="absolute left-[22px] top-[36px] font-poppins font-semibold text-[20px] text-black">Donor Response Time</p>
           <p className="absolute left-[22px] top-[66px] font-poppins font-semibold text-[15px] text-[#808080] w-[600px] whitespace-nowrap">
@@ -377,10 +377,10 @@ export default function Reports() {
               {/* Area fill under the curve */}
               <path d={chartAreaPath} fill="#f1dddc" opacity="0.7" />
               {/* Response time line */}
-              <path d={chartLinePath} fill="none" stroke="#8f404b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d={chartLinePath} fill="none" stroke="#9B1B20" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
               {/* Data point markers */}
               {chartPoints.map((p) => (
-                <circle key={p.x} cx={p.x} cy={p.y} r="6" fill="#8f404b" />
+                <circle key={p.x} cx={p.x} cy={p.y} r="6" fill="#9B1B20" />
               ))}
             </svg>
 
@@ -397,7 +397,7 @@ export default function Reports() {
           </div>
 
           <div className="absolute left-[131px] top-[410px] flex items-center gap-2">
-            <span className="w-[14px] h-[14px] rounded-[5px] bg-[#8f404b] shrink-0" />
+            <span className="w-[14px] h-[14px] rounded-[5px] bg-[#9B1B20] shrink-0" />
             <span className="font-poppins font-bold text-[11px] text-black whitespace-nowrap">Avg Response (min)</span>
           </div>
           <div className="absolute left-[333px] top-[410px] flex items-center gap-2">
@@ -476,7 +476,7 @@ export default function Reports() {
             style={{ top: 1016 + i * 62 }}
           >
             <div className="w-[135px] flex justify-center">
-              <span className="font-poppins font-semibold text-[13px] text-[#8f404b]">{row.reqId}</span>
+              <span className="font-poppins font-semibold text-[13px] text-[#9B1B20]">{row.reqId}</span>
             </div>
             <div className="w-[110px] flex justify-center">
               <div className="border-2 border-[#c5c4c4] rounded-[10px] px-2 h-[24px] flex items-center justify-center">

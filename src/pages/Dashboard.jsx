@@ -343,10 +343,10 @@ export default function Dashboard() {
                 key={row.id}
                 className="grid grid-cols-[140px_170px_170px_170px_260px_162px] items-center h-[62px] px-[11px] border border-[#c0bfbf] shadow-[0px_3px_6px_0px_rgba(0,0,0,0.1)]"
               >
-                <span className="font-poppins font-semibold text-[13px] text-[#8f404b] text-center">{row.id}</span>
+                <span className="font-poppins font-semibold text-[13px] text-[#9B1B20] text-center">{row.id}</span>
                 <div className="flex justify-center">
                   <div className="bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] h-[24px] w-[58px] flex items-center justify-center">
-                    <span className="font-poppins font-semibold text-[11px] text-[#8f404b]">{row.bloodType}</span>
+                    <span className="font-poppins font-semibold text-[11px] text-[#9B1B20]">{row.bloodType}</span>
                   </div>
                 </div>
                 <PriorityBadge priority={row.priority} />
