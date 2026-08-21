@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/apiClient";
+import { connectRealtime } from "../lib/realtime";
 
 // The bell used to be a static SVG with no onClick — decoration, not a
 // feature. This wires it to the same broadcast data ViewBDPage shows,
@@ -126,6 +127,33 @@ export default function NotificationBell() {
       cancelled = true;
       clearInterval(interval);
     };
+  }, []);
+
+  // Real-time: a donor booking/cancelling through the app pushes here
+  // immediately (server/src/realtime) instead of waiting up to POLL_MS for
+  // the next scheduled fetch above. Prepended directly rather than
+  // triggering a full re-fetch — the push payload already has everything
+  // this dropdown shows for an appointment row.
+  useEffect(() => {
+    const disconnect = connectRealtime((event) => {
+      if (event.type !== "appointment_booked" && event.type !== "appointment_cancelled") return;
+      const eventType = event.type === "appointment_cancelled" ? "cancelled" : "booked";
+      setAppointmentEvents((prev) => [
+        {
+          id: event.appointment.id,
+          eventType,
+          eventAt: new Date().toISOString(),
+          donorName: event.appointment.donorName,
+          bloodType: event.appointment.bloodType,
+          scheduledAt: event.appointment.scheduledAt,
+        },
+        // Drop any earlier event for this same appointment+type so a
+        // reconnect replaying the same push (or this event later also
+        // arriving via the regular poll) doesn't duplicate the row.
+        ...prev.filter((e) => !(e.id === event.appointment.id && e.eventType === eventType)),
+      ]);
+    });
+    return disconnect;
   }, []);
 
   // Close on outside click — the only click-outside dropdown in the app so

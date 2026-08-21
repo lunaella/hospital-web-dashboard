@@ -4,6 +4,7 @@ import { bookAppointment, AppointmentBookingError } from "../services/appointmen
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
 import { signAppointmentCheckinToken } from "../utils/jwt.js";
 import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
+import { broadcast } from "../realtime/hub.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
@@ -338,6 +339,23 @@ export const bookMyAppointment = asyncHandler(async (req, res) => {
   try {
     const appointment = await bookAppointment({ donorId: req.donor.id, hospitalId, scheduledAt });
     res.status(201).json(appointment);
+
+    // Pushes to the admin Appointment View / notification bell in real
+    // time (see server/src/realtime) instead of waiting on their next poll
+    // or manual refresh. After res.json, same fire-and-forget-after-respond
+    // pattern as the welcome email in donorAuth.controller.js — a donor's
+    // booking should never wait on this.
+    broadcast({
+      type: "appointment_booked",
+      hospitalId: appointment.hospitalId,
+      appointment: {
+        id: appointment.id,
+        status: appointment.status,
+        scheduledAt: appointment.scheduledAt,
+        donorName: req.donor.name,
+        bloodType: req.donor.bloodType,
+      },
+    });
   } catch (err) {
     if (err instanceof AppointmentBookingError) {
       return res.status(err.status).json({ error: err.message });
@@ -354,13 +372,28 @@ export const cancelMyAppointment = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `UPDATE appointments SET status = 'cancelled', updated_at = now()
      WHERE id = $1 AND donor_id = $2 AND status NOT IN ('completed', 'cancelled')
-     RETURNING id, status`,
+     RETURNING id, status, hospital_id AS "hospitalId", scheduled_at AS "scheduledAt"`,
     [req.params.id, req.donor.id]
   );
   if (!rows[0]) {
     return res.status(404).json({ error: "Appointment not found, already cancelled, or already completed." });
   }
-  res.json(rows[0]);
+  const appointment = rows[0];
+  res.json({ id: appointment.id, status: appointment.status });
+
+  // See bookMyAppointment's matching broadcast above — same real-time push
+  // to the admin side, this time for a cancellation.
+  broadcast({
+    type: "appointment_cancelled",
+    hospitalId: appointment.hospitalId,
+    appointment: {
+      id: appointment.id,
+      status: appointment.status,
+      scheduledAt: appointment.scheduledAt,
+      donorName: req.donor.name,
+      bloodType: req.donor.bloodType,
+    },
+  });
 });
 
 // Issues the short-lived signed token the mobile app renders as a QR code

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
+import { connectRealtime } from "../lib/realtime";
 import { useHospital } from "../context/HospitalContext";
 import Avatar from "../components/Avatar";
 import { IconFilter, IconShield, IconCalendar, IconCheck, IconPlus, IconClock, IconLock, IconX } from "../components/icons";
@@ -102,8 +103,25 @@ export default function DonorManagement() {
     }
 
     load();
+
+    // Real-time: a donor booking/cancelling through the app re-fetches this
+    // same day's list immediately (server/src/realtime) instead of waiting
+    // for a manual refresh. A full re-fetch rather than hand-patching state
+    // — the push event doesn't carry every field mapAppointment needs
+    // (e.g. formatted time), and re-fetching is cheap. Skipped when the
+    // event's own hospital/date obviously can't affect what's on screen, so
+    // an unrelated hospital's booking doesn't trigger a pointless request.
+    const disconnect = connectRealtime((event) => {
+      if (event.type !== "appointment_booked" && event.type !== "appointment_cancelled") return;
+      if (hospitalId !== "all" && event.hospitalId !== hospitalId) return;
+      const eventDate = new Date(event.appointment.scheduledAt);
+      if (toDateParam(eventDate) !== toDateParam(viewDate)) return;
+      load();
+    });
+
     return () => {
       cancelled = true;
+      disconnect();
     };
   }, [viewDate, hospitalId]);
 
