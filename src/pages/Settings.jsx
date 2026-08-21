@@ -458,7 +458,7 @@ export default function Settings() {
       <PageHeader title="Administrative Controls" />
 
       {/* Main content */}
-      <div ref={contentRef} className="absolute left-[312px] top-[120px] w-[945px]">
+      <div ref={contentRef} className="absolute left-[312px] right-12 top-[120px]">
         <div className="flex flex-col gap-2 w-[800px]">
           <h1 className="font-poppins font-bold text-[23px] text-black">System Settings</h1>
           <p className="font-poppins font-semibold text-[17px] text-[#808080]">
@@ -476,7 +476,7 @@ export default function Settings() {
         {/* Account Credentials card */}
         <form
           onSubmit={handleSave}
-          className="mt-8 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[816px] overflow-hidden"
+          className="mt-8 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden"
         >
           <div className="bg-[#f7f5f5] px-8 py-6 flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
@@ -528,16 +528,14 @@ export default function Settings() {
                 <p className="font-poppins font-medium text-[16px] text-black tracking-wide">SECURITY PROTOCOL UPDATE</p>
               </div>
 
-              <div className="max-w-[286px]">
-                <Field label="Current System Password">
-                  <input
-                    type="password"
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    className="border border-[#aaa4a0] rounded-[10px] w-full h-[40px] px-4 font-poppins text-[15px] text-black outline-none"
-                  />
-                </Field>
-              </div>
+              <Field label="Current System Password">
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="border border-[#aaa4a0] rounded-[10px] w-full h-[40px] px-4 font-poppins text-[15px] text-black outline-none"
+                />
+              </Field>
 
               <div className="grid grid-cols-2 gap-x-10 gap-y-8">
                 <Field label="Create New Password">
@@ -591,7 +589,7 @@ export default function Settings() {
 
         {/* Session & Environmental Security */}
         <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Session &amp; Environmental Security</h2>
-        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[816px] p-6">
+        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full p-6">
           <div className="flex items-center gap-4 pb-4 mb-6 border-b border-[#efeeed]">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
               <IconTerminal className="w-6 h-6 text-[#ad2b21]" />
@@ -654,7 +652,7 @@ export default function Settings() {
           whichever hospital a donor is routed to.
         </p>
 
-        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[816px] overflow-hidden">
+        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden">
           <div className="bg-[#f7f5f5] px-8 py-6 flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
@@ -897,7 +895,7 @@ export default function Settings() {
           hospital and per blood type — there's no single number that fits every hospital or every type.
         </p>
 
-        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[816px] overflow-hidden">
+        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden">
           <div className="bg-[#f7f5f5] px-8 py-6 flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
               <IconDroplet className="w-6 h-6 text-[#ad2b21]" />
@@ -1010,7 +1008,7 @@ export default function Settings() {
           or appointments. Accepts .csv or .xlsx files.
         </p>
 
-        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[816px] overflow-hidden">
+        <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden">
           <div className="bg-[#f7f5f5] px-8 py-6 flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
               <IconDownload className="w-6 h-6 text-[#ad2b21] rotate-180" />

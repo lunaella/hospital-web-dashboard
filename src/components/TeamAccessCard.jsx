@@ -227,7 +227,7 @@ export default function TeamAccessCard({ currentAdminId }) {
         super admin{isRealSuperAdmin ? "" : " and delegated team managers"} can make changes here.
       </p>
 
-      <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[816px] overflow-hidden">
+      <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden">
         <div className="bg-[#f7f5f5] px-8 py-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
