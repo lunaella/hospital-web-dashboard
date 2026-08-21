@@ -118,6 +118,7 @@ CREATE TABLE admin_sessions (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id          UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
   session_code      VARCHAR(50) NOT NULL, -- e.g. "VTX-992-KLA"
+  session_jti       TEXT,                 -- full JWT id — matches the Redis session:{jti} key, unlike the truncated display-only session_code above. Used to revoke a specific session (logout) or a super admin's other sessions (single-session enforcement on login).
   engine            TEXT,                 -- raw User-Agent string; unbounded since real UAs run 100-300+ chars
   system            VARCHAR(100),         -- e.g. "Windows 11"
   ip_address        INET,

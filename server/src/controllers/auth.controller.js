@@ -101,6 +101,28 @@ export const login = asyncHandler(async (req, res) => {
   // Successful login clears any prior failed attempts against this account.
   await redis.del(attemptsKey);
 
+  // Single-session enforcement — FULL_ROOT_ACCESS_LEVEL_5 only. The one
+  // shared super admin account is the highest-stakes login in the system
+  // (full access, no per-section restriction), so a second concurrent login
+  // there ends whoever was already logged in rather than silently letting
+  // two people act as "the" super admin at once. Regular team members
+  // (added via Team Access) are unaffected — logging in from a second
+  // device is expected/fine for them, since each person already has their
+  // own distinct account.
+  if (admin.clearance === "FULL_ROOT_ACCESS_LEVEL_5") {
+    const { rows: staleSessions } = await pool.query(
+      "SELECT session_jti FROM admin_sessions WHERE admin_id = $1 AND is_active = true",
+      [admin.id]
+    );
+    for (const { session_jti: staleJti } of staleSessions) {
+      if (staleJti) await redis.del(`session:${staleJti}`);
+    }
+    await pool.query(
+      "UPDATE admin_sessions SET is_active = false, revoked_at = now() WHERE admin_id = $1 AND is_active = true",
+      [admin.id]
+    );
+  }
+
   const { token, jti } = signSessionToken(admin.id);
   await redis.set(`session:${jti}`, admin.id, "EX", EXPIRES_IN_SECONDS);
 
@@ -109,11 +131,12 @@ export const login = asyncHandler(async (req, res) => {
   const region = await resolveRegion(req.ip);
 
   await pool.query(
-    `INSERT INTO admin_sessions (admin_id, session_code, engine, system, ip_address, region)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO admin_sessions (admin_id, session_code, session_jti, engine, system, ip_address, region)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [
       admin.id,
       jti.slice(0, 8).toUpperCase(),
+      jti,
       parseEngineLabel(req.headers["user-agent"]),
       parseSystemLabel(req.headers["user-agent"]),
       req.ip,
@@ -132,9 +155,16 @@ export const logout = asyncHandler(async (req, res) => {
   const redis = await ensureRedisConnected();
   await redis.del(`session:${req.admin.jti}`);
 
+  // Scoped to this one session (by jti), not every session on the account —
+  // it previously matched on admin_id alone, which marked *every* session
+  // for that admin inactive in the DB (misleading on the Settings session
+  // card) even though only this one's Redis key — the thing that actually
+  // gates access — was revoked. Rows from before the session_jti column
+  // existed (NULL) simply won't match here, which is fine: they're already
+  // stale.
   await pool.query(
-    "UPDATE admin_sessions SET is_active = false, revoked_at = now() WHERE admin_id = $1 AND is_active = true",
-    [req.admin.id]
+    "UPDATE admin_sessions SET is_active = false, revoked_at = now() WHERE session_jti = $1 AND is_active = true",
+    [req.admin.jti]
   );
 
   res.status(204).send();
