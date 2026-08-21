@@ -611,7 +611,7 @@ export default function Settings() {
                 {sessionTiles.map((info) => {
                   const TileIcon = info.icon;
                   return (
-                    <div key={info.key} className="bg-[#d9d9d9] rounded-[13px] w-[115px] h-[70px] px-3 pt-3">
+                    <div key={info.key} className="bg-[#d9d9d9] rounded-[13px] min-w-[115px] min-h-[70px] px-3 py-3">
                       <TileIcon className="w-4 h-4 mb-1 text-black" />
                       <p className="font-poppins font-semibold text-[12px] text-black tracking-wide">{info.label}</p>
                       <p className="font-poppins text-[12px] text-black">{info.value}</p>
