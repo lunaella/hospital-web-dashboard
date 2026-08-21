@@ -4,13 +4,6 @@ import WebNav from "./WebNav";
 
 const DESIGN_WIDTH = 1440;
 const SIDEBAR_WIDTH = 296;
-// Below this zoom, text/buttons start getting genuinely hard to read/tap
-// (e.g. an 11px hint label rendering at a few physical pixels on a phone).
-// Rather than keep shrinking to exactly fit narrow screens, zoom stops here
-// and the app becomes wider than the viewport instead — the person pans
-// sideways to see the rest, like a desktop site on mobile, but nothing ever
-// renders smaller than this floor.
-const MIN_ZOOM = 0.9;
 
 // Pages using this shell no longer render their own <WebNav> inline — it's
 // rendered once here, pinned to the real viewport via position:fixed, so it
@@ -44,23 +37,24 @@ const MIN_ZOOM = 0.9;
 // level. The tradeoff `zoom` was chosen to avoid (transform doesn't affect
 // layout, so the wrapper needs to be told the scaled height manually) is
 // handled below with a ResizeObserver on the unscaled content.
+//
+// This deliberately always scales to exactly fit the window width, with no
+// minimum — on a narrow window or phone, text/buttons do get small, but
+// nothing ever needs horizontal scrolling or clips off-screen. A readable-
+// minimum-zoom-plus-scroll variant was tried and reverted: it fixed the
+// "too small on a phone" complaint but introduced a worse one (scrollbars
+// and cut-off content on an ordinary resized desktop window), so exact-fit
+// won out as the simpler, more universally correct behavior.
 export default function AppShell({ children }) {
   const location = useLocation();
-  const [naturalZoom, setNaturalZoom] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth / DESIGN_WIDTH : 1
-  );
-  // Whether the viewport is narrow enough that MIN_ZOOM is actively clamping
-  // (i.e. the canvas is deliberately wider than the screen right now) — see
-  // the sidebar's position toggle below for why this needs to be known.
-  const isNarrow = naturalZoom < MIN_ZOOM;
-  const zoom = Math.max(naturalZoom, MIN_ZOOM);
+  const [zoom, setZoom] = useState(() => (typeof window !== "undefined" ? window.innerWidth / DESIGN_WIDTH : 1));
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 0));
   const contentRef = useRef(null);
   const [contentHeight, setContentHeight] = useState(0);
 
   useEffect(() => {
     function update() {
-      setNaturalZoom(window.innerWidth / DESIGN_WIDTH);
+      setZoom(window.innerWidth / DESIGN_WIDTH);
       setViewportHeight(window.innerHeight);
     }
     update();
@@ -84,34 +78,14 @@ export default function AppShell({ children }) {
   }, [location.pathname]);
 
   return (
-    // Below MIN_ZOOM the canvas is deliberately wider than the viewport (see
-    // MIN_ZOOM above) — `overflowX: auto` is what lets the person pan
-    // sideways to reach the rest of it instead of it just clipping off the
-    // edge of the screen. `position: relative` gives the sidebar something
-    // to scroll *with* in that case — see the position toggle just below.
-    <div style={{ position: "relative", overflowX: isNarrow ? "auto" : "visible" }}>
+    <>
       <div
         style={{
-          // Fixed (pinned to the real viewport, ignoring all scrolling) is
-          // correct at normal zoom, where the canvas never exceeds the
-          // viewport width — that's what keeps the sidebar visible while
-          // scrolling down a tall page. But once the canvas is deliberately
-          // wider than the viewport (isNarrow) and the person pans sideways,
-          // a viewport-fixed sidebar would stay glued to the screen's left
-          // edge while the actual page content scrolls out from under it —
-          // so past a small amount of panning, real content would slide in
-          // underneath the still-pinned sidebar instead of appearing beside
-          // it. `absolute` (positioned against this wrapper, which pans
-          // normally) keeps the sidebar correctly aligned with its own
-          // reserved blank column in the canvas at every scroll position,
-          // at the cost of it no longer staying put while scrolling down a
-          // tall page — an acceptable trade in a mode people already expect
-          // to scroll around in.
-          position: isNarrow ? "absolute" : "fixed",
+          position: "fixed",
           top: 0,
           left: 0,
           width: SIDEBAR_WIDTH * zoom,
-          height: isNarrow ? contentHeight * zoom : "100vh",
+          height: "100vh",
           overflow: "hidden",
           zIndex: 40,
         }}
@@ -119,7 +93,7 @@ export default function AppShell({ children }) {
         <div
           style={{
             width: SIDEBAR_WIDTH,
-            height: (isNarrow ? contentHeight * zoom : viewportHeight) / zoom,
+            height: viewportHeight / zoom,
             transform: `scale(${zoom})`,
             transformOrigin: "top left",
           }}
@@ -132,6 +106,6 @@ export default function AppShell({ children }) {
           {children}
         </div>
       </div>
-    </div>
+    </>
   );
 }
