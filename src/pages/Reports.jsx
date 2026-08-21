@@ -208,7 +208,7 @@ export default function Reports() {
   const SYNC_LEVEL_BY_STATUS = { OPTIMAL: 100, DEGRADED: 55, CRITICAL: 8 };
   const syncLevelPct = SYNC_LEVEL_BY_STATUS[systemHealth?.overallStatus] ?? 0;
   const healthBarFillClass =
-    systemHealth?.overallStatus === "CRITICAL" ? "bg-[#b94842]" : "bg-[#ad2b21]";
+    systemHealth?.overallStatus === "CRITICAL" ? "bg-[#b94842]" : "bg-[#9B1B20]";
 
   // Demand Forecast card copy, derived from the real 48h-trend payload
   // (see server getDemandForecast) instead of hardcoded text.
@@ -255,7 +255,7 @@ export default function Reports() {
         <button
           type="button"
           onClick={() => window.print()}
-          className="absolute left-[899px] top-[109px] bg-[#ad2b21] rounded-[16px] w-[166px] h-[49px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8f2419] transition-colors"
+          className="absolute left-[899px] top-[109px] bg-[#9B1B20] rounded-[16px] w-[166px] h-[49px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8B1218] transition-colors"
         >
           <span className="font-poppins font-bold text-[17px] text-white">Export PDF</span>
           <IconDownload className="w-4 h-4 text-white" />
@@ -272,7 +272,7 @@ export default function Reports() {
           type="button"
           onClick={() => setFiltersOpen((v) => !v)}
           className={`absolute left-[763px] top-[109px] border-2 rounded-[16px] w-[126px] h-[49px] flex items-center justify-center gap-2 cursor-pointer ${
-            filtersOpen ? "border-[#ad2b21] bg-[#fbf3f3]" : "border-[#d9d9d9]"
+            filtersOpen ? "border-[#9B1B20] bg-[#fbf3f3]" : "border-[#d9d9d9]"
           }`}
         >
           <IconFilter className="w-4 h-4 text-black" />
@@ -289,7 +289,7 @@ export default function Reports() {
                   type="button"
                   onClick={() => setPriorityFilter(p)}
                   className={`text-left px-2 py-1.5 rounded-[6px] text-[12px] font-poppins font-semibold cursor-pointer ${
-                    priorityFilter === p ? "bg-[#ad2b21] text-white" : "text-[#808080] hover:bg-[#fbf3f3]"
+                    priorityFilter === p ? "bg-[#9B1B20] text-white" : "text-[#808080] hover:bg-[#fbf3f3]"
                   }`}
                 >
                   {p === "all" ? "All Priorities" : p}
@@ -304,7 +304,7 @@ export default function Reports() {
             row look uneven. */}
         <div className="absolute left-[3px] top-[193px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]">
           <div className="absolute left-[26px] top-[21px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
-            <IconCheckCircle className="w-3.5 h-3.5 text-[#ad2b21]" />
+            <IconCheckCircle className="w-3.5 h-3.5 text-[#9B1B20]" />
           </div>
           <p className="absolute left-[25px] top-[59px] font-poppins font-bold text-[35px] text-black">
             {fulfillmentRatePct != null ? `${fulfillmentRatePct}%` : "--"}
@@ -317,7 +317,7 @@ export default function Reports() {
           return (
             <div key={card.key} className={`absolute ${card.left} top-[193px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]`}>
               <div className="absolute left-[19px] top-[14px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
-                <BadgeIcon className="w-3.5 h-3.5 text-[#ad2b21]" />
+                <BadgeIcon className="w-3.5 h-3.5 text-[#9B1B20]" />
               </div>
               <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
                 <TrendBadge trendPct={card.trendPct} />
@@ -330,7 +330,7 @@ export default function Reports() {
 
         <div className="absolute left-[831px] top-[193px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)] w-[247px] h-[149px]">
           <div className="absolute left-[20px] top-[14px] bg-[#f1dddc] rounded-[8px] w-[33px] h-[30px] flex items-center justify-center">
-            <IconDroplet className="w-3.5 h-3.5 text-[#ad2b21]" />
+            <IconDroplet className="w-3.5 h-3.5 text-[#9B1B20]" />
           </div>
           <div className="absolute top-[14px] right-[19px] flex items-center gap-1.5">
             <TrendBadge trendPct={kpis ? kpis.unitsProcessed.trendPct : null} />
@@ -539,7 +539,7 @@ export default function Reports() {
 
         {/* System Health card */}
         <div className="absolute left-[778px] top-[813px] bg-white rounded-tr-[10px] rounded-br-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[172px]">
-          <div className="absolute left-0 top-0 w-[3px] h-full bg-[#ad2b21] rounded-tr-[3px] rounded-br-[3px]" />
+          <div className="absolute left-0 top-0 w-[3px] h-full bg-[#9B1B20] rounded-tr-[3px] rounded-br-[3px]" />
           <div className="pl-[22px] pr-[22px] pt-[16px] pb-[28px] flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="font-poppins font-bold text-[15px] text-[#808080] tracking-wide">SYSTEM HEALTH</span>
@@ -583,7 +583,7 @@ export default function Reports() {
 
         {/* Demand Forecast card */}
         <div className="absolute left-[778px] top-[1010px] bg-[rgba(255,245,245,0.85)] rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[215px]">
-          <p className="absolute left-[19px] top-[13px] font-poppins font-semibold text-[15px] text-[#ad2b21] tracking-wide">DEMAND FORECAST</p>
+          <p className="absolute left-[19px] top-[13px] font-poppins font-semibold text-[15px] text-[#9B1B20] tracking-wide">DEMAND FORECAST</p>
           {/* line-clamp keeps this within its allotted 50px (top-42 to
               top-92) no matter how long the live-computed sentence is, so it
               can never grow into the MEDTECH ADVISORY box below it. */}
@@ -591,8 +591,8 @@ export default function Reports() {
             {forecastHeadline}
           </p>
           <div className="absolute left-[19px] top-[92px] bg-white rounded-[10px] w-[265px] h-[67px]">
-            <IconStethoscope className="absolute left-[9px] top-[9px] w-[16px] h-[16px] text-[#ad2b21]" />
-            <p className="absolute left-[33px] top-[9px] font-poppins font-semibold text-[12px] text-[#ad2b21] tracking-wide">MEDTECH ADVISORY</p>
+            <IconStethoscope className="absolute left-[9px] top-[9px] w-[16px] h-[16px] text-[#9B1B20]" />
+            <p className="absolute left-[33px] top-[9px] font-poppins font-semibold text-[12px] text-[#9B1B20] tracking-wide">MEDTECH ADVISORY</p>
             <p className="absolute left-[9px] top-[27px] font-poppins font-medium text-[9px] text-[#868686] w-[242px] leading-[1.4] line-clamp-2">
               {advisoryText}
             </p>
@@ -600,7 +600,7 @@ export default function Reports() {
           <button
             type="button"
             onClick={() => navigate("/donor-management")}
-            className="absolute left-[19px] top-[168px] bg-[#ad2b21] rounded-[16px] w-[265px] h-[37px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+            className="absolute left-[19px] top-[168px] bg-[#9B1B20] rounded-[16px] w-[265px] h-[37px] flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
           >
             <span className="font-poppins font-bold text-[15px] text-white">Review Prep List</span>
           </button>

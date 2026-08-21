@@ -364,7 +364,7 @@ export default function DonorManagement() {
       <button
         type="button"
         onClick={exportCsv}
-        className="absolute bg-[#ad2b21] h-[49px] left-[1207px] rounded-[16px] top-[136px] w-[170px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+        className="absolute bg-[#9B1B20] h-[49px] left-[1207px] rounded-[16px] top-[136px] w-[170px] flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
       >
         <span className="font-bold text-[17px] text-white">Export CSV</span>
       </button>
@@ -372,7 +372,7 @@ export default function DonorManagement() {
         type="button"
         onClick={() => setFiltersOpen((v) => !v)}
         className={`absolute border-2 h-[49px] left-[958px] rounded-[16px] top-[136px] w-[216px] flex items-center justify-center gap-2 cursor-pointer ${
-          filtersOpen ? "border-[#ad2b21] bg-[#fbf3f3]" : "border-[#d9d9d9]"
+          filtersOpen ? "border-[#9B1B20] bg-[#fbf3f3]" : "border-[#d9d9d9]"
         }`}
       >
         <div className="w-[16px] h-[13px]">
@@ -413,7 +413,7 @@ export default function DonorManagement() {
                 onClick={() => setEligibilityFilter(opt.key)}
                 className={`h-[30px] px-3 rounded-full border text-[12px] font-poppins font-semibold cursor-pointer ${
                   eligibilityFilter === opt.key
-                    ? "bg-[#ad2b21] border-[#ad2b21] text-white"
+                    ? "bg-[#9B1B20] border-[#9B1B20] text-white"
                     : "bg-white border-[#d9d9d9] text-[#808080]"
                 }`}
               >
@@ -558,7 +558,7 @@ export default function DonorManagement() {
 
       {/* DOH 90-Day Cooling Rule card */}
       <div className="absolute bg-white border border-[#d9d9d9] border-solid h-[113px] left-[321px] rounded-[10px] shadow-[0px_9px_6px_0px_rgba(0,0,0,0.05),0px_4px_4px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] top-[823px] w-[671px]" />
-      <div className="absolute w-[28px] h-[28px] left-[355px] top-[845px] text-[#ad2b21]">
+      <div className="absolute w-[28px] h-[28px] left-[355px] top-[845px] text-[#9B1B20]">
         <IconShield className="block max-w-none size-full" />
       </div>
       <div className="absolute left-[405px] top-[846px] w-[565px] flex flex-col gap-2">
@@ -654,7 +654,7 @@ export default function DonorManagement() {
               <button
                 type="button"
                 onClick={() => recordDonation(apt.id)}
-                className="absolute bg-[#ad2b21] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1 cursor-pointer hover:bg-[#8f2419] transition-colors"
+                className="absolute bg-[#9B1B20] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1 cursor-pointer hover:bg-[#8B1218] transition-colors"
               >
                 <div className="w-[13px] h-[13px] text-white">
                   <IconCheck className="block max-w-none size-full" />
@@ -665,7 +665,7 @@ export default function DonorManagement() {
               <button
                 type="button"
                 onClick={() => confirmArrival(apt.id)}
-                className="absolute bg-[#ad2b21] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+                className="absolute bg-[#9B1B20] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
               >
                 <span className="text-[13px] font-medium text-white">Confirm Arrival</span>
               </button>
@@ -704,7 +704,7 @@ export default function DonorManagement() {
         72%
       </p>
       <div className="absolute top-[941px] bg-[#d9d9d9] h-[5px] left-[1054px] rounded-[10px] w-[292px]" />
-      <div className="absolute top-[941px] bg-[#ad2b22] h-[5px] left-[1054px] rounded-[10px] w-[224px]" />
+      <div className="absolute top-[941px] bg-[#9B1B20] h-[5px] left-[1054px] rounded-[10px] w-[224px]" />
       <p className="absolute top-[953px] font-medium leading-[1.4] left-[1091px] not-italic text-[#aaa4a0] text-[11px] w-[230px]">
         4 of 6 extraction beds currently in use
       </p>
@@ -733,7 +733,7 @@ export default function DonorManagement() {
                   setWalkInError(null);
                 }}
                 className={`flex-1 h-[38px] rounded-[10px] text-[13px] font-poppins font-semibold cursor-pointer ${
-                  walkInMode === "search" ? "bg-[#ad2b21] text-white" : "bg-[#f6f5f4] text-[#808080]"
+                  walkInMode === "search" ? "bg-[#9B1B20] text-white" : "bg-[#f6f5f4] text-[#808080]"
                 }`}
               >
                 Existing Donor
@@ -745,7 +745,7 @@ export default function DonorManagement() {
                   setWalkInError(null);
                 }}
                 className={`flex-1 h-[38px] rounded-[10px] text-[13px] font-poppins font-semibold cursor-pointer ${
-                  walkInMode === "new" ? "bg-[#ad2b21] text-white" : "bg-[#f6f5f4] text-[#808080]"
+                  walkInMode === "new" ? "bg-[#9B1B20] text-white" : "bg-[#f6f5f4] text-[#808080]"
                 }`}
               >
                 New Donor
@@ -769,7 +769,7 @@ export default function DonorManagement() {
                   />
 
                   {walkInSelected ? (
-                    <div className="flex items-center justify-between border-2 border-[#ad2b21] bg-[#fbf3f3] rounded-[10px] px-4 py-3 mt-1">
+                    <div className="flex items-center justify-between border-2 border-[#9B1B20] bg-[#fbf3f3] rounded-[10px] px-4 py-3 mt-1">
                       <div>
                         <p className="font-poppins font-medium text-[14px] text-black">{walkInSelected.name}</p>
                         <p className="font-poppins text-[11px] text-[#808080]">{walkInSelected.id} &middot; {walkInSelected.bloodType}</p>
@@ -883,7 +883,7 @@ export default function DonorManagement() {
                 <button
                   type="submit"
                   disabled={walkInSubmitting}
-                  className="bg-[#ad2b21] rounded-[16px] px-6 h-[44px] font-poppins font-bold text-[14px] text-white cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+                  className="bg-[#9B1B20] rounded-[16px] px-6 h-[44px] font-poppins font-bold text-[14px] text-white cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
                 >
                   {walkInSubmitting ? "Booking..." : "Book Walk-in"}
                 </button>

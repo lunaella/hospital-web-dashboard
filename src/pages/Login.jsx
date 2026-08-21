@@ -153,7 +153,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full h-[48px] bg-[#ad2b21] hover:bg-[#8f2419] disabled:cursor-wait disabled:opacity-70 transition-colors rounded-[10px] flex items-center justify-center cursor-pointer"
+            className="w-full h-[48px] bg-[#9B1B20] hover:bg-[#8B1218] disabled:cursor-wait disabled:opacity-70 transition-colors rounded-[10px] flex items-center justify-center cursor-pointer"
           >
             <span className="font-poppins font-bold text-[15px] text-white">
               {isSubmitting ? "Signing in..." : "Log in"}

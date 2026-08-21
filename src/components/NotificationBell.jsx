@@ -12,7 +12,7 @@ import { connectRealtime } from "../lib/realtime";
 // read off data that already exists instead of a parallel read/unread system.
 
 const PRIORITY_META = {
-  EMERGENCY: { label: "EMERGENCY", dot: "bg-[#ad2b21]", text: "text-[#ad2b21]" },
+  EMERGENCY: { label: "EMERGENCY", dot: "bg-[#9B1B20]", text: "text-[#9B1B20]" },
   URGENT: { label: "Urgent", dot: "bg-[#c9a227]", text: "text-black" },
   NORMAL: { label: "Routine", dot: "bg-[#5b8a52]", text: "text-black" },
 };
@@ -216,7 +216,7 @@ export default function NotificationBell() {
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unseenCount > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-[3px] rounded-full bg-[#ad2b21] flex items-center justify-center font-poppins font-bold text-[9px] text-white leading-none">
+          <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-[3px] rounded-full bg-[#9B1B20] flex items-center justify-center font-poppins font-bold text-[9px] text-white leading-none">
             {unseenCount > 9 ? "9+" : unseenCount}
           </span>
         )}
@@ -227,7 +227,7 @@ export default function NotificationBell() {
           <div className="px-5 py-4 border-b border-[#ececec] flex items-center justify-between">
             <span className="font-poppins font-semibold text-[15px] text-black">Notifications</span>
             {unresolvedCount > 0 && (
-              <span className="font-poppins font-medium text-[12px] text-[#ad2b21]">{unresolvedCount} active</span>
+              <span className="font-poppins font-medium text-[12px] text-[#9B1B20]">{unresolvedCount} active</span>
             )}
           </div>
 
@@ -266,7 +266,7 @@ export default function NotificationBell() {
                             {meta.label} · {r.bloodType}
                           </span>
                           <span className="flex items-center gap-1.5 shrink-0">
-                            {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#ad2b21]" aria-label="New" />}
+                            {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#9B1B20]" aria-label="New" />}
                             <span className="font-poppins text-[11px] text-[#aaa4a0]">{formatElapsed(r.seconds_open)}</span>
                           </span>
                         </div>
@@ -300,7 +300,7 @@ export default function NotificationBell() {
                           {meta.label} · {e.bloodType}
                         </span>
                         <span className="flex items-center gap-1.5 shrink-0">
-                          {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#ad2b21]" aria-label="New" />}
+                          {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#9B1B20]" aria-label="New" />}
                         </span>
                       </div>
                       <p className="mt-0.5 font-poppins text-[12px] text-[#808080] truncate">
@@ -319,7 +319,7 @@ export default function NotificationBell() {
               setOpen(false);
               navigate("/view-broadcasts");
             }}
-            className="w-full px-5 py-3 font-poppins font-semibold text-[13px] text-[#ad2b21] text-center border-t border-[#ececec] cursor-pointer hover:bg-[#faf8f8]"
+            className="w-full px-5 py-3 font-poppins font-semibold text-[13px] text-[#9B1B20] text-center border-t border-[#ececec] cursor-pointer hover:bg-[#faf8f8]"
           >
             View All Broadcasts
           </button>

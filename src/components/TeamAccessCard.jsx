@@ -231,7 +231,7 @@ export default function TeamAccessCard({ currentAdminId }) {
         <div className="bg-[#f7f5f5] px-8 py-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
-              <IconUsers className="w-6 h-6 text-[#ad2b21]" />
+              <IconUsers className="w-6 h-6 text-[#9B1B20]" />
             </div>
             <div>
               <p className="font-poppins font-medium text-[20px] text-black">Team Access</p>
@@ -243,7 +243,7 @@ export default function TeamAccessCard({ currentAdminId }) {
           <button
             type="button"
             onClick={openAddForm}
-            className="shrink-0 bg-[#ad2b21] rounded-[16px] h-[42px] px-5 flex items-center gap-2 justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+            className="shrink-0 bg-[#9B1B20] rounded-[16px] h-[42px] px-5 flex items-center gap-2 justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
           >
             <IconPlus className="w-4 h-4 text-white" />
             <span className="font-poppins font-semibold text-[14px] text-white">Add Person</span>
@@ -335,7 +335,7 @@ export default function TeamAccessCard({ currentAdminId }) {
                       onChange={(e) => setAddForm((p) => ({ ...p, makeSuperAdmin: e.target.checked }))}
                       className="w-[15px] h-[15px]"
                     />
-                    <span className="font-poppins text-[13px] text-[#ad2b21]">
+                    <span className="font-poppins text-[13px] text-[#9B1B20]">
                       Make this a super admin (full, unrestricted access — use sparingly)
                     </span>
                   </label>
@@ -347,7 +347,7 @@ export default function TeamAccessCard({ currentAdminId }) {
               <button
                 type="submit"
                 disabled={addSubmitting}
-                className="self-start bg-[#ad2b21] rounded-[16px] h-[42px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+                className="self-start bg-[#9B1B20] rounded-[16px] h-[42px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
               >
                 <span className="font-poppins font-semibold text-[14px] text-white">
                   {addSubmitting ? "Creating..." : "Create Account"}
@@ -382,7 +382,7 @@ export default function TeamAccessCard({ currentAdminId }) {
 
                     {admin.isSuperAdmin ? (
                       <p className="flex items-center gap-2 font-poppins text-[13px] text-[#808080]">
-                        <IconShield className="w-4 h-4 text-[#ad2b21]" />
+                        <IconShield className="w-4 h-4 text-[#9B1B20]" />
                         Super admin — always has full access to every section.
                       </p>
                     ) : (
@@ -428,7 +428,7 @@ export default function TeamAccessCard({ currentAdminId }) {
                     <button
                       type="submit"
                       disabled={editSubmitting}
-                      className="self-start bg-[#ad2b21] rounded-[16px] h-[42px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+                      className="self-start bg-[#9B1B20] rounded-[16px] h-[42px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
                     >
                       <span className="font-poppins font-semibold text-[14px] text-white">
                         {editSubmitting ? "Saving..." : "Save Changes"}
@@ -444,7 +444,7 @@ export default function TeamAccessCard({ currentAdminId }) {
                           <span className="font-poppins font-normal text-[12px] text-[#808080]">(you)</span>
                         )}
                         {admin.isSuperAdmin && (
-                          <span className="flex items-center gap-1 bg-[rgba(225,32,53,0.12)] text-[#ad2b21] rounded-[8px] px-2 py-0.5 font-poppins font-semibold text-[11px]">
+                          <span className="flex items-center gap-1 bg-[rgba(225,32,53,0.12)] text-[#9B1B20] rounded-[8px] px-2 py-0.5 font-poppins font-semibold text-[11px]">
                             <IconShield className="w-3 h-3" /> Super Admin
                           </span>
                         )}

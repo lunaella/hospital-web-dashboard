@@ -480,7 +480,7 @@ export default function Settings() {
         >
           <div className="bg-[#f7f5f5] px-8 py-6 flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
-              <IconIdCard className="w-6 h-6 text-[#ad2b21]" />
+              <IconIdCard className="w-6 h-6 text-[#9B1B20]" />
             </div>
             <div>
               <p className="font-poppins font-medium text-[20px] text-black">Account Credentials</p>
@@ -524,7 +524,7 @@ export default function Settings() {
 
             <div className="flex flex-col gap-6">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#ad2b21] shrink-0" />
+                <span className="w-2 h-2 rounded-full bg-[#9B1B20] shrink-0" />
                 <p className="font-poppins font-medium text-[16px] text-black tracking-wide">SECURITY PROTOCOL UPDATE</p>
               </div>
 
@@ -577,7 +577,7 @@ export default function Settings() {
               <button
                 type="submit"
                 disabled={isSaving}
-                className="shrink-0 bg-[#ad2b21] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+                className="shrink-0 bg-[#9B1B20] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
               >
                 <span className="font-poppins font-bold text-[17px] text-white">
                   {isSaving ? "Saving..." : "Save Credentials"}
@@ -592,7 +592,7 @@ export default function Settings() {
         <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full p-6">
           <div className="flex items-center gap-4 pb-4 mb-6 border-b border-[#efeeed]">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
-              <IconTerminal className="w-6 h-6 text-[#ad2b21]" />
+              <IconTerminal className="w-6 h-6 text-[#9B1B20]" />
             </div>
             <p className="font-poppins font-medium text-[20px] text-black">Active Terminal Session</p>
           </div>
@@ -661,7 +661,7 @@ export default function Settings() {
                   width="22"
                   height="22"
                   fill="none"
-                  stroke="#ad2b21"
+                  stroke="#9B1B20"
                   strokeWidth="1.8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -682,7 +682,7 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={openAddHospital}
-                className="shrink-0 bg-[#ad2b21] rounded-[16px] h-[44px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+                className="shrink-0 bg-[#9B1B20] rounded-[16px] h-[44px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
               >
                 <span className="font-poppins font-bold text-[15px] text-white">+ Add Hospital</span>
               </button>
@@ -808,7 +808,7 @@ export default function Settings() {
                     <button
                       type="submit"
                       disabled={hospitalFormSaving}
-                      className="shrink-0 bg-[#ad2b21] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+                      className="shrink-0 bg-[#9B1B20] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
                     >
                       <span className="font-poppins font-bold text-[17px] text-white">
                         {hospitalFormSaving ? "Saving..." : editingHospitalId ? "Save Hospital" : "Add Hospital"}
@@ -898,7 +898,7 @@ export default function Settings() {
         <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden">
           <div className="bg-[#f7f5f5] px-8 py-6 flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
-              <IconDroplet className="w-6 h-6 text-[#ad2b21]" />
+              <IconDroplet className="w-6 h-6 text-[#9B1B20]" />
             </div>
             <div>
               <p className="font-poppins font-medium text-[20px] text-black">Inventory Thresholds</p>
@@ -965,7 +965,7 @@ export default function Settings() {
                         <button
                           type="submit"
                           disabled={savingType === row.type}
-                          className="bg-[#ad2b21] rounded-[16px] h-[40px] px-5 flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+                          className="bg-[#9B1B20] rounded-[16px] h-[40px] px-5 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
                         >
                           <span className="font-poppins font-semibold text-[13px] text-white">
                             {savingType === row.type ? "Saving..." : "Save"}
@@ -1011,7 +1011,7 @@ export default function Settings() {
         <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden">
           <div className="bg-[#f7f5f5] px-8 py-6 flex items-center gap-4">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
-              <IconDownload className="w-6 h-6 text-[#ad2b21] rotate-180" />
+              <IconDownload className="w-6 h-6 text-[#9B1B20] rotate-180" />
             </div>
             <div>
               <p className="font-poppins font-medium text-[20px] text-black">Data Import</p>
@@ -1035,7 +1035,7 @@ export default function Settings() {
                     }}
                     className={`h-[38px] rounded-[8px] border text-[13px] font-poppins font-semibold cursor-pointer ${
                       importType === t.key
-                        ? "bg-[#ad2b21] border-[#ad2b21] text-white"
+                        ? "bg-[#9B1B20] border-[#9B1B20] text-white"
                         : "bg-[#f6f5f4] border-[#d9d9d9] text-[#808080]"
                     }`}
                   >
@@ -1056,7 +1056,7 @@ export default function Settings() {
                     <button
                       type="button"
                       onClick={() => downloadImportTemplate(importType)}
-                      className="shrink-0 font-poppins font-semibold text-[13px] text-[#ad2b21] cursor-pointer whitespace-nowrap"
+                      className="shrink-0 font-poppins font-semibold text-[13px] text-[#9B1B20] cursor-pointer whitespace-nowrap"
                     >
                       Download template
                     </button>
@@ -1086,7 +1086,7 @@ export default function Settings() {
                       type="file"
                       accept=".csv,.xlsx,.xls"
                       onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-                      className="font-poppins text-[13px] text-black file:mr-4 file:h-[36px] file:px-4 file:rounded-[8px] file:border-0 file:bg-[#f1dddc] file:text-[#ad2b21] file:font-semibold file:cursor-pointer"
+                      className="font-poppins text-[13px] text-black file:mr-4 file:h-[36px] file:px-4 file:rounded-[8px] file:border-0 file:bg-[#f1dddc] file:text-[#9B1B20] file:font-semibold file:cursor-pointer"
                     />
                   </Field>
                 </>
@@ -1123,7 +1123,7 @@ export default function Settings() {
             <button
               type="submit"
               disabled={importSubmitting}
-              className="self-start bg-[#ad2b21] rounded-[16px] h-[49px] px-8 flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+              className="self-start bg-[#9B1B20] rounded-[16px] h-[49px] px-8 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
             >
               <span className="font-poppins font-bold text-[17px] text-white">
                 {importSubmitting ? "Importing..." : "Import"}

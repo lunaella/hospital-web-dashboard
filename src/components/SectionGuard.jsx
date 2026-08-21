@@ -26,7 +26,7 @@ export default function SectionGuard({ section, children }) {
       <div className="min-h-[600px] flex items-center justify-center px-8">
         <div className="max-w-[420px] flex flex-col items-center text-center gap-4">
           <div className="w-[64px] h-[64px] rounded-full bg-[#f1dddc] flex items-center justify-center">
-            <IconLock className="w-7 h-7 text-[#ad2b21]" />
+            <IconLock className="w-7 h-7 text-[#9B1B20]" />
           </div>
           <h2 className="font-poppins font-bold text-[22px] text-black">Couldn't verify your access</h2>
           <p className="font-poppins font-medium text-[14px] text-[#808080] leading-relaxed">
@@ -36,7 +36,7 @@ export default function SectionGuard({ section, children }) {
           <button
             type="button"
             onClick={refreshProfile}
-            className="mt-1 bg-[#ad2b21] rounded-[16px] h-[44px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+            className="mt-1 bg-[#9B1B20] rounded-[16px] h-[44px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
           >
             <span className="font-poppins font-bold text-[14px] text-white">Try again</span>
           </button>
@@ -50,7 +50,7 @@ export default function SectionGuard({ section, children }) {
       <div className="min-h-[600px] flex items-center justify-center px-8">
         <div className="max-w-[420px] flex flex-col items-center text-center gap-4">
           <div className="w-[64px] h-[64px] rounded-full bg-[#f1dddc] flex items-center justify-center">
-            <IconLock className="w-7 h-7 text-[#ad2b21]" />
+            <IconLock className="w-7 h-7 text-[#9B1B20]" />
           </div>
           <h2 className="font-poppins font-bold text-[22px] text-black">Access Restricted</h2>
           <p className="font-poppins font-medium text-[14px] text-[#808080] leading-relaxed">

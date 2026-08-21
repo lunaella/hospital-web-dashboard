@@ -6,7 +6,7 @@
 // color instead, so it never depends on the network and always looks
 // intentional rather than broken.
 
-const PALETTE = ["#ad2b21", "#8f404b", "#751423", "#5b6f8f", "#5b8a52", "#a3782f"];
+const PALETTE = ["#9B1B20", "#8f404b", "#751423", "#5b6f8f", "#5b8a52", "#a3782f"];
 
 function colorFor(seed) {
   const s = seed || "?";

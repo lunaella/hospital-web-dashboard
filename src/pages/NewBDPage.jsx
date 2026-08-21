@@ -99,7 +99,7 @@ export default function NewBDPage() {
             {/* Blood drop, same shared icon used for Units Needed / Inventory
                 Thresholds elsewhere — was a heart, swapped for the on-theme
                 blood-drop mark. */}
-            <IconDroplet className="w-[22px] h-[22px] text-[#ad2b21]" />
+            <IconDroplet className="w-[22px] h-[22px] text-[#9B1B20]" />
           </div>
           <div>
             <h2 className="font-poppins font-bold text-[20px] text-black leading-tight">Create New Broadcast</h2>
@@ -128,7 +128,7 @@ export default function NewBDPage() {
         {/* 1. Urgency level */}
         <div className="mb-5">
           <div className="flex items-center gap-3 mb-3">
-            <span className="font-poppins font-bold text-[11px] text-[#ad2b21] tracking-wide whitespace-nowrap">
+            <span className="font-poppins font-bold text-[11px] text-[#9B1B20] tracking-wide whitespace-nowrap">
               1. SET URGENCY LEVEL
             </span>
             <div className="flex-1 h-px bg-[#e5e4e7]" />
@@ -141,7 +141,7 @@ export default function NewBDPage() {
                 onClick={() => setUrgency(level.key)}
                 className={`h-[38px] rounded-[10px] border flex items-center justify-center gap-1.5 text-[13px] font-poppins font-semibold transition-colors ${
                   urgency === level.key
-                    ? "bg-[#ad2b21] border-[#ad2b21] text-white"
+                    ? "bg-[#9B1B20] border-[#9B1B20] text-white"
                     : "bg-white border-[#d9d9d9] text-[#808080]"
                 }`}
               >
@@ -155,7 +155,7 @@ export default function NewBDPage() {
         {/* 2. Blood type */}
         <div className="mb-5">
           <div className="flex items-center gap-3 mb-3">
-            <span className="font-poppins font-bold text-[11px] text-[#ad2b21] tracking-wide whitespace-nowrap">
+            <span className="font-poppins font-bold text-[11px] text-[#9B1B20] tracking-wide whitespace-nowrap">
               2. SELECT TARGET BLOOD TYPE
             </span>
             <div className="flex-1 h-px bg-[#e5e4e7]" />
@@ -168,7 +168,7 @@ export default function NewBDPage() {
                 onClick={() => setBloodType(type)}
                 className={`h-[42px] rounded-[10px] border-2 text-[15px] font-poppins font-bold transition-colors ${
                   bloodType === type
-                    ? "bg-[#fbeeec] border-[#ad2b21] text-[#ad2b21]"
+                    ? "bg-[#fbeeec] border-[#9B1B20] text-[#9B1B20]"
                     : "bg-white border-[#d9d9d9] text-black"
                 }`}
               >
@@ -181,7 +181,7 @@ export default function NewBDPage() {
         {/* 3. Ward / unit */}
         <div className="mb-5">
           <div className="flex items-center gap-3 mb-3">
-            <span className="font-poppins font-bold text-[11px] text-[#ad2b21] tracking-wide whitespace-nowrap">
+            <span className="font-poppins font-bold text-[11px] text-[#9B1B20] tracking-wide whitespace-nowrap">
               3. TARGET WARD / UNIT
             </span>
             <div className="flex-1 h-px bg-[#e5e4e7]" />
@@ -198,7 +198,7 @@ export default function NewBDPage() {
         {/* 4. Quota requirement */}
         <div className="mb-7">
           <div className="flex items-center gap-3 mb-3">
-            <span className="font-poppins font-bold text-[11px] text-[#ad2b21] tracking-wide whitespace-nowrap">
+            <span className="font-poppins font-bold text-[11px] text-[#9B1B20] tracking-wide whitespace-nowrap">
               4. QUOTA REQUIREMENT
             </span>
             <div className="flex-1 h-px bg-[#e5e4e7]" />
@@ -241,7 +241,7 @@ export default function NewBDPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="h-[45px] px-6 rounded-[16px] bg-[#ad2b21] text-[14px] font-poppins font-bold text-white cursor-pointer hover:bg-[#8f2419] transition-colors disabled:cursor-wait disabled:opacity-70"
+            className="h-[45px] px-6 rounded-[16px] bg-[#9B1B20] text-[14px] font-poppins font-bold text-white cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
           >
             {isSubmitting ? "Broadcasting..." : "Confirm & Broadcast Request"}
           </button>

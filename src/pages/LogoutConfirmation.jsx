@@ -49,7 +49,7 @@ export default function LogoutConfirmation() {
 
         <div className="absolute left-[41px] top-[57px] w-[66px] h-[58px]">
           <div className="absolute inset-0 rounded-full bg-[#f1dddc]" />
-          <IconLogout className="absolute left-[22px] top-[16px] w-[22px] h-[26px] text-[#ad2b21]" />
+          <IconLogout className="absolute left-[22px] top-[16px] w-[22px] h-[26px] text-[#9B1B20]" />
         </div>
 
         <h2 className="absolute left-[41px] top-[139px] font-poppins font-bold text-[25px] text-black">
@@ -73,7 +73,7 @@ export default function LogoutConfirmation() {
           type="button"
           onClick={handleConfirm}
           disabled={isEnding}
-          className="absolute left-[418px] top-[296px] bg-[#ad2b21] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer disabled:cursor-wait disabled:opacity-70"
+          className="absolute left-[418px] top-[296px] bg-[#9B1B20] rounded-[16px] w-[203px] h-[49px] flex items-center justify-center cursor-pointer disabled:cursor-wait disabled:opacity-70"
         >
           <span className="font-poppins font-bold text-[17px] text-white">
             {isEnding ? "Logging out..." : "Confirm Logout"}

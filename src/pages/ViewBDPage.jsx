@@ -171,7 +171,7 @@ export default function ViewBDPage() {
             <button
               type="button"
               onClick={() => navigate("/new-broadcast", { state: { backgroundLocation: location } })}
-              className="bg-[#ad2b22] text-white text-[13px] font-semibold px-5 py-2.5 rounded-full hover:bg-[#8f221b] transition-colors"
+              className="bg-[#9B1B20] text-white text-[13px] font-semibold px-5 py-2.5 rounded-full hover:bg-[#8B1218] transition-colors"
             >
               + New Broadcast
             </button>
@@ -222,7 +222,7 @@ export default function ViewBDPage() {
                   </div>
                   <div className="h-[5px] w-full bg-[#d9d9d9] rounded-[10px] overflow-hidden">
                     <div
-                      className="h-full bg-[#ad2b22] rounded-[10px]"
+                      className="h-full bg-[#9B1B20] rounded-[10px]"
                       style={{ width: `${b.percent}%` }}
                     />
                   </div>
@@ -252,7 +252,7 @@ export default function ViewBDPage() {
                         type="button"
                         disabled={fulfillingId === b.id}
                         onClick={() => handleFulfill(b.id)}
-                        className="text-[11px] font-semibold text-white bg-[#ad2b22] rounded-full px-3 py-1.5 hover:bg-[#8f221b] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="text-[11px] font-semibold text-white bg-[#9B1B20] rounded-full px-3 py-1.5 hover:bg-[#8B1218] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {fulfillingId === b.id ? "..." : "Add"}
                       </button>

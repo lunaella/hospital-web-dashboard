@@ -14,7 +14,7 @@ export default function HospitalSwitcher() {
       onChange={(e) => setHospitalId(e.target.value)}
       disabled={hospitalsLoading}
       aria-label="Select hospital"
-      className="font-poppins font-semibold text-[13px] text-[#5a1410] bg-white border border-[#ad2b21] rounded-[10px] pl-3 pr-2 py-2 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.12)] outline-none cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+      className="font-poppins font-semibold text-[13px] text-[#5a1410] bg-white border border-[#9B1B20] rounded-[10px] pl-3 pr-2 py-2 shadow-[0px_2px_8px_0px_rgba(0,0,0,0.12)] outline-none cursor-pointer disabled:opacity-60 disabled:cursor-wait"
     >
       {/* Hospital-scoped admins (Team Access > which hospitals can they
           access) don't get an aggregate "All Hospitals" view — there's no

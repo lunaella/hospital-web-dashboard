@@ -82,15 +82,15 @@ const SYSTEM_HEALTH_META = {
 function PriorityBadge({ priority }) {
   const colorMap = {
     // Was #c26460 (an off-family salmon) — the login page's palette only
-    // has one red (#ad2b21 + its #8f2419 hover), so EMERGENCY now uses that
+    // has one red (#9B1B20 + its #8B1218 hover), so EMERGENCY now uses that
     // instead of a third, unrelated shade of "red".
-    EMERGENCY: "text-[#ad2b21]",
+    EMERGENCY: "text-[#9B1B20]",
     URGENT: "text-black",
     NORMAL: "text-black",
   };
   return (
     <div className="flex items-center justify-center gap-1">
-      {priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#ad2b21]" />}
+      {priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#9B1B20]" />}
       <span className={`font-poppins font-semibold text-[11px] tracking-wide ${colorMap[priority]}`}>{priority}</span>
     </div>
   );
@@ -275,7 +275,7 @@ export default function Dashboard() {
         <button
           type="button"
           onClick={() => openModal("/new-broadcast")}
-          className="absolute bg-[#ad2b21] h-[49px] left-[871px] rounded-[16px] top-[138px] w-[215px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8f2419] transition-colors"
+          className="absolute bg-[#9B1B20] h-[49px] left-[871px] rounded-[16px] top-[138px] w-[215px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8B1218] transition-colors"
         >
           <IconMegaphone className="w-5 h-5 text-white" strokeWidth="2.2" />
           <span className="font-poppins font-bold text-[17px] text-white">New Broadcast</span>
@@ -289,11 +289,11 @@ export default function Dashboard() {
               <div
                 key={card.label}
                 className={`relative w-[247px] min-h-[166px] rounded-[16px] flex flex-col ${
-                  i === 0 ? "bg-[#fbf3f3] border-l-[9px] border-l-[#ad2b21]" : "bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)]"
+                  i === 0 ? "bg-[#fbf3f3] border-l-[9px] border-l-[#9B1B20]" : "bg-white shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)]"
                 } px-[19px] pt-[14px] pb-[10px]`}
               >
                 <div className="bg-[#f1dddc] h-[30px] w-[33px] rounded-[8px] flex items-center justify-center shrink-0">
-                  <CardIcon className="w-[16px] h-[16px] text-[#ad2b21]" />
+                  <CardIcon className="w-[16px] h-[16px] text-[#9B1B20]" />
                 </div>
                 <div className="mt-2 font-poppins font-bold text-[17px] text-[#808080] leading-snug">{card.label}</div>
                 <div className="mt-2 font-poppins font-bold text-[35px] text-black leading-none">{card.value}</div>
@@ -306,7 +306,7 @@ export default function Dashboard() {
         {/* Live Match Monitoring */}
         <div className="absolute left-[11px] top-[439px] w-[1072px] h-[432px] bg-white rounded-[6px] shadow-[0px_5px_5px_0px_rgba(0,0,0,0.09)]">
           <div className="flex items-center gap-2 pt-[22px] pl-[15px]">
-            <IconChart className="w-[16px] h-[16px] text-[#ad2b21]" />
+            <IconChart className="w-[16px] h-[16px] text-[#9B1B20]" />
             <span className="font-poppins font-semibold text-[17px] text-black">Live Match Monitoring</span>
           </div>
           <div className="pl-[42px] font-poppins font-medium text-[11px] text-[#808080]">
@@ -317,8 +317,8 @@ export default function Dashboard() {
             onClick={() => navigate("/view-broadcasts")}
             className="absolute right-[15px] top-[36px] flex items-center gap-1 cursor-pointer"
           >
-            <span className="font-poppins font-medium text-[13px] text-[#ad2b21]">View All Broadcasts</span>
-            <IconChevronRight className="w-[6px] h-[10px] text-[#ad2b21]" />
+            <span className="font-poppins font-medium text-[13px] text-[#9B1B20]">View All Broadcasts</span>
+            <IconChevronRight className="w-[6px] h-[10px] text-[#9B1B20]" />
           </button>
 
           <div className="mt-[19px] border-t border-[#d9d9d9]" />
@@ -357,8 +357,7 @@ export default function Dashboard() {
                     <span className="text-[#808080]">{row.pct}%</span>
                   </div>
                   <div className="bg-[#d9d9d9] h-[5px] rounded-[10px] w-[134px]">
-                    {/* Was #ad2b22 — one digit off from the actual brand red. */}
-                    <div className="bg-[#ad2b21] h-[5px] rounded-[10px]" style={{ width: `${row.pct}%` }} />
+                    <div className="bg-[#9B1B20] h-[5px] rounded-[10px]" style={{ width: `${row.pct}%` }} />
                   </div>
                 </div>
                 <div className="flex items-center justify-center gap-1">
@@ -378,7 +377,7 @@ export default function Dashboard() {
         {/* Stock Criticality */}
         <div className="absolute left-[11px] top-[906px] w-[585px] h-[411px] bg-white rounded-[16px] shadow-[0px_2px_5px_0px_rgba(0,0,0,0.1)]">
           <div className="pt-[27px] pl-[27px] flex items-center gap-2 font-poppins font-bold text-[17px] text-black">
-            <IconDroplet className="w-[16px] h-[16px] text-[#ad2b21] shrink-0" />
+            <IconDroplet className="w-[16px] h-[16px] text-[#9B1B20] shrink-0" />
             <span>Stock Criticality</span>
           </div>
           <div className="mt-[16px] border-t border-[#d9d9d9]" />
@@ -415,7 +414,7 @@ export default function Dashboard() {
           <div className="pl-[71px] pt-[1px] font-poppins font-medium text-[11px] text-[#808080]">
             Donors detected in facility geofence
           </div>
-          <IconMapPin className="absolute left-[20px] top-[26px] w-[24px] h-[24px] text-[#ad2b21]" />
+          <IconMapPin className="absolute left-[20px] top-[26px] w-[24px] h-[24px] text-[#9B1B20]" />
           <div className="mt-[15px] border-t border-[#d9d9d9]" />
 
           <div className="flex flex-col gap-[13px] px-[25px] pt-[15px]">
