@@ -4,6 +4,7 @@ import { HospitalProvider } from "./context/HospitalContext";
 import { AuthProvider } from "./context/AuthContext";
 import AppShell from "./components/AppShell";
 import SectionGuard from "./components/SectionGuard";
+import RequireAuth from "./components/RequireAuth";
 import Login from "./pages/Login";
 import LoginFailed from "./pages/LoginFailed";
 import Dashboard from "./pages/Dashboard";
@@ -27,11 +28,13 @@ const MODAL_ROUTES = (
     <Route
       path="/view-broadcasts"
       element={
-        <AppShell>
-          <SectionGuard section="broadcasts">
-            <ViewBDPage />
-          </SectionGuard>
-        </AppShell>
+        <RequireAuth>
+          <AppShell>
+            <SectionGuard section="broadcasts">
+              <ViewBDPage />
+            </SectionGuard>
+          </AppShell>
+        </RequireAuth>
       }
     />
     <Route path="/new-broadcast" element={<NewBDPage />} />
@@ -51,36 +54,52 @@ function AppRoutes() {
         <Route
           path="/dashboard"
           element={
-            <AppShell>
-              <SectionGuard section="dashboard">
-                <Dashboard />
-              </SectionGuard>
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <SectionGuard section="dashboard">
+                  <Dashboard />
+                </SectionGuard>
+              </AppShell>
+            </RequireAuth>
           }
         />
         <Route
           path="/reports"
           element={
-            <AppShell>
-              <SectionGuard section="reports">
-                <Reports />
-              </SectionGuard>
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <SectionGuard section="reports">
+                  <Reports />
+                </SectionGuard>
+              </AppShell>
+            </RequireAuth>
           }
         />
         {/* Settings itself is always reachable (self-service account/session
             management applies to every admin); the cards inside it that are
             real administrative capabilities — Hospital Network, Data Import,
-            Team Access — gate themselves individually. */}
-        <Route path="/settings" element={<AppShell><Settings /></AppShell>} />
+            Team Access — gate themselves individually. Still requires a
+            token, though — same reasoning as the other routes below. */}
+        <Route
+          path="/settings"
+          element={
+            <RequireAuth>
+              <AppShell>
+                <Settings />
+              </AppShell>
+            </RequireAuth>
+          }
+        />
         <Route
           path="/donor-management"
           element={
-            <AppShell>
-              <SectionGuard section="donor_management">
-                <DonorManagement />
-              </SectionGuard>
-            </AppShell>
+            <RequireAuth>
+              <AppShell>
+                <SectionGuard section="donor_management">
+                  <DonorManagement />
+                </SectionGuard>
+              </AppShell>
+            </RequireAuth>
           }
         />
         {MODAL_ROUTES}
