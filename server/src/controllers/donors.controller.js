@@ -167,6 +167,51 @@ export const listAppointmentsForDay = asyncHandler(async (req, res) => {
   res.json(rows);
 });
 
+// Feeds the admin notification bell (NotificationBell.jsx) — surfaces
+// appointments a donor booked or cancelled themselves through the mobile
+// app recently, the same way GET /api/requests already surfaces broadcasts
+// there. One row per appointment: if it's currently cancelled, that's the
+// event shown (using updated_at as the cancellation time); otherwise it's
+// shown as a "booked" event (using created_at). A booked-then-cancelled
+// appointment inside the same window only shows once, as cancelled — an
+// acceptable simplification, not a second missed notification, since the
+// donor's most recent action is the one that actually matters to the admin.
+const RECENT_APPOINTMENT_WINDOW = "7 days";
+
+export const listRecentAppointmentEvents = asyncHandler(async (req, res) => {
+  const hospitalId = hospitalIdParam(req);
+  const hospitalClause = hospitalId ? "AND a.hospital_id = $1" : "";
+  const params = hospitalId ? [hospitalId] : [];
+
+  const { rows } = await pool.query(
+    `SELECT a.id, a.status, a.scheduled_at AS "scheduledAt",
+            a.created_at AS "createdAt", a.updated_at AS "updatedAt",
+            d.name AS "donorName", d.blood_type AS "bloodType"
+     FROM appointments a
+     JOIN donors d ON d.id = a.donor_id
+     WHERE (a.created_at > now() - interval '${RECENT_APPOINTMENT_WINDOW}'
+            OR (a.status = 'cancelled' AND a.updated_at > now() - interval '${RECENT_APPOINTMENT_WINDOW}'))
+       ${hospitalClause}
+     ORDER BY GREATEST(a.created_at, a.updated_at) DESC
+     LIMIT 50`,
+    params
+  );
+
+  const events = rows.map((r) => {
+    const isCancelled = r.status === "cancelled";
+    return {
+      id: r.id,
+      eventType: isCancelled ? "cancelled" : "booked",
+      eventAt: isCancelled ? r.updatedAt : r.createdAt,
+      donorName: r.donorName,
+      bloodType: r.bloodType,
+      scheduledAt: r.scheduledAt,
+    };
+  });
+
+  res.json(events);
+});
+
 // hospitalId is required here — in the real app this is whichever hospital
 // the donor's geolocation-based nearest-hospital match resolved to for this
 // appointment; this admin's walk-in form asks for it explicitly instead

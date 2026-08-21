@@ -5,10 +5,10 @@ import { api } from "../lib/apiClient";
 // The bell used to be a static SVG with no onClick — decoration, not a
 // feature. This wires it to the same broadcast data ViewBDPage shows,
 // scoped to whichever hospital is currently selected (api.get() already
-// carries that automatically). No separate "notifications" backend concept
-// exists yet, and none is needed: a blood request broadcast *is* the
-// notification-worthy event in this app, so the bell just surfaces the most
-// recent ones instead of inventing a parallel read/unread system.
+// carries that automatically), plus GET /api/appointments/recent so a donor
+// booking or cancelling an appointment through the app also shows up here —
+// no separate "notifications" backend concept exists for either, both just
+// read off data that already exists instead of a parallel read/unread system.
 
 const PRIORITY_META = {
   EMERGENCY: { label: "EMERGENCY", dot: "bg-[#ad2b21]", text: "text-[#ad2b21]" },
@@ -61,10 +61,25 @@ function formatElapsed(seconds) {
   return `${hrs}h ${String(mins % 60).padStart(2, "0")}m ago`;
 }
 
+// Appointment events (booked/cancelled) render distinctly from broadcasts —
+// a calendar-style dot rather than the priority-colored one, and their own
+// one-line label instead of ward/units text.
+const APPOINTMENT_META = {
+  booked: { label: "New Appointment", dot: "bg-[#3b7dd8]" },
+  cancelled: { label: "Appointment Cancelled", dot: "bg-[#aaa4a0]" },
+};
+
+function formatApptTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 export default function NotificationBell() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [requests, setRequests] = useState([]);
+  const [appointmentEvents, setAppointmentEvents] = useState([]);
   const [loadError, setLoadError] = useState(null);
   const [lastSeenAt, setLastSeenAt] = useState(readLastSeen);
   const containerRef = useRef(null);
@@ -89,6 +104,19 @@ export default function NotificationBell() {
         }
       } catch (err) {
         if (!cancelled) setLoadError(err.message);
+      }
+
+      // Kept as a separate try/catch from the broadcasts fetch above: a
+      // permissions gap or a transient failure on one shouldn't blank out
+      // the other, since they're unrelated data sources shown side by side.
+      try {
+        const events = await api.get("/api/appointments/recent");
+        if (!cancelled) setAppointmentEvents(events);
+      } catch {
+        // Silently skipped — most likely this admin just doesn't have
+        // donor_management access, same reasoning as broadcasts' own
+        // permission-denied handling, but appointments aren't the bell's
+        // primary content so it's not worth a second error message.
       }
     }
 
@@ -129,9 +157,23 @@ export default function NotificationBell() {
     });
   }
 
+  // Broadcasts and appointment events are two different shapes coming from
+  // two different endpoints — normalized into one list here (kind +
+  // eventAtMs) purely so they can share one chronological feed, one unseen
+  // count, and one MAX_SHOWN cutoff instead of the dropdown juggling two
+  // separate lists.
+  const events = [
+    ...requests.map((r) => ({ kind: "broadcast", eventAtMs: r.createdAtMs, data: r })),
+    ...appointmentEvents.map((e) => ({
+      kind: e.eventType === "cancelled" ? "appointment_cancelled" : "appointment_booked",
+      eventAtMs: new Date(e.eventAt).getTime(),
+      data: e,
+    })),
+  ].sort((a, b) => b.eventAtMs - a.eventAtMs);
+
   const unresolvedCount = requests.filter((r) => UNRESOLVED_STATUSES.has(r.status)).length;
-  const unseenCount = requests.filter((r) => r.createdAtMs > lastSeenAt).length;
-  const shown = requests.slice(0, MAX_SHOWN);
+  const unseenCount = events.filter((e) => e.eventAtMs > lastSeenAt).length;
+  const shown = events.slice(0, MAX_SHOWN);
 
   return (
     <div ref={containerRef} className="relative">
@@ -155,7 +197,7 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-[calc(100%+12px)] w-[360px] bg-white rounded-[12px] shadow-[0px_8px_24px_0px_rgba(0,0,0,0.15)] border border-[#ececec] overflow-hidden z-50">
           <div className="px-5 py-4 border-b border-[#ececec] flex items-center justify-between">
-            <span className="font-poppins font-semibold text-[15px] text-black">Broadcasts</span>
+            <span className="font-poppins font-semibold text-[15px] text-black">Notifications</span>
             {unresolvedCount > 0 && (
               <span className="font-poppins font-medium text-[12px] text-[#ad2b21]">{unresolvedCount} active</span>
             )}
@@ -169,18 +211,55 @@ export default function NotificationBell() {
             ) : loadError ? (
               <p className="px-5 py-6 font-poppins text-[13px] text-[#d70b07]">Couldn't load: {loadError}</p>
             ) : shown.length === 0 ? (
-              <p className="px-5 py-6 font-poppins text-[13px] text-[#808080]">No broadcasts yet.</p>
+              <p className="px-5 py-6 font-poppins text-[13px] text-[#808080]">No notifications yet.</p>
             ) : (
-              shown.map((r) => {
-                const meta = PRIORITY_META[r.priority] ?? PRIORITY_META.NORMAL;
-                const isNew = r.createdAtMs > viewingSinceRef.current;
+              shown.map((item) => {
+                const isNew = item.eventAtMs > viewingSinceRef.current;
+
+                if (item.kind === "broadcast") {
+                  const r = item.data;
+                  const meta = PRIORITY_META[r.priority] ?? PRIORITY_META.NORMAL;
+                  return (
+                    <button
+                      key={`broadcast-${r.id}`}
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        navigate("/view-broadcasts", { state: { presetSearch: r.id } });
+                      }}
+                      className={`w-full text-left px-5 py-3 flex items-start gap-3 border-b border-[#f5f4f3] last:border-b-0 hover:bg-[#faf8f8] cursor-pointer ${
+                        isNew ? "bg-[#fbf3f3]" : ""
+                      }`}
+                    >
+                      <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${meta.dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`font-poppins font-semibold text-[13px] ${meta.text}`}>
+                            {meta.label} · {r.bloodType}
+                          </span>
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#ad2b21]" aria-label="New" />}
+                            <span className="font-poppins text-[11px] text-[#aaa4a0]">{formatElapsed(r.seconds_open)}</span>
+                          </span>
+                        </div>
+                        <p className="mt-0.5 font-poppins text-[12px] text-[#808080] truncate">
+                          {r.ward} · {r.unitsFulfilled}/{r.unitsNeeded} units · {STATUS_LABEL[r.status] ?? r.status}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                }
+
+                // appointment_booked / appointment_cancelled
+                const e = item.data;
+                const meta = APPOINTMENT_META[e.eventType] ?? APPOINTMENT_META.booked;
                 return (
                   <button
-                    key={r.id}
+                    key={`appointment-${e.id}-${e.eventType}`}
                     type="button"
                     onClick={() => {
                       setOpen(false);
-                      navigate("/view-broadcasts", { state: { presetSearch: r.id } });
+                      navigate("/donor-management");
                     }}
                     className={`w-full text-left px-5 py-3 flex items-start gap-3 border-b border-[#f5f4f3] last:border-b-0 hover:bg-[#faf8f8] cursor-pointer ${
                       isNew ? "bg-[#fbf3f3]" : ""
@@ -189,16 +268,15 @@ export default function NotificationBell() {
                     <span className={`mt-1.5 w-[7px] h-[7px] rounded-full shrink-0 ${meta.dot}`} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`font-poppins font-semibold text-[13px] ${meta.text}`}>
-                          {meta.label} · {r.bloodType}
+                        <span className="font-poppins font-semibold text-[13px] text-black">
+                          {meta.label} · {e.bloodType}
                         </span>
                         <span className="flex items-center gap-1.5 shrink-0">
                           {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#ad2b21]" aria-label="New" />}
-                          <span className="font-poppins text-[11px] text-[#aaa4a0]">{formatElapsed(r.seconds_open)}</span>
                         </span>
                       </div>
                       <p className="mt-0.5 font-poppins text-[12px] text-[#808080] truncate">
-                        {r.ward} · {r.unitsFulfilled}/{r.unitsNeeded} units · {STATUS_LABEL[r.status] ?? r.status}
+                        {e.donorName} · {formatApptTime(e.scheduledAt)}
                       </p>
                     </div>
                   </button>

@@ -223,21 +223,51 @@ export const donorPasswordLogin = asyncHandler(async (req, res) => {
 export const completeProfile = asyncHandler(async (req, res) => {
   const phone = req.pendingPhone;
 
-  const { rows: existingRows } = await pool.query(`SELECT ${DONOR_SELECT} FROM donors WHERE phone = $1`, [phone]);
+  const { rows: existingRows } = await pool.query(
+    `SELECT ${DONOR_SELECT}, password_hash AS "passwordHash" FROM donors WHERE phone = $1`,
+    [phone]
+  );
   let donor = existingRows[0];
   // Only a genuinely brand-new signup gets a welcome email — the
   // "attach to an existing admin-created record" branch below is really a
   // first login, not a registration, so it stays silent.
   const isNewDonor = !donor;
 
+  const { name, bloodType, email, age, weightKg, gender, healthScreening, password } = req.body;
+  if (!name?.trim() || !bloodType) {
+    return res.status(400).json({ error: "name and bloodType are required." });
+  }
+  if (!BLOOD_TYPES.includes(bloodType)) {
+    return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}` });
+  }
+  // age/weightKg/gender/healthScreening are all optional — the mobile
+  // app's screening wizard is a separate step from this bare-minimum
+  // signup, and older admin-created donor records never had them either.
+  if (age !== undefined && age !== null && !Number.isInteger(age)) {
+    return res.status(400).json({ error: "age must be an integer." });
+  }
+  if (weightKg !== undefined && weightKg !== null && !(Number(weightKg) > 0)) {
+    return res.status(400).json({ error: "weightKg must be a positive number." });
+  }
+  if (gender !== undefined && gender !== null && !GENDERS.includes(gender)) {
+    return res.status(400).json({ error: `gender must be one of: ${GENDERS.join(", ")}` });
+  }
+  // Email is optional here, same as always, but now that it also works as
+  // a login identifier (donorPasswordLogin above), a duplicate would make
+  // that login ambiguous — same reasoning as the phone uniqueness check
+  // in updateMyProfile, just enforced here instead of edit time.
+  const normalizedEmail = email?.trim().toLowerCase() || null;
+  if (normalizedEmail) {
+    const { rows: emailClash } = await pool.query(
+      donor
+        ? "SELECT id FROM donors WHERE lower(email) = $1 AND id != $2"
+        : "SELECT id FROM donors WHERE lower(email) = $1",
+      donor ? [normalizedEmail, donor.id] : [normalizedEmail]
+    );
+    if (emailClash[0]) return res.status(400).json({ error: "That email is already in use by another account." });
+  }
+
   if (!donor) {
-    const { name, bloodType, email, age, weightKg, gender, healthScreening, password } = req.body;
-    if (!name?.trim() || !bloodType) {
-      return res.status(400).json({ error: "name and bloodType are required." });
-    }
-    if (!BLOOD_TYPES.includes(bloodType)) {
-      return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}` });
-    }
     // The phone itself was already OTP-verified to reach this step, but a
     // password is still required here so the donor has a way to log back
     // in afterward without waiting on another SMS every time — see
@@ -245,30 +275,6 @@ export const completeProfile = asyncHandler(async (req, res) => {
     // that donor OTP-only forever unless they later find PATCH /me.
     if (!isValidPassword(password)) {
       return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
-    }
-    // age/weightKg/gender/healthScreening are all optional — the mobile
-    // app's screening wizard is a separate step from this bare-minimum
-    // signup, and older admin-created donor records never had them either.
-    if (age !== undefined && age !== null && !Number.isInteger(age)) {
-      return res.status(400).json({ error: "age must be an integer." });
-    }
-    if (weightKg !== undefined && weightKg !== null && !(Number(weightKg) > 0)) {
-      return res.status(400).json({ error: "weightKg must be a positive number." });
-    }
-    if (gender !== undefined && gender !== null && !GENDERS.includes(gender)) {
-      return res.status(400).json({ error: `gender must be one of: ${GENDERS.join(", ")}` });
-    }
-    // Email is optional here, same as always, but now that it also works as
-    // a login identifier (donorPasswordLogin above), a duplicate would make
-    // that login ambiguous — same reasoning as the phone uniqueness check
-    // in updateMyProfile, just enforced at creation time instead of edit
-    // time since a brand-new signup has no existing row to collide into.
-    const normalizedEmail = email?.trim().toLowerCase() || null;
-    if (normalizedEmail) {
-      const { rows: emailClash } = await pool.query("SELECT id FROM donors WHERE lower(email) = $1", [
-        normalizedEmail,
-      ]);
-      if (emailClash[0]) return res.status(400).json({ error: "That email is already in use by another account." });
     }
 
     const passwordHash = await hashPassword(password);
@@ -285,7 +291,7 @@ export const completeProfile = asyncHandler(async (req, res) => {
             name.trim(),
             phone,
             bloodType,
-            email?.trim() || null,
+            normalizedEmail,
             age ?? null,
             weightKg ?? null,
             gender ?? null,
@@ -303,6 +309,49 @@ export const completeProfile = asyncHandler(async (req, res) => {
     if (!donor) {
       return res.status(500).json({ error: "Could not generate a unique donor code. Try again." });
     }
+  } else {
+    // A donor row already existed for this phone (an admin-created walk-in,
+    // an import, or an earlier signup attempt that got cut short). Bug fixed
+    // here: this branch used to just log straight into that existing row
+    // and silently discard everything just submitted — including the
+    // password, which meant that donor could never log back in with a
+    // password afterward, only via OTP, forever. Now it fills in whatever
+    // the existing row is still missing from this submission. COALESCE
+    // means it only ever fills gaps — it never overwrites a value the row
+    // already had (e.g. blood type an admin already set).
+    let passwordHash = null;
+    if (!donor.passwordHash) {
+      if (!isValidPassword(password)) {
+        return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+      }
+      passwordHash = await hashPassword(password);
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE donors SET
+         name = COALESCE(name, $1),
+         blood_type = COALESCE(blood_type, $2),
+         email = COALESCE(email, $3),
+         age = COALESCE(age, $4),
+         weight_kg = COALESCE(weight_kg, $5),
+         gender = COALESCE(gender, $6),
+         health_screening = COALESCE(health_screening, $7),
+         password_hash = COALESCE(password_hash, $8)
+       WHERE id = $9
+       RETURNING ${DONOR_SELECT}`,
+      [
+        name.trim(),
+        bloodType,
+        normalizedEmail,
+        age ?? null,
+        weightKg ?? null,
+        gender ?? null,
+        healthScreening ? JSON.stringify(healthScreening) : null,
+        passwordHash,
+        donor.id,
+      ]
+    );
+    donor = rows[0];
   }
 
   const token = await startDonorSession(donor.id);

@@ -6,6 +6,7 @@ import {
   setDonorEligibility,
   exportDonors,
   listAppointmentsForDay,
+  listRecentAppointmentEvents,
   createAppointment,
   updateAppointmentStatus,
   completeAppointment,
@@ -58,6 +59,9 @@ async function checkinTokenHospitalId(req) {
 export const appointmentsRouter = Router();
 appointmentsRouter.use(requireAuth, requireSection("donor_management", "view"));
 
+// Registered before "/" purely for readability — as a distinct literal
+// path it can't be shadowed by "/" either way.
+appointmentsRouter.get("/recent", requireHospitalScope(), listRecentAppointmentEvents);
 appointmentsRouter.get("/", requireHospitalScope(), listAppointmentsForDay);
 appointmentsRouter.post("/", requireSection("donor_management", "edit"), requireHospitalScope(), createAppointment);
 appointmentsRouter.post(

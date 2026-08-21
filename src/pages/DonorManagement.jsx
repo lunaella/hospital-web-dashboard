@@ -4,7 +4,7 @@ import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
 import Avatar from "../components/Avatar";
-import { IconFilter, IconShield, IconCalendar, IconCheck, IconPlus, IconClock, IconLock } from "../components/icons";
+import { IconFilter, IconShield, IconCalendar, IconCheck, IconPlus, IconClock, IconLock, IconX } from "../components/icons";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -624,6 +624,13 @@ export default function DonorManagement() {
                   <IconCheck className="block max-w-none size-full" />
                 </div>
                 <span className="text-[13px] font-medium text-black">Donation Recorded</span>
+              </div>
+            ) : apt.status === "cancelled" ? (
+              <div className="absolute border border-[#f1dddc] border-solid h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1 bg-[#f8f3f4]">
+                <div className="w-[13px] h-[13px] text-[#aaa4a0]">
+                  <IconX className="block max-w-none size-full" />
+                </div>
+                <span className="text-[13px] font-medium text-[#aaa4a0]">Cancelled by Donor</span>
               </div>
             ) : apt.status === "confirmed" ? (
               <button
