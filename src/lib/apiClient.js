@@ -40,6 +40,24 @@ function withHospitalParam(path) {
   return `${path}${separator}hospitalId=${encodeURIComponent(hospitalId)}`;
 }
 
+// A 401 on a request that carried a token means the *session* is no longer
+// valid (logged out elsewhere, expired, or — since single-session
+// enforcement — kicked out by another super admin login), as opposed to a
+// login attempt itself coming back 401 for a wrong password (that request
+// never had a token to begin with, so this never fires for it). Previously
+// this just surfaced as a raw error message wherever the failing request
+// happened to be — a stale "Couldn't load ___: Session has been logged out
+// or expired" sitting on whatever page you were on, with no obvious next
+// step. Clearing the token and sending you to Login is what every other
+// "you got signed out" flow in the app already looks like from Logout
+// itself, just triggered here instead of by a deliberate click.
+function handleSessionExpired() {
+  clearToken();
+  if (window.location.pathname !== "/login" && window.location.pathname !== "/") {
+    window.location.href = "/login";
+  }
+}
+
 export async function apiFetch(path, options = {}) {
   const token = getToken();
   const headers = {
@@ -59,6 +77,7 @@ export async function apiFetch(path, options = {}) {
   const body = res.status === 204 ? null : await res.json().catch(() => null);
 
   if (!res.ok) {
+    if (res.status === 401 && token) handleSessionExpired();
     throw new Error(body?.error || `Request failed with status ${res.status}`);
   }
   return body;
@@ -92,6 +111,7 @@ export async function apiUploadFile(path, formData) {
 
   const body = await res.json().catch(() => null);
   if (!res.ok) {
+    if (res.status === 401 && token) handleSessionExpired();
     throw new Error(body?.error || `Request failed with status ${res.status}`);
   }
   return body;
