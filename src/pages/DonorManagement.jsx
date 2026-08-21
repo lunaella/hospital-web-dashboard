@@ -649,16 +649,22 @@ export default function DonorManagement() {
         ))}
       </div>
 
-      <button
-        type="button"
-        onClick={openWalkInModal}
-        className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[1057px] top-[825px] rounded-[4px] w-[289px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#f6f5f4] transition-colors"
-      >
-        <div className="w-[15px] h-[15px] text-[#808080]">
-          <IconPlus className="block max-w-none size-full" />
-        </div>
-        <span className="text-[13px] font-medium text-[#808080]">Add Manual Walk-in</span>
-      </button>
+      {/* Walk-ins are always booked into one specific hospital (submitWalkIn
+          refuses to submit otherwise) — hiding the entry point under "All
+          Hospitals" instead of letting someone open the modal and only find
+          out it's blocked after filling it out. */}
+      {hospitalId !== "all" && (
+        <button
+          type="button"
+          onClick={openWalkInModal}
+          className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[1057px] top-[825px] rounded-[4px] w-[289px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#f6f5f4] transition-colors"
+        >
+          <div className="w-[15px] h-[15px] text-[#808080]">
+            <IconPlus className="block max-w-none size-full" />
+          </div>
+          <span className="text-[13px] font-medium text-[#808080]">Add Manual Walk-in</span>
+        </button>
+      )}
 
       {/* Card height increased from the original 75px: at 11px font the
           caption below wraps to two lines, which pushed a couple pixels
