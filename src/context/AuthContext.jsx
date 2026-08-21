@@ -21,21 +21,40 @@ const EMPTY_PERMISSIONS = {
 export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  // True only when the /me fetch itself failed (network blip, backend
+  // restart, etc.) — distinct from "the admin genuinely has no access".
+  // SectionGuard/WebNav need this distinction: without it, a single
+  // transient failure right after login permanently looks identical to a
+  // real permissions restriction (everything defaults to EMPTY_PERMISSIONS
+  // either way), and there was no way to tell the two apart or recover
+  // short of a manual hard refresh.
+  const [profileError, setProfileError] = useState(false);
 
   const refreshProfile = useCallback(async () => {
     if (!getToken()) {
       setProfile(null);
+      setProfileError(false);
       setLoading(false);
       return;
     }
-    try {
-      const me = await api.get("/api/auth/me");
-      setProfile(me);
-    } catch {
-      setProfile(null);
-    } finally {
-      setLoading(false);
+    // One retry after a short delay before giving up — covers exactly the
+    // kind of one-off hiccup (dev server hot-reloading, a dropped
+    // connection) that used to silently strand an admin in a fully
+    // "restricted" UI with no indication anything had gone wrong.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const me = await api.get("/api/auth/me");
+        setProfile(me);
+        setProfileError(false);
+        setLoading(false);
+        return;
+      } catch {
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 600));
+      }
     }
+    setProfile(null);
+    setProfileError(true);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -45,6 +64,7 @@ export function AuthProvider({ children }) {
   const value = {
     profile,
     loading,
+    profileError,
     refreshProfile,
     isSuperAdmin: profile?.isSuperAdmin ?? false,
     canManageTeam: profile?.canManageTeam ?? false,

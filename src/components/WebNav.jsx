@@ -29,10 +29,19 @@ const ITEM_GAP = 56;
 
 export default function WebNav({ className }) {
   const location = useLocation();
-  const { permissions } = useAuth();
+  const { permissions, profileError } = useAuth();
 
   const activePath = ACTIVE_PATH_OVERRIDES[location.pathname] || location.pathname;
-  const visibleItems = NAV_ITEMS.filter((item) => permissions[item.section] !== "none");
+  // On a genuine permissions restriction, hide the item — navigating there
+  // would just 403 anyway. But if we couldn't even confirm the admin's
+  // permissions (profileError — see AuthContext/SectionGuard), permissions
+  // defaults to the same "none everywhere" shape as a real restriction
+  // would. Showing every item in that case, rather than a near-empty
+  // sidebar, keeps the admin able to navigate and retry from each page's
+  // own SectionGuard instead of looking locked out of the whole app.
+  const visibleItems = profileError
+    ? NAV_ITEMS
+    : NAV_ITEMS.filter((item) => permissions[item.section] !== "none");
   const activeIndex = visibleItems.findIndex((item) => item.to === activePath);
   const isSettingsActive = activePath === "/settings";
 

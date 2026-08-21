@@ -12,9 +12,38 @@ import { IconLock } from "./icons";
 // rather than flashing "Access Restricted" and then the real page a moment
 // later.
 export default function SectionGuard({ section, children }) {
-  const { permissions, loading } = useAuth();
+  const { permissions, loading, profileError, refreshProfile } = useAuth();
 
   if (loading) return null;
+
+  // The /me fetch itself failed (after AuthContext's own retry) rather than
+  // the admin genuinely having 'none' on this section — permissions default
+  // to empty either way, so without this check a transient network/server
+  // hiccup right after login looked identical to a real restriction, with
+  // no way to tell the difference or recover besides a manual hard refresh.
+  if (profileError) {
+    return (
+      <div className="min-h-[600px] flex items-center justify-center px-8">
+        <div className="max-w-[420px] flex flex-col items-center text-center gap-4">
+          <div className="w-[64px] h-[64px] rounded-full bg-[#f1dddc] flex items-center justify-center">
+            <IconLock className="w-7 h-7 text-[#ad2b21]" />
+          </div>
+          <h2 className="font-poppins font-bold text-[22px] text-black">Couldn't verify your access</h2>
+          <p className="font-poppins font-medium text-[14px] text-[#808080] leading-relaxed">
+            We couldn't reach the ResQ server to check your permissions. This usually clears up on its own —
+            try again, or check that the API is running.
+          </p>
+          <button
+            type="button"
+            onClick={refreshProfile}
+            className="mt-1 bg-[#ad2b21] rounded-[16px] h-[44px] px-6 flex items-center justify-center cursor-pointer hover:bg-[#8f2419] transition-colors"
+          >
+            <span className="font-poppins font-bold text-[14px] text-white">Try again</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (permissions[section] === "none") {
     return (
