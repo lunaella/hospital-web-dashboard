@@ -700,31 +700,11 @@ export default function DonorManagement() {
           <IconCalendar className="w-4 h-4 text-black" />
           <p className="font-poppins font-bold text-[17px] text-black whitespace-nowrap">Appointment View</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Camera check-in — unlike the Walk-in button below, this isn't
-              gated on a specific hospital being selected: completeAppointment
-              is scoped server-side to whichever hospital the scanned donor's
-              own appointment actually belongs to (requireHospitalScope reads
-              it off the appointment row, not the dashboard's current
-              filter), same as the checkin URL param path above. */}
-          <button
-            type="button"
-            onClick={() => setScannerOpen(true)}
-            className="w-[26px] h-[19px] rounded-[6px] border border-[#d9d9d9] flex items-center justify-center cursor-pointer hover:bg-[#f6f5f4] transition-colors"
-            title="Scan donor QR to check in"
-            aria-label="Scan donor QR to check in"
-          >
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#808080" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 7V4a1 1 0 0 1 1-1h3M17 3h3a1 1 0 0 1 1 1v3M21 17v3a1 1 0 0 1-1 1h-3M7 21H4a1 1 0 0 1-1-1v-3" />
-              <rect x="9" y="9" width="6" height="6" rx="0.5" />
-            </svg>
-          </button>
-          {isToday && (
-            <div className="bg-[#ac271d] h-[19px] rounded-[10px] px-3 flex items-center justify-center shrink-0">
-              <p className="font-poppins font-bold text-[10px] text-white leading-[normal] whitespace-nowrap">Today</p>
-            </div>
-          )}
-        </div>
+        {isToday && (
+          <div className="bg-[#ac271d] h-[19px] rounded-[10px] px-3 flex items-center justify-center shrink-0">
+            <p className="font-poppins font-bold text-[10px] text-white leading-[normal] whitespace-nowrap">Today</p>
+          </div>
+        )}
       </div>
       <div className="absolute left-[1035px] top-[271px] w-[324px] flex items-center justify-between">
         <button
@@ -758,9 +738,10 @@ export default function DonorManagement() {
 
       {/* Fixed-height viewport: the list scrolls internally instead of
           growing the card (and everything below it) as appointments are
-          added. Sized to show ~3 cards at a time, matching the original
-          design's assumed default. */}
-      <div className="absolute left-[1056px] top-[313px] w-[290px] max-h-[500px] overflow-y-auto flex flex-col gap-[25px] pr-1">
+          added. Shortened from the original 500px to leave clean room below
+          for the Scan QR / Add Manual Walk-in buttons instead of the list
+          overlapping them. */}
+      <div className="absolute left-[1056px] top-[313px] w-[290px] max-h-[452px] overflow-y-auto flex flex-col gap-[25px] pr-1">
         {appointments.map((apt) => (
           <div
             key={apt.id}
@@ -817,6 +798,26 @@ export default function DonorManagement() {
           </div>
         ))}
       </div>
+
+      {/* Camera check-in — unlike the Walk-in button below, this isn't
+          gated on a specific hospital being selected: completeAppointment
+          is scoped server-side to whichever hospital the scanned donor's
+          own appointment actually belongs to (requireHospitalScope reads
+          it off the appointment row, not the dashboard's current filter),
+          same as the checkin URL param path in this component's top-level
+          useEffect. */}
+      <button
+        type="button"
+        onClick={() => setScannerOpen(true)}
+        className="absolute bg-[#9B1B20] h-[32px] left-[1057px] top-[777px] rounded-[4px] w-[289px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8B1218] transition-colors"
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 9V6a2 2 0 0 1 2-2h2l1.5-2h7L17 4h2a2 2 0 0 1 2 2v3" />
+          <path d="M3 15v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3" />
+          <circle cx="12" cy="12" r="3.2" />
+        </svg>
+        <span className="text-[13px] font-semibold text-white">Scan QR to Check In</span>
+      </button>
 
       {/* Walk-ins are always booked into one specific hospital (submitWalkIn
           refuses to submit otherwise) — hiding the entry point under "All
