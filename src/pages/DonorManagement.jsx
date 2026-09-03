@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import PageHeader from "../components/PageHeader";
 import { api } from "../lib/apiClient";
@@ -244,10 +245,10 @@ export default function DonorManagement() {
   const [walkInSubmitting, setWalkInSubmitting] = useState(false);
   const [walkInError, setWalkInError] = useState(null);
 
-  function openWalkInModal() {
+  function openWalkInModal(initialQuery = "") {
     setWalkInOpen(true);
     setWalkInMode("search");
-    setWalkInQuery("");
+    setWalkInQuery(initialQuery);
     setWalkInResults([]);
     setWalkInSelected(null);
     setWalkInNewName("");
@@ -261,6 +262,26 @@ export default function DonorManagement() {
     if (walkInSubmitting) return;
     setWalkInOpen(false);
   }
+
+  // Lets the donor app's "Digital Donor QR Pass" actually do something when
+  // scanned: it links to /donor-management?checkin=<donorCode>, so a staffer
+  // who's already logged in here lands on this page with the Walk-in lookup
+  // pre-opened and pre-searched for that exact donor, instead of a plain
+  // code that a phone camera has nowhere to send (see qr_pass_modal_view.dart).
+  // Runs once on mount; clears the param afterward so refreshing/closing the
+  // modal doesn't keep reopening it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const code = searchParams.get("checkin");
+    if (!code) return;
+    openWalkInModal(code);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("checkin");
+      return next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Debounced live search against the real donor list as the admin types.
   useEffect(() => {
@@ -681,7 +702,7 @@ export default function DonorManagement() {
       {hospitalId !== "all" && (
         <button
           type="button"
-          onClick={openWalkInModal}
+          onClick={() => openWalkInModal()}
           className="absolute border border-[#d9d9d9] border-solid h-[28px] left-[1057px] top-[825px] rounded-[4px] w-[289px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#f6f5f4] transition-colors"
         >
           <div className="w-[15px] h-[15px] text-[#808080]">
