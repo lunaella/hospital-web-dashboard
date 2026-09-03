@@ -42,7 +42,12 @@ function toDateParam(date) {
   return `${y}-${m}-${d}`;
 }
 
-const PAGE_SIZE = 5;
+// The Donor Database card's fixed height (577px, see the card's className
+// below) was actually sized for 7 rows (header ends at y=328, "Showing X of
+// Y" starts at y=754 — (754-328)/58px-per-row ≈ 7.3) — 5 left a ~136px gap
+// of empty white space between the last row and the footer text instead of
+// the rows filling the container.
+const PAGE_SIZE = 7;
 
 export default function DonorManagement() {
   const { hospitalId } = useHospital();
