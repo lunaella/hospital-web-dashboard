@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import PageHeader from "../components/PageHeader";
+import QrScannerModal from "../components/QrScannerModal";
 import { api } from "../lib/apiClient";
 import { connectRealtime } from "../lib/realtime";
 import { useHospital } from "../context/HospitalContext";
@@ -283,6 +284,65 @@ export default function DonorManagement() {
     return () => clearTimeout(timer);
   }, [checkinBanner]);
 
+  // Shared by both ways a `checkin=<donorCode>` value can arrive: the URL
+  // query param (a donor's own phone camera app opening the QR pass link)
+  // and the in-page camera scanner below (a tablet decoding the same link
+  // itself, without ever navigating). Same outcome either way — look the
+  // donor up, close out their active appointment if they have one, fall
+  // back to the Walk-in search otherwise.
+  async function performCheckin(code) {
+    let donor;
+    try {
+      const data = await api.get(`/api/donors?q=${encodeURIComponent(code)}&pageSize=5`);
+      donor = data.donors.map(mapDonor).find((d) => d.id === code) ?? data.donors.map(mapDonor)[0];
+    } catch (err) {
+      setCheckinBanner({ type: "error", message: `Couldn't look up ${code}: ${err.message}` });
+      return;
+    }
+    if (!donor) {
+      setCheckinBanner({ type: "error", message: `No donor found matching "${code}".` });
+      openWalkInModal(code);
+      return;
+    }
+
+    let activeAppointment;
+    try {
+      activeAppointment = await api.get(`/api/donors/${donor.dbId}/active-appointment`);
+    } catch (err) {
+      setCheckinBanner({ type: "error", message: `Couldn't check ${donor.name}'s appointments: ${err.message}` });
+      return;
+    }
+    if (!activeAppointment) {
+      setCheckinBanner({
+        type: "info",
+        message: `${donor.name} has no active appointment to check in — opening Walk-in booking instead.`,
+      });
+      openWalkInModal(code);
+      return;
+    }
+
+    try {
+      const result = await api.post(`/api/appointments/${activeAppointment.id}/complete`);
+      setAppointments((prev) => prev.map((a) => (a.id === activeAppointment.id ? { ...a, status: "completed" } : a)));
+      const quotaNote = result.fulfilledRequest
+        ? ` Counted toward ${result.fulfilledRequest.requestCode} (${result.fulfilledRequest.unitsFulfilled}/${result.fulfilledRequest.unitsNeeded} ${donor.bloodType}).`
+        : "";
+      setCheckinBanner({ type: "success", message: `${donor.name} checked in and donation recorded.${quotaNote}` });
+
+      // Same donor-list refetch recordDonation does after a manual
+      // "Record Donation" click — this donor's eligibility just changed.
+      const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
+      bloodTypeFilter.forEach((t) => params.append("bloodType", t));
+      if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
+      const data = await api.get(`/api/donors?${params.toString()}`);
+      setDonors(data.donors.map(mapDonor));
+      setTotalDonors(data.total);
+      setTotalPages(data.totalPages);
+    } catch (err) {
+      setCheckinBanner({ type: "error", message: `Couldn't complete ${donor.name}'s check-in: ${err.message}` });
+    }
+  }
+
   useEffect(() => {
     const code = searchParams.get("checkin");
     if (!code) return;
@@ -294,61 +354,37 @@ export default function DonorManagement() {
       },
       { replace: true }
     );
-
-    (async () => {
-      let donor;
-      try {
-        const data = await api.get(`/api/donors?q=${encodeURIComponent(code)}&pageSize=5`);
-        donor = data.donors.map(mapDonor).find((d) => d.id === code) ?? data.donors.map(mapDonor)[0];
-      } catch (err) {
-        setCheckinBanner({ type: "error", message: `Couldn't look up ${code}: ${err.message}` });
-        return;
-      }
-      if (!donor) {
-        setCheckinBanner({ type: "error", message: `No donor found matching "${code}".` });
-        openWalkInModal(code);
-        return;
-      }
-
-      let activeAppointment;
-      try {
-        activeAppointment = await api.get(`/api/donors/${donor.dbId}/active-appointment`);
-      } catch (err) {
-        setCheckinBanner({ type: "error", message: `Couldn't check ${donor.name}'s appointments: ${err.message}` });
-        return;
-      }
-      if (!activeAppointment) {
-        setCheckinBanner({
-          type: "info",
-          message: `${donor.name} has no active appointment to check in — opening Walk-in booking instead.`,
-        });
-        openWalkInModal(code);
-        return;
-      }
-
-      try {
-        const result = await api.post(`/api/appointments/${activeAppointment.id}/complete`);
-        setAppointments((prev) => prev.map((a) => (a.id === activeAppointment.id ? { ...a, status: "completed" } : a)));
-        const quotaNote = result.fulfilledRequest
-          ? ` Counted toward ${result.fulfilledRequest.requestCode} (${result.fulfilledRequest.unitsFulfilled}/${result.fulfilledRequest.unitsNeeded} ${donor.bloodType}).`
-          : "";
-        setCheckinBanner({ type: "success", message: `${donor.name} checked in and donation recorded.${quotaNote}` });
-
-        // Same donor-list refetch recordDonation does after a manual
-        // "Record Donation" click — this donor's eligibility just changed.
-        const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
-        bloodTypeFilter.forEach((t) => params.append("bloodType", t));
-        if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
-        const data = await api.get(`/api/donors?${params.toString()}`);
-        setDonors(data.donors.map(mapDonor));
-        setTotalDonors(data.total);
-        setTotalPages(data.totalPages);
-      } catch (err) {
-        setCheckinBanner({ type: "error", message: `Couldn't complete ${donor.name}'s check-in: ${err.message}` });
-      }
-    })();
+    performCheckin(code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // --- Camera QR scanner (tablet check-in station) ---
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  // Parses whatever the camera decodes into a donor code, same as the URL
+  // path above. Accepts either the full pass link (https://.../donor-
+  // management?checkin=D-1234) or, defensively, a bare donor code on its
+  // own — a QR scanner library shouldn't hard-fail just because someone
+  // printed/typed a code by hand instead of using the app's real pass.
+  function extractCheckinCode(decodedText) {
+    try {
+      const url = new URL(decodedText);
+      const code = url.searchParams.get("checkin");
+      if (code) return code;
+    } catch {
+      // Not a URL — fall through to the bare-code case below.
+    }
+    return /^[A-Za-z]-?\d{3,}$/.test(decodedText.trim()) ? decodedText.trim() : null;
+  }
+
+  function handleScannerDecode(decodedText) {
+    const code = extractCheckinCode(decodedText);
+    if (!code) {
+      setCheckinBanner({ type: "error", message: "That QR code isn't a ResQ donor pass." });
+      return;
+    }
+    performCheckin(code);
+  }
 
   // Debounced live search against the real donor list as the admin types.
   useEffect(() => {
@@ -664,11 +700,31 @@ export default function DonorManagement() {
           <IconCalendar className="w-4 h-4 text-black" />
           <p className="font-poppins font-bold text-[17px] text-black whitespace-nowrap">Appointment View</p>
         </div>
-        {isToday && (
-          <div className="bg-[#ac271d] h-[19px] rounded-[10px] px-3 flex items-center justify-center shrink-0">
-            <p className="font-poppins font-bold text-[10px] text-white leading-[normal] whitespace-nowrap">Today</p>
-          </div>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Camera check-in — unlike the Walk-in button below, this isn't
+              gated on a specific hospital being selected: completeAppointment
+              is scoped server-side to whichever hospital the scanned donor's
+              own appointment actually belongs to (requireHospitalScope reads
+              it off the appointment row, not the dashboard's current
+              filter), same as the checkin URL param path above. */}
+          <button
+            type="button"
+            onClick={() => setScannerOpen(true)}
+            className="w-[26px] h-[19px] rounded-[6px] border border-[#d9d9d9] flex items-center justify-center cursor-pointer hover:bg-[#f6f5f4] transition-colors"
+            title="Scan donor QR to check in"
+            aria-label="Scan donor QR to check in"
+          >
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#808080" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7V4a1 1 0 0 1 1-1h3M17 3h3a1 1 0 0 1 1 1v3M21 17v3a1 1 0 0 1-1 1h-3M7 21H4a1 1 0 0 1-1-1v-3" />
+              <rect x="9" y="9" width="6" height="6" rx="0.5" />
+            </svg>
+          </button>
+          {isToday && (
+            <div className="bg-[#ac271d] h-[19px] rounded-[10px] px-3 flex items-center justify-center shrink-0">
+              <p className="font-poppins font-bold text-[10px] text-white leading-[normal] whitespace-nowrap">Today</p>
+            </div>
+          )}
+        </div>
       </div>
       <div className="absolute left-[1035px] top-[271px] w-[324px] flex items-center justify-between">
         <button
@@ -796,6 +852,13 @@ export default function DonorManagement() {
       <p className="absolute top-[953px] font-medium leading-[1.4] left-[1091px] not-italic text-[#aaa4a0] text-[11px] w-[230px]">
         4 of 6 extraction beds currently in use
       </p>
+
+      {scannerOpen && (
+        <QrScannerModal
+          onScan={handleScannerDecode}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
 
       {checkinBanner &&
         createPortal(
