@@ -9,6 +9,15 @@ import { broadcast } from "../realtime/hub.js";
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
 
+// PRC coordinates all donor-facing blood requests on behalf of the partner
+// hospitals — the app's Priority Request Feed and "Schedule New Appointment"
+// flow should only ever surface broadcasts from this one hospital row, even
+// though other hospitals still exist in the `hospitals` table for other
+// purposes (admin-side records, walk-in appointments booked directly by
+// staff). Must match the `name` of the hospital row created in Settings >
+// Hospital Network exactly.
+const COORDINATING_HOSPITAL_NAME = "Philippine Red Cross - Quezon Chapter";
+
 // Same 90-day DOH cooling-rule math as the donor_eligibility view (schema.sql)
 // and exportDonors (donors.controller.js) — duplicated as a WHERE id = $1
 // query rather than joining the view, since the view isn't donor-scoped and
@@ -229,11 +238,14 @@ export const listOpenRequestsForDonor = asyncHandler(async (req, res) => {
      FROM blood_requests r
      JOIN hospitals h ON h.id = r.hospital_id
      WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED') AND r.blood_type = $1
+       AND h.name = $${hasLocation ? 4 : 2}
      ORDER BY
        CASE r.priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END,
        (${distanceExpr}) ASC NULLS LAST,
        r.created_at DESC`,
-    hasLocation ? [req.donor.bloodType, lat, lng] : [req.donor.bloodType]
+    hasLocation
+      ? [req.donor.bloodType, lat, lng, COORDINATING_HOSPITAL_NAME]
+      : [req.donor.bloodType, COORDINATING_HOSPITAL_NAME]
   );
   res.json(rows);
 });

@@ -12,6 +12,19 @@
 // this writing; codes are short slugs made up for this app (not each
 // hospital's own internal code) and can be edited freely in the form.
 export const HOSPITAL_DIRECTORY = {
+  // The coordinating chapter itself — donor-facing blood request broadcasts
+  // and the mobile app's "Schedule New Appointment" flow are scoped to
+  // exactly this hospital row (see COORDINATING_HOSPITAL_NAME in
+  // server/src/controllers/donorPortal.controller.js), so its name here
+  // must match that constant exactly. Address is a placeholder — edit it
+  // in the Add Hospital form before saving if you have the real one.
+  "Quezon City": [
+    {
+      name: "Philippine Red Cross - Quezon Chapter",
+      code: "PRC-QC",
+      address: "Quezon City, Philippines",
+    },
+  ],
   "Lucena City": [
     {
       name: "Lucena MMG General Hospital",
