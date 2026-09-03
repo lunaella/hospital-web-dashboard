@@ -113,7 +113,7 @@ export default function DonorManagement() {
     // event's own hospital/date obviously can't affect what's on screen, so
     // an unrelated hospital's booking doesn't trigger a pointless request.
     const disconnect = connectRealtime((event) => {
-      if (event.type !== "appointment_booked" && event.type !== "appointment_cancelled") return;
+      if (!["appointment_booked", "appointment_cancelled", "appointment_completed"].includes(event.type)) return;
       if (hospitalId !== "all" && event.hospitalId !== hospitalId) return;
       const eventDate = new Date(event.appointment.scheduledAt);
       if (toDateParam(eventDate) !== toDateParam(viewDate)) return;
@@ -264,22 +264,89 @@ export default function DonorManagement() {
   }
 
   // Lets the donor app's "Digital Donor QR Pass" actually do something when
-  // scanned: it links to /donor-management?checkin=<donorCode>, so a staffer
-  // who's already logged in here lands on this page with the Walk-in lookup
-  // pre-opened and pre-searched for that exact donor, instead of a plain
-  // code that a phone camera has nowhere to send (see qr_pass_modal_view.dart).
-  // Runs once on mount; clears the param afterward so refreshing/closing the
-  // modal doesn't keep reopening it.
+  // scanned: it links to /donor-management?checkin=<donorCode>. Scanning a
+  // donor's pass at their appointment slot is the real-world equivalent of
+  // an attendance check — staff choosing to scan a specific donor's code is
+  // itself the confirming action, so this closes the loop automatically
+  // (marks their appointment complete, counts toward a matching broadcast's
+  // quota, logs the arrival) rather than making staff scan and then also
+  // click a second "confirm" button. Falls back to the old pre-searched
+  // Walk-in lookup only when there's no active appointment to close, or the
+  // donor code can't be resolved at all — those are exactly the cases where
+  // a human needs to decide what to do next, not something to guess at.
   const [searchParams, setSearchParams] = useSearchParams();
+  const [checkinBanner, setCheckinBanner] = useState(null); // {type: 'success'|'info'|'error', message}
+
+  useEffect(() => {
+    if (!checkinBanner) return;
+    const timer = setTimeout(() => setCheckinBanner(null), 6000);
+    return () => clearTimeout(timer);
+  }, [checkinBanner]);
+
   useEffect(() => {
     const code = searchParams.get("checkin");
     if (!code) return;
-    openWalkInModal(code);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete("checkin");
-      return next;
-    }, { replace: true });
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("checkin");
+        return next;
+      },
+      { replace: true }
+    );
+
+    (async () => {
+      let donor;
+      try {
+        const data = await api.get(`/api/donors?q=${encodeURIComponent(code)}&pageSize=5`);
+        donor = data.donors.map(mapDonor).find((d) => d.id === code) ?? data.donors.map(mapDonor)[0];
+      } catch (err) {
+        setCheckinBanner({ type: "error", message: `Couldn't look up ${code}: ${err.message}` });
+        return;
+      }
+      if (!donor) {
+        setCheckinBanner({ type: "error", message: `No donor found matching "${code}".` });
+        openWalkInModal(code);
+        return;
+      }
+
+      let activeAppointment;
+      try {
+        activeAppointment = await api.get(`/api/donors/${donor.dbId}/active-appointment`);
+      } catch (err) {
+        setCheckinBanner({ type: "error", message: `Couldn't check ${donor.name}'s appointments: ${err.message}` });
+        return;
+      }
+      if (!activeAppointment) {
+        setCheckinBanner({
+          type: "info",
+          message: `${donor.name} has no active appointment to check in — opening Walk-in booking instead.`,
+        });
+        openWalkInModal(code);
+        return;
+      }
+
+      try {
+        const result = await api.post(`/api/appointments/${activeAppointment.id}/complete`);
+        setAppointments((prev) => prev.map((a) => (a.id === activeAppointment.id ? { ...a, status: "completed" } : a)));
+        const quotaNote = result.fulfilledRequest
+          ? ` Counted toward ${result.fulfilledRequest.requestCode} (${result.fulfilledRequest.unitsFulfilled}/${result.fulfilledRequest.unitsNeeded} ${donor.bloodType}).`
+          : "";
+        setCheckinBanner({ type: "success", message: `${donor.name} checked in and donation recorded.${quotaNote}` });
+
+        // Same donor-list refetch recordDonation does after a manual
+        // "Record Donation" click — this donor's eligibility just changed.
+        const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
+        bloodTypeFilter.forEach((t) => params.append("bloodType", t));
+        if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
+        const data = await api.get(`/api/donors?${params.toString()}`);
+        setDonors(data.donors.map(mapDonor));
+        setTotalDonors(data.total);
+        setTotalPages(data.totalPages);
+      } catch (err) {
+        setCheckinBanner({ type: "error", message: `Couldn't complete ${donor.name}'s check-in: ${err.message}` });
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -729,6 +796,30 @@ export default function DonorManagement() {
       <p className="absolute top-[953px] font-medium leading-[1.4] left-[1091px] not-italic text-[#aaa4a0] text-[11px] w-[230px]">
         4 of 6 extraction beds currently in use
       </p>
+
+      {checkinBanner &&
+        createPortal(
+          <div
+            className={`fixed top-6 left-1/2 -translate-x-1/2 z-[60] font-poppins max-w-[520px] rounded-[12px] px-5 py-3 text-[13px] font-medium shadow-lg flex items-center gap-3 ${
+              checkinBanner.type === "success"
+                ? "bg-[#16a34a] text-white"
+                : checkinBanner.type === "info"
+                ? "bg-[#f6f5f4] text-black border border-[#c0bfbf]"
+                : "bg-[#d70b07] text-white"
+            }`}
+          >
+            <span className="flex-1">{checkinBanner.message}</span>
+            <button
+              type="button"
+              onClick={() => setCheckinBanner(null)}
+              className="cursor-pointer opacity-80 hover:opacity-100 text-[15px] leading-none"
+              aria-label="Dismiss"
+            >
+              &times;
+            </button>
+          </div>,
+          document.body
+        )}
 
       {walkInOpen &&
         createPortal(

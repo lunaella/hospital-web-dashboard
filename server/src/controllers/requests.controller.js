@@ -113,7 +113,10 @@ const RATING_THRESHOLDS_MIN = {
   NORMAL: [60, 120, 240],
 };
 
-function ratingFor(priority, elapsedMinutes) {
+// Exported so completeAppointment (donors.controller.js) can compute the
+// same rating when a donor's check-in auto-fulfills a matching broadcast,
+// instead of duplicating these thresholds a second time.
+export function ratingFor(priority, elapsedMinutes) {
   const [optimal, good, acceptable] = RATING_THRESHOLDS_MIN[priority] || RATING_THRESHOLDS_MIN.NORMAL;
   if (elapsedMinutes <= optimal) return "Optimal";
   if (elapsedMinutes <= good) return "Good";

@@ -3,6 +3,8 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { hospitalIdParam } from "../utils/hospitalScope.js";
 import { bookAppointment, AppointmentBookingError } from "../services/appointments.service.js";
 import { verifySessionToken } from "../utils/jwt.js";
+import { broadcast } from "../realtime/hub.js";
+import { ratingFor } from "./requests.controller.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
@@ -257,14 +259,39 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   res.json(rows[0]);
 });
 
+// Finds the donor's own next active (pending/confirmed) appointment, if
+// any — powers the QR pass's scan-to-check-in flow (DonorManagement.jsx's
+// `checkin` query param): once a donor is looked up by donor_code, this is
+// how staff find which appointment to close out without hunting through
+// the day's list by hand. Not date-restricted (earliest active one wins)
+// since a donor could scan in slightly before or after their exact slot.
+export const getActiveAppointmentForDonor = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT a.id, a.status, a.hospital_id AS "hospitalId", a.scheduled_at AS "scheduledAt",
+            h.name AS "hospitalName"
+     FROM appointments a
+     JOIN hospitals h ON h.id = a.hospital_id
+     WHERE a.donor_id = $1 AND a.status IN ('pending', 'confirmed')
+     ORDER BY a.scheduled_at ASC
+     LIMIT 1`,
+    [req.params.id]
+  );
+  res.json(rows[0] ?? null);
+});
+
 // Records an actual completed donation. This is the one place that closes
 // the loop between "donor showed up" and the rest of the system: it flips
 // the appointment to completed, logs a donor_arrivals row (so the donor
 // shows up in Dashboard's Recent Arrivals) tagged to the same hospital as
 // the appointment, starts the donor's 90-day DOH cooling period, and adds
-// one unit to that hospital's inventory for that blood type. Wrapped in a
-// single transaction with a row lock so a double-click can't double-count
-// the same donation.
+// one unit to that hospital's inventory for that blood type. It also
+// counts this donation toward whichever broadcast is currently asking for
+// this exact blood type at this hospital (same units_fulfilled/auto-resolve
+// logic as fulfillRequest, requests.controller.js) — a completed donation
+// is a real unit collected, so it should move that request's quota the
+// same way a manual "record units" entry would, without staff having to
+// remember to do that separately. Wrapped in a single transaction with a
+// row lock so a double-click can't double-count the same donation.
 export const completeAppointment = asyncHandler(async (req, res) => {
   const client = await pool.connect();
   try {
@@ -312,8 +339,56 @@ export const completeAppointment = asyncHandler(async (req, res) => {
       [appt.hospitalId, appt.bloodType]
     );
 
+    // Oldest, most urgent still-open request for this exact blood type at
+    // this hospital gets credited first — same tie-break order the donor
+    // feed itself sorts by (donorPortal.controller.js's
+    // listOpenRequestsForDonor), so the request most likely to be why this
+    // donor showed up in the first place is the one that benefits.
+    const { rows: matchRows } = await client.query(
+      `SELECT id, request_code AS "requestCode", units_needed AS "unitsNeeded",
+              units_fulfilled AS "unitsFulfilled", priority, created_at AS "createdAt"
+       FROM blood_requests
+       WHERE hospital_id = $1 AND blood_type = $2 AND status IN ('OPEN', 'PARTIALLY_FULFILLED')
+       ORDER BY CASE priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, created_at ASC
+       FOR UPDATE
+       LIMIT 1`,
+      [appt.hospitalId, appt.bloodType]
+    );
+    let fulfilledRequest = null;
+    const match = matchRows[0];
+    if (match) {
+      const newFulfilled = Math.min(match.unitsNeeded, match.unitsFulfilled + 1);
+      const isNowFulfilled = newFulfilled >= match.unitsNeeded;
+      const resolvedAt = isNowFulfilled ? new Date() : null;
+      const rating = isNowFulfilled
+        ? ratingFor(match.priority, (resolvedAt - new Date(match.createdAt)) / 60000)
+        : null;
+      const { rows: updated } = await client.query(
+        `UPDATE blood_requests
+         SET units_fulfilled = $1,
+             status = $2,
+             resolved_at = COALESCE($3, resolved_at),
+             system_rating = COALESCE($4, system_rating)
+         WHERE id = $5
+         RETURNING request_code AS "requestCode", units_needed AS "unitsNeeded",
+                   units_fulfilled AS "unitsFulfilled", status`,
+        [newFulfilled, isNowFulfilled ? "FULFILLED" : "PARTIALLY_FULFILLED", resolvedAt, rating, match.id]
+      );
+      fulfilledRequest = updated[0];
+    }
+
     await client.query("COMMIT");
-    res.json({ id: appt.id, status: "completed" });
+    res.json({ id: appt.id, status: "completed", fulfilledRequest });
+
+    // Pushes the completion to every open admin tab/station in real time —
+    // same fire-and-forget-after-respond pattern as appointment_booked/
+    // appointment_cancelled (donorPortal.controller.js).
+    broadcast({
+      type: "appointment_completed",
+      hospitalId: appt.hospitalId,
+      appointment: { id: appt.id, status: "completed" },
+      fulfilledRequest,
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
