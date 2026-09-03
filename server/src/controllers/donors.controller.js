@@ -5,6 +5,8 @@ import { bookAppointment, AppointmentBookingError } from "../services/appointmen
 import { verifySessionToken } from "../utils/jwt.js";
 import { broadcast } from "../realtime/hub.js";
 import { ratingFor } from "./requests.controller.js";
+import { classifyDonorRow } from "../utils/eligibilityClassifier.js";
+import { MinHeap } from "../utils/minHeap.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
@@ -279,6 +281,24 @@ export const getActiveAppointmentForDonor = asyncHandler(async (req, res) => {
   res.json(rows[0] ?? null);
 });
 
+// Instant Pre-Screening Verification — re-runs the same rule-based decision
+// tree the donor's own app uses (see eligibilityClassifier.js) against
+// whatever screening answers are on file, server-side, so a hospital
+// staffer scanning a donor's QR pass gets an authoritative eligible /
+// temporarily deferred (with a clearance date) / requires clinical review
+// read, without trusting a client-cached status the donor's phone could be
+// showing stale.
+export const getScreeningSummary = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
+            last_donation_at AS "lastDonationAt"
+     FROM donors WHERE id = $1`,
+    [req.params.id]
+  );
+  if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
+  res.json(classifyDonorRow(rows[0]));
+});
+
 // Records an actual completed donation. This is the one place that closes
 // the loop between "donor showed up" and the rest of the system: it flips
 // the appointment to completed, logs a donor_arrivals row (so the donor
@@ -339,23 +359,34 @@ export const completeAppointment = asyncHandler(async (req, res) => {
       [appt.hospitalId, appt.bloodType]
     );
 
-    // Oldest, most urgent still-open request for this exact blood type at
-    // this hospital gets credited first — same tie-break order the donor
-    // feed itself sorts by (donorPortal.controller.js's
-    // listOpenRequestsForDonor), so the request most likely to be why this
-    // donor showed up in the first place is the one that benefits.
-    const { rows: matchRows } = await client.query(
+    // Min-Heap Queue Activation: every still-open request for this exact
+    // blood type at this hospital is a candidate this donor's arrival could
+    // satisfy — inserted into a real MinHeap (utils/minHeap.js, the same
+    // class notifications.service.js uses to rank donor response times) so
+    // extractMin() is the thing actually deciding which request benefits,
+    // not a SQL ORDER BY LIMIT 1 standing in for one. Same priority-tier-
+    // then-age comparator as the donor feed's own sort (donorPortal.
+    // controller.js's listOpenRequestsForDonor) so the request most likely
+    // to be why this donor showed up is the one credited.
+    const { rows: candidateRows } = await client.query(
       `SELECT id, request_code AS "requestCode", units_needed AS "unitsNeeded",
               units_fulfilled AS "unitsFulfilled", priority, created_at AS "createdAt"
        FROM blood_requests
        WHERE hospital_id = $1 AND blood_type = $2 AND status IN ('OPEN', 'PARTIALLY_FULFILLED')
-       ORDER BY CASE priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END, created_at ASC
-       FOR UPDATE
-       LIMIT 1`,
+       FOR UPDATE`,
       [appt.hospitalId, appt.bloodType]
     );
+    const priorityRank = { EMERGENCY: 0, URGENT: 1 };
+    const requestHeap = new MinHeap((a, b) => {
+      const rankA = priorityRank[a.priority] ?? 2;
+      const rankB = priorityRank[b.priority] ?? 2;
+      if (rankA !== rankB) return rankA - rankB;
+      return new Date(a.createdAt) - new Date(b.createdAt);
+    });
+    for (const row of candidateRows) requestHeap.insert(row);
+
     let fulfilledRequest = null;
-    const match = matchRows[0];
+    const match = requestHeap.extractMin();
     if (match) {
       const newFulfilled = Math.min(match.unitsNeeded, match.unitsFulfilled + 1);
       const isNowFulfilled = newFulfilled >= match.unitsNeeded;

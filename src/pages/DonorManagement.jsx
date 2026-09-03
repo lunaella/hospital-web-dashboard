@@ -281,11 +281,14 @@ export default function DonorManagement() {
   // donor code can't be resolved at all — those are exactly the cases where
   // a human needs to decide what to do next, not something to guess at.
   const [searchParams, setSearchParams] = useSearchParams();
-  const [checkinBanner, setCheckinBanner] = useState(null); // {type: 'success'|'info'|'error', message}
+  const [checkinBanner, setCheckinBanner] = useState(null); // {type: 'success'|'info'|'warning'|'error', message}
 
   useEffect(() => {
     if (!checkinBanner) return;
-    const timer = setTimeout(() => setCheckinBanner(null), 6000);
+    // Deferred/clinical-review warnings stay up longer — a staffer needs
+    // time to actually read and act on a safety-relevant message, not just
+    // catch it out of the corner of their eye before it vanishes.
+    const timer = setTimeout(() => setCheckinBanner(null), checkinBanner.type === "warning" ? 12000 : 6000);
     return () => clearTimeout(timer);
   }, [checkinBanner]);
 
@@ -307,6 +310,40 @@ export default function DonorManagement() {
     if (!donor) {
       setCheckinBanner({ type: "error", message: `No donor found matching "${code}".` });
       openWalkInModal(code);
+      return;
+    }
+
+    // Instant Pre-Screening Verification: re-runs the donor's own rule-based
+    // screening server-side (eligibilityClassifier.js — same decision tree
+    // as their app) before anything else happens. A donor flagged DEFERRED
+    // or CLINICAL_REVIEW stops here — their arrival isn't logged as a
+    // completed donation just because staff scanned their pass; a person
+    // still has to look at why and decide. UNKNOWN (no screening on file,
+    // e.g. an admin-created walk-in donor) and ELIGIBLE both fall through
+    // to the normal check-in below, same as the mobile app's own fallback
+    // when it can't run the classifier either.
+    let screening = null;
+    try {
+      screening = await api.get(`/api/donors/${donor.dbId}/screening-summary`);
+    } catch {
+      // Best-effort safety check — if it fails to load, don't block check-in
+      // on it; fall through and let the active-appointment step proceed.
+    }
+    if (screening?.status === "CLINICAL_REVIEW") {
+      setCheckinBanner({
+        type: "warning",
+        message: `${donor.name} requires CLINICAL REVIEW before donating: ${screening.message} Not checked in automatically — a staff member needs to assess this donor first.`,
+      });
+      return;
+    }
+    if (screening?.status === "DEFERRED") {
+      const clearanceNote = screening.clearanceDate
+        ? ` Clear to donate again on ${new Date(screening.clearanceDate).toLocaleDateString()}.`
+        : "";
+      setCheckinBanner({
+        type: "warning",
+        message: `${donor.name} is temporarily deferred: ${screening.message}${clearanceNote}`,
+      });
       return;
     }
 
@@ -332,7 +369,11 @@ export default function DonorManagement() {
       const quotaNote = result.fulfilledRequest
         ? ` Counted toward ${result.fulfilledRequest.requestCode} (${result.fulfilledRequest.unitsFulfilled}/${result.fulfilledRequest.unitsNeeded} ${donor.bloodType}).`
         : "";
-      setCheckinBanner({ type: "success", message: `${donor.name} checked in and donation recorded.${quotaNote}` });
+      const eligibilityNote = screening?.status === "ELIGIBLE" ? " Verified eligible." : "";
+      setCheckinBanner({
+        type: "success",
+        message: `${donor.name} checked in and donation recorded.${eligibilityNote}${quotaNote}`,
+      });
 
       // Same donor-list refetch recordDonation does after a manual
       // "Record Donation" click — this donor's eligibility just changed.
@@ -874,6 +915,8 @@ export default function DonorManagement() {
                 ? "bg-[#16a34a] text-white"
                 : checkinBanner.type === "info"
                 ? "bg-[#f6f5f4] text-black border border-[#c0bfbf]"
+                : checkinBanner.type === "warning"
+                ? "bg-[#fff3e0] text-[#8a5a00] border border-[#ffcc80]"
                 : "bg-[#d70b07] text-white"
             }`}
           >
