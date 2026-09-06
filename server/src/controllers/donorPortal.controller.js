@@ -231,15 +231,20 @@ export const deleteMyAccount = asyncHandler(async (req, res) => {
   res.status(204).send();
 });
 
-const VERIFICATION_FILE_FIELDS = [
-  "idFront",
-  "idBack",
-  "face_front",
-  "face_left",
-  "face_right",
-  "face_up",
-  "face_down",
-];
+const VERIFICATION_ALWAYS_REQUIRED_FIELDS = ["idFront", "face_front", "face_left", "face_right", "face_up", "face_down"];
+
+// Mirrors kNoIdBackTypes in resq_app/lib/views/profile/get_ver_view.dart —
+// these document types have nothing usable on the back (a passport's data
+// is all on the photo page; a clearance/certificate is a single printed
+// page), so the app never captures or sends an "idBack" file for them.
+// Kept server-side too rather than trusting the client's own omission,
+// since this affects what's actually required to accept a submission.
+const VERIFICATION_NO_BACK_ID_TYPES = new Set([
+  "Philippine Passport issued by the Department of Foreign Affairs (DFA)",
+  "NBI Clearance or Police Clearance",
+  "Barangay Clearance or Barangay ID",
+  "PSA Birth Certificate or Marriage Contract",
+]);
 
 // Real photos from get_ver_view.dart's camera capture (maxWidth 1600) are
 // always well above this — anything smaller than a thumbnail is almost
@@ -266,22 +271,35 @@ function validVerificationImage(file) {
   }
 }
 
+// A loose sanity check, not a real parse — just enough to keep obviously
+// garbage input out of the DATE column rather than letting Postgres reject
+// the whole insert over it. The app only ever sends its own
+// DateTime.toIso8601String() output here (or nothing).
+function looksLikeIsoDate(value) {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value));
+}
+
 // "Get Verified" flow (mobile app, get_ver_view.dart): stores the donor's
-// chosen ID type plus all 7 required photos as one submission row.
+// chosen ID type plus the required photos as one submission row (idBack is
+// only required for ID types outside VERIFICATION_NO_BACK_ID_TYPES).
 //
 // Auto-approved (status inserted as 'verified' directly) rather than left
 // 'pending' for a human reviewer — there's no admin-side review screen
 // built yet to ever move it out of 'pending', and no 3rd-party KYC
 // provider wired in to confirm the ID actually belongs to the donor. What
 // IS automated: every file must decode as a real, reasonably-sized image
-// (validVerificationImage below), on top of the app's own on-device check
-// that a face is actually visible in the ID photo before it's ever
-// uploaded — together these catch corrupted, blank, or obviously-wrong
-// submissions without a human needing to look. Neither is real identity
-// verification (matching the ID's face to the selfie captures); the
-// photos are still fully captured and stored either way, so upgrading to
-// a manual review step or real face-matching later only changes this one
-// function, not the schema or the app's upload flow.
+// (validVerificationImage below), on top of the app's own on-device checks
+// that a face is visible in the ID photo and that its printed text is at
+// least roughly consistent with the donor's own registered name/age
+// (extractedBirthdate/extractedAddress below are that check's by-products,
+// carried through for context — not re-verified here) — together these
+// catch corrupted, blank, or obviously-wrong-person submissions without a
+// human needing to look. None of this is real identity verification
+// (matching the ID's face to the selfie captures, or confirming the ID
+// itself is genuine); the photos are still fully captured and stored
+// either way, so upgrading to a manual review step or real face-matching
+// later only changes this one function, not the schema or the app's
+// upload flow.
 //
 // Multiple submissions per donor are still allowed (e.g. retaking bad
 // photos) — this always inserts a fresh row rather than overwriting a
@@ -292,18 +310,28 @@ export const submitVerification = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "idType is required." });
   }
 
-  const missing = VERIFICATION_FILE_FIELDS.filter((field) => !req.files?.[field]?.[0]);
+  const requiredFields = VERIFICATION_NO_BACK_ID_TYPES.has(idType)
+    ? VERIFICATION_ALWAYS_REQUIRED_FIELDS
+    : [...VERIFICATION_ALWAYS_REQUIRED_FIELDS, "idBack"];
+
+  const missing = requiredFields.filter((field) => !req.files?.[field]?.[0]);
   if (missing.length) {
     return res.status(400).json({ error: `Missing required file(s): ${missing.join(", ")}` });
   }
-  const file = (field) => req.files[field][0];
+  const file = (field) => req.files[field]?.[0];
+  const hasIdBack = Boolean(file("idBack"));
 
-  const invalid = VERIFICATION_FILE_FIELDS.filter((field) => !validVerificationImage(file(field)));
+  const invalid = [...requiredFields, ...(hasIdBack ? ["idBack"] : [])].filter(
+    (field) => !validVerificationImage(file(field))
+  );
   if (invalid.length) {
     return res.status(400).json({
       error: `Could not process: ${invalid.join(", ")} — make sure each is a clear photo, not a corrupted or placeholder file.`,
     });
   }
+
+  const extractedBirthdate = looksLikeIsoDate(req.body?.extractedBirthdate) ? req.body.extractedBirthdate : null;
+  const extractedAddress = req.body?.extractedAddress?.trim() || null;
 
   await pool.query(
     `INSERT INTO donor_verifications (
@@ -312,15 +340,16 @@ export const submitVerification = asyncHandler(async (req, res) => {
        face_front, face_front_mime, face_left, face_left_mime,
        face_right, face_right_mime, face_up, face_up_mime,
        face_down, face_down_mime,
+       extracted_birthdate, extracted_address,
        status, reviewed_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'verified',now())`,
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'verified',now())`,
     [
       req.donor.id,
       idType,
       file("idFront").buffer,
       file("idFront").mimetype,
-      file("idBack").buffer,
-      file("idBack").mimetype,
+      hasIdBack ? file("idBack").buffer : null,
+      hasIdBack ? file("idBack").mimetype : null,
       file("face_front").buffer,
       file("face_front").mimetype,
       file("face_left").buffer,
@@ -331,6 +360,8 @@ export const submitVerification = asyncHandler(async (req, res) => {
       file("face_up").mimetype,
       file("face_down").buffer,
       file("face_down").mimetype,
+      extractedBirthdate,
+      extractedAddress,
     ]
   );
 

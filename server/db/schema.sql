@@ -294,8 +294,10 @@ CREATE TABLE donor_verifications (
   id_type           TEXT NOT NULL,
   id_front          BYTEA NOT NULL,
   id_front_mime     TEXT NOT NULL,
-  id_back           BYTEA NOT NULL,
-  id_back_mime      TEXT NOT NULL,
+  -- Nullable: some ID types (passport, clearances/certificates — see
+  -- kNoIdBackTypes in the app) have nothing on the back worth scanning.
+  id_back           BYTEA,
+  id_back_mime      TEXT,
   face_front        BYTEA NOT NULL,
   face_front_mime   TEXT NOT NULL,
   face_left         BYTEA NOT NULL,
@@ -306,6 +308,11 @@ CREATE TABLE donor_verifications (
   face_up_mime      TEXT NOT NULL,
   face_down         BYTEA NOT NULL,
   face_down_mime    TEXT NOT NULL,
+  -- Best-effort on-device OCR results from the app's ID Front cross-check
+  -- (name/birthdate against the donor's registered profile) — carried
+  -- through for context, not re-derived server-side.
+  extracted_birthdate DATE,
+  extracted_address TEXT,
   status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'rejected')),
   rejection_reason  TEXT,
   reviewed_by       UUID REFERENCES admins(id) ON DELETE SET NULL,
