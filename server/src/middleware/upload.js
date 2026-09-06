@@ -9,3 +9,17 @@ const upload = multer({
 });
 
 export const uploadSingleFile = upload.single("file");
+
+// "Get Verified" flow (donor mobile app): 2 ID photos + 5 guided face-angle
+// photos, all required in one submission — same memory storage as above,
+// they're read straight into donor_verifications as bytea rather than ever
+// touching disk (see migration 012 for why).
+export const uploadVerificationFiles = upload.fields([
+  { name: "idFront", maxCount: 1 },
+  { name: "idBack", maxCount: 1 },
+  { name: "face_front", maxCount: 1 },
+  { name: "face_left", maxCount: 1 },
+  { name: "face_right", maxCount: 1 },
+  { name: "face_up", maxCount: 1 },
+  { name: "face_down", maxCount: 1 },
+]);

@@ -41,7 +41,13 @@ export const getMyProfile = asyncHandler(async (req, res) => {
             -- the same table completeAppointment writes to, so this only
             -- grows when a hospital admin actually completes a visit, never
             -- from the donor's own self-reported screening answers.
-            (SELECT count(*)::int FROM donor_arrivals da WHERE da.donor_id = d.id) AS "completedDonations"
+            (SELECT count(*)::int FROM donor_arrivals da WHERE da.donor_id = d.id) AS "completedDonations",
+            -- Latest "Get Verified" submission's status (pending/verified/
+            -- rejected) — null for a donor who's never submitted one,
+            -- which the app's own verificationStatusFromString already
+            -- treats the same as "not started".
+            (SELECT dv.status FROM donor_verifications dv
+              WHERE dv.donor_id = d.id ORDER BY dv.submitted_at DESC LIMIT 1) AS "verificationStatus"
      FROM donors d WHERE d.id = $1`,
     [req.donor.id]
   );
@@ -222,6 +228,65 @@ export const deleteMyAccount = asyncHandler(async (req, res) => {
   await redis.del(`donor_session:${req.donor.jti}`);
 
   res.status(204).send();
+});
+
+const VERIFICATION_FILE_FIELDS = [
+  "idFront",
+  "idBack",
+  "face_front",
+  "face_left",
+  "face_right",
+  "face_up",
+  "face_down",
+];
+
+// "Get Verified" flow (mobile app, get_ver_view.dart): stores the donor's
+// chosen ID type plus all 7 required photos as one submission row and
+// leaves it "pending" for a human reviewer. Multiple submissions per donor
+// are allowed (e.g. resubmitting after a rejection) — this always inserts
+// a fresh row rather than overwriting a previous one, so a past rejection
+// reason isn't lost; getMyProfile always reads whichever row is newest.
+export const submitVerification = asyncHandler(async (req, res) => {
+  const idType = req.body?.idType?.trim();
+  if (!idType) {
+    return res.status(400).json({ error: "idType is required." });
+  }
+
+  const missing = VERIFICATION_FILE_FIELDS.filter((field) => !req.files?.[field]?.[0]);
+  if (missing.length) {
+    return res.status(400).json({ error: `Missing required file(s): ${missing.join(", ")}` });
+  }
+  const file = (field) => req.files[field][0];
+
+  await pool.query(
+    `INSERT INTO donor_verifications (
+       donor_id, id_type,
+       id_front, id_front_mime, id_back, id_back_mime,
+       face_front, face_front_mime, face_left, face_left_mime,
+       face_right, face_right_mime, face_up, face_up_mime,
+       face_down, face_down_mime
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+    [
+      req.donor.id,
+      idType,
+      file("idFront").buffer,
+      file("idFront").mimetype,
+      file("idBack").buffer,
+      file("idBack").mimetype,
+      file("face_front").buffer,
+      file("face_front").mimetype,
+      file("face_left").buffer,
+      file("face_left").mimetype,
+      file("face_right").buffer,
+      file("face_right").mimetype,
+      file("face_up").buffer,
+      file("face_up").mimetype,
+      file("face_down").buffer,
+      file("face_down").mimetype,
+    ]
+  );
+
+  res.status(201).json({ verificationStatus: "pending" });
 });
 
 // Home screen "Priority Request Feed" — open broadcasts matching this

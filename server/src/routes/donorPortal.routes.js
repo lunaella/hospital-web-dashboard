@@ -12,8 +12,10 @@ import {
   markMyNotificationsRead,
   getAppointmentQrToken,
   deleteMyAccount,
+  submitVerification,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
+import { uploadVerificationFiles } from "../middleware/upload.js";
 
 // Everything here requires a real donor session (see middleware/donorAuth.js)
 // — this is the "logged in" surface of the Android app's API.
@@ -23,6 +25,7 @@ donorPortalRouter.use(requireDonorAuth);
 donorPortalRouter.get("/me", getMyProfile);
 donorPortalRouter.patch("/me", updateMyProfile);
 donorPortalRouter.delete("/me", deleteMyAccount);
+donorPortalRouter.post("/me/verification", uploadVerificationFiles, submitVerification);
 donorPortalRouter.get("/requests", listOpenRequestsForDonor);
 donorPortalRouter.get("/hospitals", listHospitalsForDonors);
 donorPortalRouter.get("/appointments", listMyAppointments);
