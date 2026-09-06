@@ -7,6 +7,7 @@ import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } fr
 import { verifyOtp } from "../utils/otp.js";
 import { ensureRedisConnected } from "../db/redis.js";
 import { broadcast } from "../realtime/hub.js";
+import { imageSize } from "image-size";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
@@ -240,17 +241,47 @@ const VERIFICATION_FILE_FIELDS = [
   "face_down",
 ];
 
+// Real photos from get_ver_view.dart's camera capture (maxWidth 1600) are
+// always well above this — anything smaller than a thumbnail is almost
+// certainly a placeholder, a corrupt upload, or a deliberately garbage
+// file, not a usable ID/face photo. min(width,height) rather than both
+// dimensions, so a legitimately off-aspect capture doesn't get rejected
+// just for not being square-ish.
+const MIN_VERIFICATION_IMAGE_DIMENSION = 300;
+
+// Automated check #2 (server-side): confirms every uploaded field actually
+// decodes as a real image of a sane size, on top of check #1 (the app's
+// own on-device face-presence check on capture). Neither of these confirms
+// the ID actually belongs to the donor — that would need real face-
+// matching against a trusted source, which this project doesn't have — but
+// together they catch corrupted uploads, non-image files, and obviously
+// fake/placeholder submissions automatically, without a manual reviewer.
+function validVerificationImage(file) {
+  if (!file.mimetype?.startsWith("image/")) return false;
+  try {
+    const { width, height } = imageSize(file.buffer);
+    return Math.min(width, height) >= MIN_VERIFICATION_IMAGE_DIMENSION;
+  } catch {
+    return false; // doesn't even decode as a recognizable image format
+  }
+}
+
 // "Get Verified" flow (mobile app, get_ver_view.dart): stores the donor's
 // chosen ID type plus all 7 required photos as one submission row.
 //
-// Auto-approved on arrival (status inserted as 'verified' directly) rather
-// than left 'pending' for a human reviewer — there's no admin-side review
-// screen built yet to ever move it out of 'pending', and no 3rd-party KYC
-// provider wired in to actually check the photos against the ID, so
-// leaving everyone stuck on 'pending' forever would be worse than not
-// having verification at all. The photos are still captured and stored
-// (donor_verifications), so a manual review step can be turned on later
-// by changing this one insert instead of a schema change.
+// Auto-approved (status inserted as 'verified' directly) rather than left
+// 'pending' for a human reviewer — there's no admin-side review screen
+// built yet to ever move it out of 'pending', and no 3rd-party KYC
+// provider wired in to confirm the ID actually belongs to the donor. What
+// IS automated: every file must decode as a real, reasonably-sized image
+// (validVerificationImage below), on top of the app's own on-device check
+// that a face is actually visible in the ID photo before it's ever
+// uploaded — together these catch corrupted, blank, or obviously-wrong
+// submissions without a human needing to look. Neither is real identity
+// verification (matching the ID's face to the selfie captures); the
+// photos are still fully captured and stored either way, so upgrading to
+// a manual review step or real face-matching later only changes this one
+// function, not the schema or the app's upload flow.
 //
 // Multiple submissions per donor are still allowed (e.g. retaking bad
 // photos) — this always inserts a fresh row rather than overwriting a
@@ -266,6 +297,13 @@ export const submitVerification = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: `Missing required file(s): ${missing.join(", ")}` });
   }
   const file = (field) => req.files[field][0];
+
+  const invalid = VERIFICATION_FILE_FIELDS.filter((field) => !validVerificationImage(file(field)));
+  if (invalid.length) {
+    return res.status(400).json({
+      error: `Could not process: ${invalid.join(", ")} — make sure each is a clear photo, not a corrupted or placeholder file.`,
+    });
+  }
 
   await pool.query(
     `INSERT INTO donor_verifications (
