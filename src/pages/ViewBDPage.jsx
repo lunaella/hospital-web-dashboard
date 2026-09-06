@@ -2,8 +2,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
-import { IconAlert, IconClock } from "../components/icons";
-import NotificationBell from "../components/NotificationBell";
+import { IconAlert, IconClock, IconSearch } from "../components/icons";
+import PageHeader from "../components/PageHeader";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -131,29 +131,32 @@ export default function ViewBDPage() {
 
   return (
     <div className="relative w-[1440px] min-h-[1024px] bg-white font-poppins">
-      <div className="absolute left-[314px] top-0 w-[1086px] pb-16">
-        {/* Page header */}
-        <div className="relative h-[93px] border-b border-[#ececec] flex items-center justify-between px-8">
-          <div>
-            <h1 className="text-[26px] font-semibold text-[#3d1116]">All Broadcasts</h1>
-            <p className="text-[13px] text-[#8a8a8a]">Live tracking of all blood donation broadcasts</p>
+      {/* Top bar — shared across every page (Dashboard, Donor Management,
+          Reports, Settings) so the title placement, hospital switcher, and
+          bell line up exactly instead of this page having its own
+          differently-positioned, differently-styled header. */}
+      <PageHeader
+        title="All Broadcasts"
+        right={
+          <div className="h-[40.62px] w-[293.783px] bg-[#f6f5f4] rounded-[13px] shadow-[0px_5px_5px_0px_rgba(0,0,0,0.09)] flex items-center gap-2 px-4">
+            <IconSearch className="w-[16px] h-[16px] shrink-0 text-[#b3b3b3]" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search donors or requests..."
+              className="bg-transparent outline-none font-poppins text-[15px] text-black placeholder:text-[#b3b3b3] w-full"
+            />
           </div>
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 bg-[#f5f5f5] rounded-full px-4 py-2.5 w-[280px]">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search donors or requests..."
-                className="bg-transparent outline-none text-[13px] text-[#3d1116] placeholder:text-[#aaaaaa] w-full"
-              />
-            </div>
-            {/* Was a static 🔔 emoji in a plain <button> with no onClick —
-                looked different from every other page's bell (they all use
-                PageHeader) and did nothing when clicked. Same shared,
-                working bell as everywhere else now. */}
-            <NotificationBell />
-          </div>
+        }
+      />
+
+      <div className="absolute left-[312px] top-[93px] w-[1086px] pb-16">
+        <div className="px-8 pt-8">
+          <h1 className="font-poppins font-bold text-[23px] text-black">All Broadcasts</h1>
+          <p className="font-poppins font-semibold text-[17px] text-[#808080]">
+            Live tracking of all blood donation broadcasts
+          </p>
         </div>
 
         <div className="px-8 py-8">
