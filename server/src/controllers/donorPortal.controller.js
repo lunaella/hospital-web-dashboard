@@ -406,6 +406,11 @@ export const startDiditVerification = asyncHandler(async (req, res) => {
 
   if (!diditRes.ok) {
     const detail = await diditRes.text().catch(() => "");
+    // Logged server-side (not just returned to the app) since Didit's
+    // actual rejection reason — bad/revoked key, workflow_id that doesn't
+    // belong to this application, etc. — lives in `detail`, and the app UI
+    // only ever shows the generic `error` message below.
+    console.error(`[startDiditVerification] Didit session create failed (${diditRes.status}): ${detail}`);
     return res.status(502).json({ error: "Could not start verification. Please try again.", detail });
   }
 
