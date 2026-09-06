@@ -241,11 +241,20 @@ const VERIFICATION_FILE_FIELDS = [
 ];
 
 // "Get Verified" flow (mobile app, get_ver_view.dart): stores the donor's
-// chosen ID type plus all 7 required photos as one submission row and
-// leaves it "pending" for a human reviewer. Multiple submissions per donor
-// are allowed (e.g. resubmitting after a rejection) — this always inserts
-// a fresh row rather than overwriting a previous one, so a past rejection
-// reason isn't lost; getMyProfile always reads whichever row is newest.
+// chosen ID type plus all 7 required photos as one submission row.
+//
+// Auto-approved on arrival (status inserted as 'verified' directly) rather
+// than left 'pending' for a human reviewer — there's no admin-side review
+// screen built yet to ever move it out of 'pending', and no 3rd-party KYC
+// provider wired in to actually check the photos against the ID, so
+// leaving everyone stuck on 'pending' forever would be worse than not
+// having verification at all. The photos are still captured and stored
+// (donor_verifications), so a manual review step can be turned on later
+// by changing this one insert instead of a schema change.
+//
+// Multiple submissions per donor are still allowed (e.g. retaking bad
+// photos) — this always inserts a fresh row rather than overwriting a
+// previous one; getMyProfile always reads whichever row is newest.
 export const submitVerification = asyncHandler(async (req, res) => {
   const idType = req.body?.idType?.trim();
   if (!idType) {
@@ -264,8 +273,9 @@ export const submitVerification = asyncHandler(async (req, res) => {
        id_front, id_front_mime, id_back, id_back_mime,
        face_front, face_front_mime, face_left, face_left_mime,
        face_right, face_right_mime, face_up, face_up_mime,
-       face_down, face_down_mime
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+       face_down, face_down_mime,
+       status, reviewed_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'verified',now())`,
     [
       req.donor.id,
       idType,
@@ -286,7 +296,7 @@ export const submitVerification = asyncHandler(async (req, res) => {
     ]
   );
 
-  res.status(201).json({ verificationStatus: "pending" });
+  res.status(201).json({ verificationStatus: "verified" });
 });
 
 // Home screen "Priority Request Feed" — open broadcasts matching this
