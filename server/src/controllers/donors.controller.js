@@ -19,6 +19,7 @@ export const listDonors = asyncHandler(async (req, res) => {
     : null;
   const search = req.query.q?.trim() || null;
   const eligibility = req.query.eligibility; // "eligible" | "locked" | undefined/"all"
+  const hospitalId = hospitalIdParam(req);
 
   const conditions = [];
   const params = [];
@@ -35,6 +36,17 @@ export const listDonors = asyncHandler(async (req, res) => {
     conditions.push(`(last_donation_at IS NULL OR now() - last_donation_at >= INTERVAL '90 days')`);
   } else if (eligibility === "locked") {
     conditions.push(`(last_donation_at IS NOT NULL AND now() - last_donation_at < INTERVAL '90 days')`);
+  }
+  // Donors are a shared pool with no hospital_id of their own — scoping to
+  // one hospital means "has this hospital ever actually interacted with
+  // this donor", i.e. an appointment (any status) or a recorded donation
+  // there. "All Hospitals" (hospitalId === null) skips this entirely.
+  if (hospitalId) {
+    params.push(hospitalId);
+    conditions.push(
+      `(EXISTS (SELECT 1 FROM appointments a WHERE a.donor_id = donors.id AND a.hospital_id = $${params.length})
+        OR EXISTS (SELECT 1 FROM donor_arrivals da WHERE da.donor_id = donors.id AND da.hospital_id = $${params.length}))`
+    );
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -122,8 +134,18 @@ export const setDonorEligibility = asyncHandler(async (req, res) => {
 });
 
 // Full unpaginated export for CSV download — separate from listDonors so
-// the paginated endpoint's page size cap (100) doesn't limit exports.
+// the paginated endpoint's page size cap (100) doesn't limit exports. Same
+// hospital scoping as listDonors, so an export taken while a specific
+// hospital is selected matches what that admin actually sees on screen.
 export const exportDonors = asyncHandler(async (req, res) => {
+  const hospitalId = hospitalIdParam(req);
+  const params = [];
+  let where = "";
+  if (hospitalId) {
+    params.push(hospitalId);
+    where = `WHERE (EXISTS (SELECT 1 FROM appointments a WHERE a.donor_id = donors.id AND a.hospital_id = $1)
+                     OR EXISTS (SELECT 1 FROM donor_arrivals da WHERE da.donor_id = donors.id AND da.hospital_id = $1))`;
+  }
   const { rows } = await pool.query(
     `SELECT donor_code AS "donorCode", name, phone, blood_type AS "bloodType",
             CASE
@@ -133,7 +155,9 @@ export const exportDonors = asyncHandler(async (req, res) => {
             END AS "isEligible",
             GREATEST(0, 90 - EXTRACT(DAY FROM now() - last_donation_at)::int) AS "daysUntilEligible"
      FROM donors
-     ORDER BY name`
+     ${where}
+     ORDER BY name`,
+    params
   );
   res.json(rows);
 });

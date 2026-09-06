@@ -85,6 +85,12 @@ function Field({ label, hint, children }) {
 }
 
 const EMPTY_HOSPITAL_FORM = { name: "", code: "", city: "", address: "", latitude: "", longitude: "", appointmentCapacity: "5" };
+// Sentinel <option> values that drop the City/Hospital Name selects into a
+// free-text input, so a genuinely new hospital (or one in a city not yet in
+// hospitalDirectory.js) can actually be added — the directory is a
+// convenience shortcut, not the only allowed set of hospitals.
+const CUSTOM_CITY_OPTION = "__custom_city__";
+const CUSTOM_NAME_OPTION = "__custom_name__";
 
 function inputClass() {
   return "border border-[#aaa4a0] rounded-[10px] w-full h-[40px] px-4 font-poppins text-[15px] text-black outline-none";
@@ -107,6 +113,8 @@ export default function Settings() {
   const [showHospitalForm, setShowHospitalForm] = useState(false);
   const [editingHospitalId, setEditingHospitalId] = useState(null);
   const [hospitalForm, setHospitalForm] = useState(EMPTY_HOSPITAL_FORM);
+  const [customCity, setCustomCity] = useState(false);
+  const [customName, setCustomName] = useState(false);
   const [hospitalFormError, setHospitalFormError] = useState(null);
   const [confirmDeleteHospitalId, setConfirmDeleteHospitalId] = useState(null);
   const [hospitalDeleteError, setHospitalDeleteError] = useState(null);
@@ -260,16 +268,25 @@ export default function Settings() {
   function openAddHospital() {
     setEditingHospitalId(null);
     setHospitalForm(EMPTY_HOSPITAL_FORM);
+    setCustomCity(false);
+    setCustomName(false);
     setHospitalFormError(null);
     setShowHospitalForm(true);
   }
 
   function openEditHospital(hospital) {
     setEditingHospitalId(hospital.id);
+    const city = hospital.city ?? "";
+    const name = hospital.name ?? "";
+    // A hospital saved before it existed in the directory (or added via the
+    // free-text path below) won't match a directory entry — open its form
+    // straight into free-text mode instead of showing an empty/wrong list.
+    setCustomCity(city !== "" && !DIRECTORY_CITIES.includes(city));
+    setCustomName(name !== "" && !hospitalsForCity(city).some((h) => h.name === name));
     setHospitalForm({
-      name: hospital.name ?? "",
+      name,
       code: hospital.code ?? "",
-      city: hospital.city ?? "",
+      city,
       address: hospital.address ?? "",
       latitude: hospital.latitude ?? "",
       longitude: hospital.longitude ?? "",
@@ -283,6 +300,8 @@ export default function Settings() {
     setShowHospitalForm(false);
     setEditingHospitalId(null);
     setHospitalForm(EMPTY_HOSPITAL_FORM);
+    setCustomCity(false);
+    setCustomName(false);
     setHospitalFormError(null);
   }
 
@@ -292,15 +311,37 @@ export default function Settings() {
 
   // City drives which hospitals show up in the Hospital Name dropdown
   // below — switching city clears the name, since whatever was picked for
-  // the old city almost certainly isn't in the new one's list.
+  // the old city almost certainly isn't in the new one's list. Picking the
+  // "+ Add a new city…" sentinel drops both fields into free text, since a
+  // city outside the directory can never have directory-listed hospitals.
   function handleCityChange(city) {
+    if (city === CUSTOM_CITY_OPTION) {
+      setCustomCity(true);
+      setCustomName(true);
+      setHospitalForm((prev) => ({ ...prev, city: "", name: "" }));
+      return;
+    }
+    setCustomCity(false);
+    setCustomName(false);
     setHospitalForm((prev) => ({ ...prev, city, name: "" }));
+  }
+
+  function resetCityToDirectory() {
+    setCustomCity(false);
+    setCustomName(false);
+    setHospitalForm((prev) => ({ ...prev, city: "", name: "" }));
   }
 
   // Picking a real hospital from the directory (src/data/hospitalDirectory.js)
   // auto-fills its known code/address — still editable afterward, this is
-  // just a starting point, not a lock.
+  // just a starting point, not a lock. "+ Add a new hospital…" drops just
+  // this field into free text (the city can stay a real directory city).
   function handleHospitalNameChange(name) {
+    if (name === CUSTOM_NAME_OPTION) {
+      setCustomName(true);
+      setHospitalForm((prev) => ({ ...prev, name: "" }));
+      return;
+    }
     const match = hospitalsForCity(hospitalForm.city).find((h) => h.name === name);
     setHospitalForm((prev) => ({
       ...prev,
@@ -308,6 +349,11 @@ export default function Settings() {
       code: match ? match.code : prev.code,
       address: match ? match.address : prev.address,
     }));
+  }
+
+  function resetNameToDirectory() {
+    setCustomName(false);
+    setHospitalForm((prev) => ({ ...prev, name: "" }));
   }
 
   async function submitHospitalForm(e) {
@@ -694,46 +740,80 @@ export default function Settings() {
               <form onSubmit={submitHospitalForm} className="flex flex-col gap-8">
                 <div className="grid grid-cols-2 gap-x-10 gap-y-8">
                   <Field label="CITY">
-                    <select
-                      value={hospitalForm.city}
-                      onChange={(e) => handleCityChange(e.target.value)}
-                      className={inputClass()}
-                    >
-                      <option value="" disabled>
-                        Select a city...
-                      </option>
-                      {DIRECTORY_CITIES.map((city) => (
-                        <option key={city} value={city}>
-                          {city}
+                    {customCity ? (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          value={hospitalForm.city}
+                          onChange={(e) => updateHospitalField("city", e.target.value)}
+                          placeholder="Type the city"
+                          className={inputClass()}
+                        />
+                        <button
+                          type="button"
+                          onClick={resetCityToDirectory}
+                          className="self-start font-poppins text-[12px] text-[#9B1B20] underline"
+                        >
+                          Choose from list instead
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={hospitalForm.city}
+                        onChange={(e) => handleCityChange(e.target.value)}
+                        className={inputClass()}
+                      >
+                        <option value="" disabled>
+                          Select a city...
                         </option>
-                      ))}
-                      {/* Preserves an existing hospital's city on edit even if it's
-                          outside the directory above (e.g. older seed data). */}
-                      {hospitalForm.city && !DIRECTORY_CITIES.includes(hospitalForm.city) && (
-                        <option value={hospitalForm.city}>{hospitalForm.city}</option>
-                      )}
-                    </select>
+                        {DIRECTORY_CITIES.map((city) => (
+                          <option key={city} value={city}>
+                            {city}
+                          </option>
+                        ))}
+                        <option value={CUSTOM_CITY_OPTION}>+ Add a new city…</option>
+                      </select>
+                    )}
                   </Field>
-                  <Field label="HOSPITAL NAME" hint={!hospitalForm.city ? "Select a city first" : undefined}>
-                    <select
-                      value={hospitalForm.name}
-                      onChange={(e) => handleHospitalNameChange(e.target.value)}
-                      className={inputClass()}
-                      disabled={!hospitalForm.city}
-                    >
-                      <option value="" disabled>
-                        {hospitalForm.city ? "Select a hospital..." : "Select a city first"}
-                      </option>
-                      {hospitalsForCity(hospitalForm.city).map((h) => (
-                        <option key={h.name} value={h.name}>
-                          {h.name}
-                        </option>
-                      ))}
-                      {hospitalForm.name &&
-                        !hospitalsForCity(hospitalForm.city).some((h) => h.name === hospitalForm.name) && (
-                          <option value={hospitalForm.name}>{hospitalForm.name}</option>
+                  <Field
+                    label="HOSPITAL NAME"
+                    hint={!customCity && !hospitalForm.city ? "Select a city first" : undefined}
+                  >
+                    {customName ? (
+                      <div className="flex flex-col gap-2">
+                        <input
+                          value={hospitalForm.name}
+                          onChange={(e) => updateHospitalField("name", e.target.value)}
+                          placeholder="Type the hospital name"
+                          className={inputClass()}
+                        />
+                        {!customCity && (
+                          <button
+                            type="button"
+                            onClick={resetNameToDirectory}
+                            className="self-start font-poppins text-[12px] text-[#9B1B20] underline"
+                          >
+                            Choose from list instead
+                          </button>
                         )}
-                    </select>
+                      </div>
+                    ) : (
+                      <select
+                        value={hospitalForm.name}
+                        onChange={(e) => handleHospitalNameChange(e.target.value)}
+                        className={inputClass()}
+                        disabled={!hospitalForm.city}
+                      >
+                        <option value="" disabled>
+                          {hospitalForm.city ? "Select a hospital..." : "Select a city first"}
+                        </option>
+                        {hospitalsForCity(hospitalForm.city).map((h) => (
+                          <option key={h.name} value={h.name}>
+                            {h.name}
+                          </option>
+                        ))}
+                        {hospitalForm.city && <option value={CUSTOM_NAME_OPTION}>+ Add a new hospital…</option>}
+                      </select>
+                    )}
                   </Field>
                 </div>
 
