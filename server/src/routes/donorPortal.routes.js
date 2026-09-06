@@ -13,6 +13,7 @@ import {
   getAppointmentQrToken,
   deleteMyAccount,
   submitVerification,
+  startDiditVerification,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
 import { uploadVerificationFiles } from "../middleware/upload.js";
@@ -25,7 +26,8 @@ donorPortalRouter.use(requireDonorAuth);
 donorPortalRouter.get("/me", getMyProfile);
 donorPortalRouter.patch("/me", updateMyProfile);
 donorPortalRouter.delete("/me", deleteMyAccount);
-donorPortalRouter.post("/me/verification", uploadVerificationFiles, submitVerification);
+donorPortalRouter.post("/me/verification", uploadVerificationFiles, submitVerification); // legacy on-device flow, no longer called by the app
+donorPortalRouter.post("/me/verification/didit-session", startDiditVerification);
 donorPortalRouter.get("/requests", listOpenRequestsForDonor);
 donorPortalRouter.get("/hospitals", listHospitalsForDonors);
 donorPortalRouter.get("/appointments", listMyAppointments);

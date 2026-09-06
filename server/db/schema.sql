@@ -288,32 +288,40 @@ CREATE INDEX idx_notifications_donor_id ON notifications(donor_id);
 -- disk/cloud file paths. One row per submission attempt, not per donor, so
 -- a rejection's reason survives a later resubmission instead of being
 -- overwritten; "current" status for a donor is whichever row is newest.
+--
+-- source='didit' rows (migration 014) are Didit-hosted sessions — Didit
+-- captures and stores the actual photos on their end, so those rows never
+-- populate the bytea columns below; those only ever get filled by the
+-- older source='local' on-device-checked flow, kept but no longer used.
 CREATE TABLE donor_verifications (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   donor_id          UUID NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
   id_type           TEXT NOT NULL,
-  id_front          BYTEA NOT NULL,
-  id_front_mime     TEXT NOT NULL,
+  id_front          BYTEA,
+  id_front_mime     TEXT,
   -- Nullable: some ID types (passport, clearances/certificates — see
   -- kNoIdBackTypes in the app) have nothing on the back worth scanning.
   id_back           BYTEA,
   id_back_mime      TEXT,
-  face_front        BYTEA NOT NULL,
-  face_front_mime   TEXT NOT NULL,
-  face_left         BYTEA NOT NULL,
-  face_left_mime    TEXT NOT NULL,
-  face_right        BYTEA NOT NULL,
-  face_right_mime   TEXT NOT NULL,
-  face_up           BYTEA NOT NULL,
-  face_up_mime      TEXT NOT NULL,
-  face_down         BYTEA NOT NULL,
-  face_down_mime    TEXT NOT NULL,
+  face_front        BYTEA,
+  face_front_mime   TEXT,
+  face_left         BYTEA,
+  face_left_mime    TEXT,
+  face_right        BYTEA,
+  face_right_mime   TEXT,
+  face_up           BYTEA,
+  face_up_mime      TEXT,
+  face_down         BYTEA,
+  face_down_mime    TEXT,
   -- Best-effort on-device OCR results from the app's ID Front cross-check
   -- (name/birthdate against the donor's registered profile) — carried
   -- through for context, not re-derived server-side.
   extracted_birthdate DATE,
   extracted_address TEXT,
-  status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'rejected')),
+  source            TEXT NOT NULL DEFAULT 'local' CHECK (source IN ('local', 'didit')),
+  didit_session_id  TEXT,
+  didit_status      TEXT, -- Didit's own raw status string (Approved/Declined/In Review/...)
+  status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'verified', 'rejected')),
   rejection_reason  TEXT,
   reviewed_by       UUID REFERENCES admins(id) ON DELETE SET NULL,
   reviewed_at       TIMESTAMPTZ,
@@ -322,6 +330,15 @@ CREATE TABLE donor_verifications (
 
 CREATE INDEX idx_donor_verifications_donor_id ON donor_verifications(donor_id);
 CREATE INDEX idx_donor_verifications_submitted_at ON donor_verifications(submitted_at DESC);
+CREATE UNIQUE INDEX idx_donor_verifications_didit_session_id
+  ON donor_verifications(didit_session_id) WHERE didit_session_id IS NOT NULL;
+
+-- Webhook delivery idempotency for /api/webhooks/didit — Didit retries on
+-- anything but a fast 2xx, so this is just a seen-it-already set.
+CREATE TABLE didit_webhook_events (
+  event_id TEXT PRIMARY KEY,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- ---------------------------------------------------------------------------
 -- System health (Reports > System Health card)

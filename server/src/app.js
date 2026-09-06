@@ -11,6 +11,7 @@ import { importRouter } from "./routes/import.routes.js";
 import { teamRouter } from "./routes/team.routes.js";
 import { donorAuthRouter } from "./routes/donorAuth.routes.js";
 import { donorPortalRouter } from "./routes/donorPortal.routes.js";
+import { diditWebhookRouter } from "./routes/diditWebhook.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -42,6 +43,10 @@ app.use("/api/team", teamRouter);
 // the admin routes above (see middleware/donorAuth.js), same server.
 app.use("/api/donor-auth", donorAuthRouter);
 app.use("/api/donor", donorPortalRouter);
+
+// Public — Didit calls this directly, verified via HMAC inside the handler
+// (see diditWebhook.controller.js), not the donor auth scheme above.
+app.use("/api/webhooks/didit", diditWebhookRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

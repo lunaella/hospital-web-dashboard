@@ -26,4 +26,15 @@ export const env = {
   semaphoreSenderName: process.env.SEMAPHORE_SENDER_NAME || null,
   resendApiKey: process.env.RESEND_API_KEY || null,
   notificationFromEmail: process.env.NOTIFICATION_FROM_EMAIL || "onboarding@resend.dev",
+
+  // Didit (third-party KYC — see donorPortal.controller.js's
+  // startDiditVerification and controllers/diditWebhook.controller.js).
+  // Not required() for the same reason as the SMS/email config above: a
+  // dev environment without these shouldn't refuse to boot, it should just
+  // 503 on the one endpoint that needs them.
+  diditApiKey: process.env.DIDIT_API_KEY || null,
+  diditWebhookSecret: process.env.DIDIT_WEBHOOK_SECRET || null,
+  // The "ResQ Donor Verification" workflow — not a secret, just which
+  // configured flow (ID + Liveness + Face Match) a session should run.
+  diditWorkflowId: process.env.DIDIT_WORKFLOW_ID || "8011ee0f-0c26-4860-8a57-b0ee34eeabb6",
 };

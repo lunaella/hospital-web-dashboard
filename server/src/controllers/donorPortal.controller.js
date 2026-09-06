@@ -8,6 +8,7 @@ import { verifyOtp } from "../utils/otp.js";
 import { ensureRedisConnected } from "../db/redis.js";
 import { broadcast } from "../realtime/hub.js";
 import { imageSize } from "image-size";
+import { env } from "../config/env.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
@@ -279,6 +280,12 @@ function looksLikeIsoDate(value) {
   return typeof value === "string" && !Number.isNaN(Date.parse(value));
 }
 
+// Superseded by startDiditVerification below once the group started paying
+// for real third-party KYC — kept working (route still wired) rather than
+// deleted, since ripping it out doesn't buy anything and ties the schema's
+// hands for no reason. The mobile app's "Get Verified" screen no longer
+// calls this.
+//
 // "Get Verified" flow (mobile app, get_ver_view.dart): stores the donor's
 // chosen ID type plus the required photos as one submission row (idBack is
 // only required for ID types outside VERIFICATION_NO_BACK_ID_TYPES).
@@ -366,6 +373,51 @@ export const submitVerification = asyncHandler(async (req, res) => {
   );
 
   res.status(201).json({ verificationStatus: "verified" });
+});
+
+const DIDIT_SESSION_URL = "https://verification.didit.me/v3/session/";
+
+// Kicks off Didit's hosted KYC flow (real ID authenticity checks, liveness,
+// and face match — see docs.didit.me) for the signed-in donor. The mobile
+// app opens the returned `url` in the device browser; Didit runs its own
+// capture UI end to end and, once the donor finishes, calls back to
+// POST /api/webhooks/didit (diditWebhook.controller.js) with the actual
+// decision — this endpoint never sees or stores the ID/face photos itself,
+// unlike the legacy submitVerification flow above.
+//
+// A donor_verifications row is created up front (status 'pending') so
+// getMyProfile has something to report immediately, and so the webhook has
+// a row to find via didit_session_id once the decision comes in — Didit's
+// session-create response doesn't include enough to identify the donor on
+// its own (vendor_data does, but only round-trips through the webhook).
+export const startDiditVerification = asyncHandler(async (req, res) => {
+  if (!env.diditApiKey) {
+    return res.status(503).json({ error: "Identity verification isn't configured yet." });
+  }
+
+  const diditRes = await fetch(DIDIT_SESSION_URL, {
+    method: "POST",
+    headers: { "x-api-key": env.diditApiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      workflow_id: env.diditWorkflowId,
+      vendor_data: req.donor.id,
+    }),
+  });
+
+  if (!diditRes.ok) {
+    const detail = await diditRes.text().catch(() => "");
+    return res.status(502).json({ error: "Could not start verification. Please try again.", detail });
+  }
+
+  const session = await diditRes.json();
+
+  await pool.query(
+    `INSERT INTO donor_verifications (donor_id, id_type, source, didit_session_id, status)
+     VALUES ($1, 'didit', 'didit', $2, 'pending')`,
+    [req.donor.id, session.session_id]
+  );
+
+  res.status(201).json({ url: session.url, sessionId: session.session_id });
 });
 
 // Home screen "Priority Request Feed" — open broadcasts matching this
