@@ -11,6 +11,7 @@ import {
   listMyNotifications,
   markMyNotificationsRead,
   getAppointmentQrToken,
+  deleteMyAccount,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
 
@@ -21,6 +22,7 @@ donorPortalRouter.use(requireDonorAuth);
 
 donorPortalRouter.get("/me", getMyProfile);
 donorPortalRouter.patch("/me", updateMyProfile);
+donorPortalRouter.delete("/me", deleteMyAccount);
 donorPortalRouter.get("/requests", listOpenRequestsForDonor);
 donorPortalRouter.get("/hospitals", listHospitalsForDonors);
 donorPortalRouter.get("/appointments", listMyAppointments);

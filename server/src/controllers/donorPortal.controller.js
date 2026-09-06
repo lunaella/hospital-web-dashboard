@@ -4,6 +4,8 @@ import { bookAppointment, AppointmentBookingError } from "../services/appointmen
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
 import { signAppointmentCheckinToken } from "../utils/jwt.js";
 import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
+import { verifyOtp } from "../utils/otp.js";
+import { ensureRedisConnected } from "../db/redis.js";
 import { broadcast } from "../realtime/hub.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
@@ -187,6 +189,33 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     params
   );
   res.json(rows[0]);
+});
+
+// Self-service account deletion, gated behind the same OTP flow used
+// elsewhere (POST /donor-auth/request-otp, then this call with the code).
+// Every donor-owned table (appointments, donor_arrivals, notifications) has
+// ON DELETE CASCADE back to donors (schema.sql), so a single DELETE here is
+// enough — no manual per-table cleanup to keep in sync as those tables grow.
+export const deleteMyAccount = asyncHandler(async (req, res) => {
+  const { otpCode } = req.body;
+  if (!otpCode) {
+    return res.status(400).json({ error: "otpCode is required." });
+  }
+
+  const isValid = await verifyOtp(req.donor.phone, otpCode);
+  if (!isValid) {
+    return res.status(400).json({ error: "Invalid or expired verification code." });
+  }
+
+  await pool.query(`DELETE FROM donors WHERE id = $1`, [req.donor.id]);
+
+  // Same revocation donorLogout uses — without this the JWT itself would
+  // stay valid (stateless) until it naturally expires, even though the
+  // account behind it no longer exists.
+  const redis = await ensureRedisConnected();
+  await redis.del(`donor_session:${req.donor.jti}`);
+
+  res.status(204).send();
 });
 
 // Home screen "Priority Request Feed" — open broadcasts matching this
