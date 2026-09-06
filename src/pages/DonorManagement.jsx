@@ -92,7 +92,21 @@ export default function DonorManagement() {
     return () => {
       cancelled = true;
     };
-  }, [page, bloodTypeFilter, eligibilityFilter]);
+    // hospitalId is a dependency even though it's never read directly here —
+    // api.get() appends it to every request automatically (apiClient.js), so
+    // switching hospitals changes what the server returns for this same URL.
+    // Without it in the deps, React has no reason to refetch and the list
+    // just sits on whatever hospital was selected when the page first loaded,
+    // unlike the Appointment View effect below, which already depends on it.
+  }, [page, bloodTypeFilter, eligibilityFilter, hospitalId]);
+
+  // Switching hospitals can leave `page` pointing past the end of the new,
+  // smaller filtered list (e.g. on page 3 of "All Hospitals", then a
+  // specific hospital only has 1 page of donors) — reset back to page 0
+  // whenever the selected hospital changes.
+  useEffect(() => {
+    setPage(0);
+  }, [hospitalId]);
 
   // Appointment View: refetched whenever the viewed day changes.
   useEffect(() => {
