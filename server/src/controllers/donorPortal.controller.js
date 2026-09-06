@@ -26,17 +26,23 @@ const COORDINATING_HOSPITAL_NAME = "Philippine Red Cross - Quezon Chapter";
 // this just needs the one row.
 export const getMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
-            last_donation_at AS "lastDonationAt",
-            age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
-            notify_sms AS "notifySms", notify_email AS "notifyEmail",
+    `SELECT d.id, d.donor_code AS "donorCode", d.name, d.phone, d.email, d.blood_type AS "bloodType",
+            d.last_donation_at AS "lastDonationAt",
+            d.age, d.weight_kg AS "weightKg", d.gender, d.health_screening AS "healthScreening",
+            d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
             CASE
-              WHEN last_donation_at IS NULL THEN true
-              WHEN now() - last_donation_at >= INTERVAL '90 days' THEN true
+              WHEN d.last_donation_at IS NULL THEN true
+              WHEN now() - d.last_donation_at >= INTERVAL '90 days' THEN true
               ELSE false
             END AS "isEligible",
-            GREATEST(0, 90 - EXTRACT(DAY FROM now() - last_donation_at)::int) AS "daysUntilEligible"
-     FROM donors WHERE id = $1`,
+            GREATEST(0, 90 - EXTRACT(DAY FROM now() - d.last_donation_at)::int) AS "daysUntilEligible",
+            -- Hospital-verified donation count (the app's Lifetime Impact
+            -- Record / "Hero" badge source of truth) — donor_arrivals is
+            -- the same table completeAppointment writes to, so this only
+            -- grows when a hospital admin actually completes a visit, never
+            -- from the donor's own self-reported screening answers.
+            (SELECT count(*)::int FROM donor_arrivals da WHERE da.donor_id = d.id) AS "completedDonations"
+     FROM donors d WHERE d.id = $1`,
     [req.donor.id]
   );
   if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
