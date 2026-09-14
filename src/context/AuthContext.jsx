@@ -37,11 +37,16 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return;
     }
-    // One retry after a short delay before giving up — covers exactly the
-    // kind of one-off hiccup (dev server hot-reloading, a dropped
-    // connection) that used to silently strand an admin in a fully
-    // "restricted" UI with no indication anything had gone wrong.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // Retries with backoff before giving up — covers everything from a
+    // one-off hiccup (dev server hot-reloading, a dropped connection) to a
+    // backend that just resumed from a suspend (e.g. Render's Redis/Key
+    // Value instance) and can stay briefly flaky for a few seconds after it
+    // reports itself back up. A single 600ms retry used to be shorter than
+    // that recovery window, so a login right after an outage could still
+    // fail both attempts and strand the admin in a fully "restricted" UI
+    // with no indication anything had gone wrong.
+    const delaysMs = [500, 1200, 2500, 4000];
+    for (let attempt = 0; attempt <= delaysMs.length; attempt++) {
       try {
         const me = await api.get("/api/auth/me");
         setProfile(me);
@@ -49,7 +54,7 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       } catch {
-        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 600));
+        if (attempt < delaysMs.length) await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]));
       }
     }
     setProfile(null);
