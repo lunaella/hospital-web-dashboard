@@ -184,15 +184,8 @@ export default function Dashboard() {
   );
   const isSearching = searchQuery.trim().length > 0;
 
-  // The Recent Arrivals card and its "View Full Donor Management" button
-  // were laid out assuming exactly 3 rows; real data can return more (up to
-  // the /api/dashboard/arrivals limit), so both need to grow with the list
-  // instead of the button sitting fixed and overlapping row 3+.
-  const EXTRA_ARRIVALS = Math.max(0, filteredRecentArrivals.length - 3);
-  const ARRIVALS_SHIFT = EXTRA_ARRIVALS * 58; // 45px avatar + 13px row gap
-
   return (
-    <div className="bg-white relative w-[1440px] mx-auto" style={{ height: 1335 + ARRIVALS_SHIFT }}>
+    <div className="bg-white relative w-[1440px] mx-auto" style={{ height: 1335 }}>
 
       {/* Top bar */}
       <PageHeader
@@ -380,11 +373,12 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* Recent Arrivals */}
-        <div
-          className="absolute left-[651px] top-[906px] w-[425px] bg-white rounded-[10px]"
-          style={{ height: 411 + ARRIVALS_SHIFT }}
-        >
+        {/* Recent Arrivals — fixed 411px height to match Stock Criticality
+            next to it; the list scrolls internally past ~4 rows instead of
+            growing the card (and the whole page under it) to fit however
+            many donors the geofence has picked up. Same fixed-card/
+            scrolling-inner-list pattern as Live Match Monitoring above. */}
+        <div className="absolute left-[651px] top-[906px] w-[425px] h-[411px] bg-white rounded-[10px]">
           <div className="pt-[27px] pl-[71px] font-poppins font-bold text-[17px] text-black">Recent Arrivals</div>
           <div className="pl-[71px] pt-[1px] font-poppins font-medium text-[11px] text-[#808080]">
             Donors detected in facility geofence
@@ -392,9 +386,9 @@ export default function Dashboard() {
           <IconMapPin className="absolute left-[20px] top-[26px] w-[24px] h-[24px] text-[#9B1B20]" />
           <div className="mt-[15px] border-t border-[#d9d9d9]" />
 
-          <div className="flex flex-col gap-[13px] px-[25px] pt-[15px]">
+          <div className="flex flex-col gap-[13px] px-[25px] pt-[15px] max-h-[228px] overflow-y-auto">
             {filteredRecentArrivals.map((person) => (
-              <div key={person.name} className="flex items-center gap-3">
+              <div key={person.name} className="flex items-center gap-3 shrink-0">
                 <Avatar name={person.name} size={45} />
                 <div className="flex-1">
                   <div className="font-poppins font-medium text-[15px] text-black">{person.name}</div>
@@ -403,7 +397,7 @@ export default function Dashboard() {
                     <span>{person.time}</span>
                   </div>
                 </div>
-                <div className="relative w-[26px] h-[25px]">
+                <div className="relative w-[26px] h-[25px] shrink-0">
                   <div className="absolute inset-0 rounded-full bg-[#f1dddc]" />
                   <span className="absolute inset-0 flex items-center justify-center font-poppins font-medium text-[11px] text-black">
                     {person.bloodType}
@@ -418,8 +412,7 @@ export default function Dashboard() {
 
           <Link
             to="/donor-management"
-            style={{ top: 340 + ARRIVALS_SHIFT }}
-            className="absolute left-[52px] w-[321px] h-[49px] bg-[#f6f5f4] rounded-[10px] shadow-[0px_2px_2px_0px_rgba(0,0,0,0.1)] flex items-center justify-center cursor-pointer"
+            className="absolute left-[52px] top-[340px] w-[321px] h-[49px] bg-[#f6f5f4] rounded-[10px] shadow-[0px_2px_2px_0px_rgba(0,0,0,0.1)] flex items-center justify-center cursor-pointer"
           >
             <span className="font-poppins font-bold text-[15px] text-[#808080]">View Full Donor Management</span>
           </Link>
