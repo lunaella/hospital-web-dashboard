@@ -209,6 +209,7 @@ export default function NotificationBell() {
         type="button"
         onClick={toggleOpen}
         className="relative w-[20px] h-[22px] flex items-center justify-center cursor-pointer"
+        title={unseenCount > 0 ? `Notifications (${unseenCount} unviewed)` : "Notifications"}
         aria-label={unseenCount > 0 ? `Notifications (${unseenCount} unviewed)` : "Notifications"}
       >
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="black" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

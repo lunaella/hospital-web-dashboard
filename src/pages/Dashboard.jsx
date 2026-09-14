@@ -52,32 +52,31 @@ function stockStatusColor(status) {
   return status === "CRITICAL" ? "text-[#b94842] bg-[#f5e8e7]" : "text-black";
 }
 
-// Three distinct visual states for the System Health pill, driven by
-// GET /api/dashboard/health (live DB/Redis reachability + latency check —
-// see server/src/utils/systemHealth.js).
-const SYSTEM_HEALTH_META = {
-  OPTIMAL: {
-    label: "System Health: Optimal",
+// Two visual states for the top-bar attention pill, driven entirely by
+// monitoringRows (already fetched for "Live Match Monitoring" below — no
+// extra API call). This replaced a "System Health: Optimal/Degraded/
+// Disconnected" pill that surfaced DB/Redis reachability — infrastructure
+// language a hospital admin has no use for and can't act on. Open Emergency
+// requests are the one number on this page that's both urgent and
+// actionable, so that's what greets the admin up top instead.
+function attentionPillMeta(openEmergencyCount) {
+  if (openEmergencyCount > 0) {
+    return {
+      label: `${openEmergencyCount} Emergency Request${openEmergencyCount === 1 ? "" : "s"} Open`,
+      border: "border-[#eec3c1]",
+      bg: "bg-[#fbeeed]",
+      text: "text-[#b94842]",
+      dot: "bg-[#b94842]",
+    };
+  }
+  return {
+    label: "No Emergency Requests Open",
     border: "border-[#bfe3c8]",
     bg: "bg-[#f0faf3]",
     text: "text-[#1e7d32]",
     dot: "bg-[#1e7d32]",
-  },
-  DEGRADED: {
-    label: "System Health: Degraded",
-    border: "border-[#f0dfa8]",
-    bg: "bg-[#fdf8ea]",
-    text: "text-[#8a6d1f]",
-    dot: "bg-[#c9992a]",
-  },
-  CRITICAL: {
-    label: "System Health: Disconnected",
-    border: "border-[#eec3c1]",
-    bg: "bg-[#fbeeed]",
-    text: "text-[#b94842]",
-    dot: "bg-[#b94842]",
-  },
-};
+  };
+}
 
 function PriorityBadge({ priority }) {
   const colorMap = {
@@ -108,31 +107,6 @@ export default function Dashboard() {
   const [stockCriticality, setStockCriticality] = useState([]);
   const [recentArrivals, setRecentArrivals] = useState([]);
   const [loadError, setLoadError] = useState(null);
-  const [systemHealth, setSystemHealth] = useState(null);
-
-  // Fetched independently from the rest of the dashboard data: if the API
-  // can't be reached at all, that failure IS the "Critical/Disconnected"
-  // state, so it needs its own catch instead of failing alongside (and
-  // being masked by) the other Promise.all calls below.
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadHealth() {
-      try {
-        const health = await api.get("/api/dashboard/health");
-        if (!cancelled) setSystemHealth(health);
-      } catch {
-        if (!cancelled) setSystemHealth({ overallStatus: "CRITICAL" });
-      }
-    }
-
-    loadHealth();
-    const interval = setInterval(loadHealth, 15000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -253,19 +227,20 @@ export default function Dashboard() {
         )}
 
         {(() => {
-          const health = SYSTEM_HEALTH_META[systemHealth?.overallStatus] ?? null;
+          const openEmergencyCount = monitoringRows.filter((row) => row.priority === "EMERGENCY").length;
+          const pill = stats ? attentionPillMeta(openEmergencyCount) : null;
           return (
             <div className="absolute contents left-[578px] top-[138px]">
               <div
                 className={`absolute border-2 h-[49px] left-[578px] rounded-[16px] top-[138px] flex items-center gap-2 px-5 whitespace-nowrap transition-colors ${
-                  health ? `${health.border} ${health.bg}` : "border-[#d9d9d9]"
+                  pill ? `${pill.border} ${pill.bg}` : "border-[#d9d9d9]"
                 }`}
               >
                 <span
-                  className={`w-[8px] h-[8px] rounded-full shrink-0 ${health ? health.dot : "bg-[#b3b3b3]"}`}
+                  className={`w-[8px] h-[8px] rounded-full shrink-0 ${pill ? pill.dot : "bg-[#b3b3b3]"}`}
                 />
-                <span className={`font-poppins font-bold text-[14px] whitespace-nowrap ${health ? health.text : "text-black"}`}>
-                  {health ? health.label : "System Health: Checking..."}
+                <span className={`font-poppins font-bold text-[14px] whitespace-nowrap ${pill ? pill.text : "text-black"}`}>
+                  {pill ? pill.label : "Loading status..."}
                 </span>
               </div>
             </div>

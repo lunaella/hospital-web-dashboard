@@ -41,6 +41,7 @@ export default function LogoutConfirmation() {
         <button
           type="button"
           onClick={handleCancel}
+          title="Close"
           aria-label="Close"
           className="absolute right-[24px] top-[24px] cursor-pointer"
         >

@@ -506,6 +506,7 @@ export default function Reports() {
                 type="button"
                 onClick={() => setOpenLogMenu((v) => (v === `${row.reqId}-${i}` ? null : `${row.reqId}-${i}`))}
                 className="flex flex-col items-center gap-[2px] cursor-pointer"
+                title="Row actions"
                 aria-label="Row actions"
               >
                 <span className="w-[3px] h-[3px] rounded-full bg-[#808080]" />

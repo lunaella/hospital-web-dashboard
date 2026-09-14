@@ -11,6 +11,15 @@ import { IconFilter, IconShield, IconCalendar, IconCheck, IconPlus, IconClock, I
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
+// Keeps only the last 4 digits visible, e.g. "09171234567" -> "•••••••4567".
+// Falls back to the raw value if it's too short to meaningfully mask.
+function maskPhone(phone) {
+  if (!phone) return "—";
+  const digits = String(phone).trim();
+  if (digits.length <= 4) return digits;
+  return "•".repeat(digits.length - 4) + digits.slice(-4);
+}
+
 function mapDonor(d) {
   return {
     dbId: d.id,
@@ -65,6 +74,14 @@ export default function DonorManagement() {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [openRowMenu, setOpenRowMenu] = useState(null);
   const [page, setPage] = useState(0);
+  // Data Privacy Act (RA 10173) consideration: a donor's phone number is
+  // personal data with no reason to sit in plaintext on a screen that isn't
+  // actively being used to call them — masked by default, and only the
+  // admin looking at this specific row can choose to reveal it. Cleared on
+  // every fresh donor list load (below) rather than persisted, so switching
+  // hospitals/pages/filters doesn't carry a reveal over to a different set
+  // of donors than the admin meant to unmask.
+  const [revealedPhones, setRevealedPhones] = useState(() => new Set());
 
   // Donor list: server-paginated/filtered, refetched whenever the filters or
   // page change.
@@ -83,6 +100,7 @@ export default function DonorManagement() {
         setTotalDonors(data.total);
         setTotalPages(data.totalPages);
         setDonorsError(null);
+        setRevealedPhones(new Set());
       } catch (err) {
         if (!cancelled) setDonorsError(err.message);
       }
@@ -655,7 +673,27 @@ export default function DonorManagement() {
               <Avatar name={donor.name} size={45} />
               <div>
                 <p className="text-[13px] font-medium text-black leading-tight">{donor.name}</p>
-                <p className="text-[10px] font-medium text-[#aaa4a0] leading-tight">{donor.phone}</p>
+                <div className="flex items-center gap-[6px]">
+                  <p className="text-[10px] font-medium text-[#aaa4a0] leading-tight">
+                    {revealedPhones.has(donor.id) ? donor.phone : maskPhone(donor.phone)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRevealedPhones((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(donor.id)) next.delete(donor.id);
+                        else next.add(donor.id);
+                        return next;
+                      })
+                    }
+                    title={revealedPhones.has(donor.id) ? "Hide phone number" : "Show full phone number"}
+                    aria-label={revealedPhones.has(donor.id) ? "Hide phone number" : "Show full phone number"}
+                    className="text-[9px] font-semibold text-[#9B1B20] hover:underline cursor-pointer shrink-0"
+                  >
+                    {revealedPhones.has(donor.id) ? "Hide" : "Show"}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="w-[128px] flex items-center justify-center">
@@ -681,6 +719,7 @@ export default function DonorManagement() {
                 type="button"
                 onClick={() => setOpenRowMenu((v) => (v === donor.id ? null : donor.id))}
                 className="flex flex-col items-center gap-[2px] cursor-pointer"
+                title="Row actions"
                 aria-label="Row actions"
               >
                 <span className="w-[3px] h-[3px] rounded-full bg-[#808080]" />
@@ -720,6 +759,7 @@ export default function DonorManagement() {
         className={`absolute bg-white border-[#aaa4a0] border-[1.5px] border-solid h-[32px] left-[843px] rounded-[5px] top-[747px] w-[36px] flex items-center justify-center ${
           safePage === 0 ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-[#f6f5f4]"
         }`}
+        title="Previous page"
         aria-label="Previous page"
       >
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -733,6 +773,7 @@ export default function DonorManagement() {
         className={`absolute bg-white border-[#aaa4a0] border-[1.5px] border-solid h-[32px] left-[892px] rounded-[5px] top-[746px] w-[36px] flex items-center justify-center ${
           safePage >= totalPages - 1 ? "opacity-40 cursor-not-allowed" : "cursor-pointer hover:bg-[#f6f5f4]"
         }`}
+        title="Next page"
         aria-label="Next page"
       >
         <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -771,6 +812,7 @@ export default function DonorManagement() {
           type="button"
           onClick={() => shiftAppointmentDay(-1)}
           className="w-[20px] h-[20px] flex items-center justify-center cursor-pointer hover:opacity-60 transition-opacity"
+          title="Previous day"
           aria-label="Previous day"
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -782,6 +824,7 @@ export default function DonorManagement() {
           type="button"
           onClick={() => shiftAppointmentDay(1)}
           className="w-[20px] h-[20px] flex items-center justify-center cursor-pointer hover:opacity-60 transition-opacity"
+          title="Next day"
           aria-label="Next day"
         >
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -958,7 +1001,7 @@ export default function DonorManagement() {
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[20px] w-[480px] max-w-[92vw] max-h-[90vh] overflow-y-auto shadow-[0px_17px_38px_0px_rgba(0,0,0,0.1)] p-8">
             <div className="flex items-center justify-between mb-6">
               <h2 className="font-poppins font-bold text-[22px] text-black">Add Manual Walk-in</h2>
-              <button type="button" onClick={closeWalkInModal} aria-label="Close" className="cursor-pointer text-[#808080] hover:text-black text-xl leading-none">
+              <button type="button" onClick={closeWalkInModal} title="Close" aria-label="Close" className="cursor-pointer text-[#808080] hover:text-black text-xl leading-none">
                 &times;
               </button>
             </div>

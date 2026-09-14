@@ -93,6 +93,7 @@ export default function QrScannerModal({ onScan, onClose }) {
             type="button"
             onClick={onClose}
             className="cursor-pointer text-[#808080] hover:text-black text-xl leading-none"
+            title="Close"
             aria-label="Close"
           >
             &times;

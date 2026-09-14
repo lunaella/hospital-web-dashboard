@@ -209,6 +209,7 @@ export default function NewBDPage() {
               <button
                 type="button"
                 onClick={() => setUnits((u) => Math.max(1, u - 1))}
+                title="Decrease units"
                 aria-label="Decrease units"
                 className="w-[28px] h-[28px] rounded-full border border-[#d9d9d9] bg-white flex items-center justify-center text-[16px] text-[#808080] cursor-pointer"
               >
@@ -218,6 +219,7 @@ export default function NewBDPage() {
               <button
                 type="button"
                 onClick={() => setUnits((u) => u + 1)}
+                title="Increase units"
                 aria-label="Increase units"
                 className="w-[28px] h-[28px] rounded-full border border-[#d9d9d9] bg-white flex items-center justify-center text-[16px] text-[#808080] cursor-pointer"
               >

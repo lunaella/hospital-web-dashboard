@@ -258,7 +258,13 @@ export default function TeamAccessCard({ currentAdminId }) {
             <form onSubmit={submitAddForm} className="rounded-[10px] border border-[#d9d9d9] p-5 flex flex-col gap-5">
               <div className="flex items-center justify-between">
                 <p className="font-poppins font-semibold text-[15px] text-black">Add a new person</p>
-                <button type="button" onClick={() => setShowAddForm(false)} className="cursor-pointer">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  title="Cancel adding new person"
+                  aria-label="Cancel adding new person"
+                  className="cursor-pointer"
+                >
                   <IconX className="w-4 h-4 text-[#808080]" />
                 </button>
               </div>
@@ -365,7 +371,13 @@ export default function TeamAccessCard({ currentAdminId }) {
                   <form onSubmit={(e) => submitEdit(e, admin.id)} className="flex flex-col gap-5">
                     <div className="flex items-center justify-between">
                       <p className="font-poppins font-semibold text-[15px] text-black">Editing {admin.username}</p>
-                      <button type="button" onClick={closeEdit} className="cursor-pointer">
+                      <button
+                        type="button"
+                        onClick={closeEdit}
+                        title="Cancel editing"
+                        aria-label="Cancel editing"
+                        className="cursor-pointer"
+                      >
                         <IconX className="w-4 h-4 text-[#808080]" />
                       </button>
                     </div>
