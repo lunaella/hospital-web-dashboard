@@ -1,15 +1,29 @@
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { parseSpreadsheet } from "../utils/parseSpreadsheet.js";
-import { field, normalizeBloodType, BLOOD_TYPES, finalizeResult } from "../utils/importHelpers.js";
+import {
+  field,
+  normalizeBloodType,
+  BLOOD_TYPES,
+  finalizeResult,
+  flattenAliases,
+  DONOR_ALIASES,
+  INVENTORY_ALIASES,
+  REQUEST_ALIASES,
+  APPOINTMENT_ALIASES,
+} from "../utils/importHelpers.js";
 
-function parseUploadedFile(req) {
+// knownAliases tells parseSpreadsheet which header row, among any title/
+// note/blank rows a real hospital export might have above it, to actually
+// treat as the column headers — see parseSpreadsheet.js's
+// findHeaderRowIndex for why row 0 isn't a safe assumption.
+function parseUploadedFile(req, aliasGroup) {
   if (!req.file) {
     const err = new Error('No file uploaded. Attach a .csv or .xlsx file as "file".');
     err.status = 400;
     throw err;
   }
-  return parseSpreadsheet(req.file.buffer, req.file.originalname);
+  return parseSpreadsheet(req.file.buffer, req.file.originalname, flattenAliases(aliasGroup));
 }
 
 function parseDateOrNull(raw) {
@@ -26,18 +40,18 @@ function parseDateOrNull(raw) {
 // walk-in form) — existing donors are matched, and skipped rather than
 // duplicated, by phone number instead.
 export const importDonors = asyncHandler(async (req, res) => {
-  const rows = parseUploadedFile(req);
+  const rows = parseUploadedFile(req, DONOR_ALIASES);
   const result = { imported: 0, skipped: 0, errors: [] };
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 2; // +1 for the header row, +1 for 1-indexing
 
-    const name = field(row, "Name", "Full Name", "Donor Name");
-    const phone = field(row, "Phone", "Phone Number", "Contact", "Mobile Number");
-    const email = field(row, "Email", "Email Address");
-    const bloodType = normalizeBloodType(field(row, "Blood Type", "Type", "BloodType"));
-    const lastDonationAt = parseDateOrNull(field(row, "Last Donation Date", "Last Donation", "LastDonationAt"));
+    const name = field(row, ...DONOR_ALIASES.name);
+    const phone = field(row, ...DONOR_ALIASES.phone);
+    const email = field(row, ...DONOR_ALIASES.email);
+    const bloodType = normalizeBloodType(field(row, ...DONOR_ALIASES.bloodType));
+    const lastDonationAt = parseDateOrNull(field(row, ...DONOR_ALIASES.lastDonationAt));
 
     if (!name || !phone) {
       result.errors.push({ row: rowNum, message: "Missing name or phone." });
@@ -87,17 +101,17 @@ export const importInventory = asyncHandler(async (req, res) => {
   if (!hospitalId) {
     return res.status(400).json({ error: "hospitalId is required." });
   }
-  const rows = parseUploadedFile(req);
+  const rows = parseUploadedFile(req, INVENTORY_ALIASES);
   const result = { imported: 0, skipped: 0, errors: [] };
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 2;
 
-    const bloodType = normalizeBloodType(field(row, "Blood Type", "Type", "BloodType"));
-    const unitsRaw = field(row, "Units Available", "Units", "Stock");
-    const criticalRaw = field(row, "Critical Threshold", "Critical");
-    const lowRaw = field(row, "Low Threshold", "Low");
+    const bloodType = normalizeBloodType(field(row, ...INVENTORY_ALIASES.bloodType));
+    const unitsRaw = field(row, ...INVENTORY_ALIASES.units);
+    const criticalRaw = field(row, ...INVENTORY_ALIASES.critical);
+    const lowRaw = field(row, ...INVENTORY_ALIASES.low);
 
     if (!bloodType) {
       result.errors.push({ row: rowNum, message: `Blood type must be one of: ${BLOOD_TYPES.join(", ")}.` });
@@ -152,19 +166,19 @@ export const importRequests = asyncHandler(async (req, res) => {
   if (!hospitalId) {
     return res.status(400).json({ error: "hospitalId is required." });
   }
-  const rows = parseUploadedFile(req);
+  const rows = parseUploadedFile(req, REQUEST_ALIASES);
   const result = { imported: 0, skipped: 0, errors: [] };
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 2;
 
-    const bloodType = normalizeBloodType(field(row, "Blood Type", "Type", "BloodType"));
-    const priority = String(field(row, "Priority") || "NORMAL").toUpperCase();
-    const ward = field(row, "Ward", "Department", "Unit") || "Unspecified";
-    const unitsNeeded = Number(field(row, "Units Needed", "UnitsNeeded"));
-    const unitsFulfilledRaw = Number(field(row, "Units Fulfilled", "UnitsFulfilled"));
-    const createdAt = parseDateOrNull(field(row, "Created At", "Date", "CreatedAt")) || new Date();
+    const bloodType = normalizeBloodType(field(row, ...REQUEST_ALIASES.bloodType));
+    const priority = String(field(row, ...REQUEST_ALIASES.priority) || "NORMAL").toUpperCase();
+    const ward = field(row, ...REQUEST_ALIASES.ward) || "Unspecified";
+    const unitsNeeded = Number(field(row, ...REQUEST_ALIASES.unitsNeeded));
+    const unitsFulfilledRaw = Number(field(row, ...REQUEST_ALIASES.unitsFulfilled));
+    const createdAt = parseDateOrNull(field(row, ...REQUEST_ALIASES.createdAt)) || new Date();
 
     if (!bloodType) {
       result.errors.push({ row: rowNum, message: `Blood type must be one of: ${BLOOD_TYPES.join(", ")}.` });
@@ -225,16 +239,16 @@ export const importAppointments = asyncHandler(async (req, res) => {
   if (!hospitalId) {
     return res.status(400).json({ error: "hospitalId is required." });
   }
-  const rows = parseUploadedFile(req);
+  const rows = parseUploadedFile(req, APPOINTMENT_ALIASES);
   const result = { imported: 0, skipped: 0, errors: [] };
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowNum = i + 2;
 
-    const phone = field(row, "Phone", "Donor Phone", "Phone Number");
-    const scheduledAt = parseDateOrNull(field(row, "Scheduled At", "Date", "Appointment Date"));
-    const status = String(field(row, "Status") || "completed").toLowerCase();
+    const phone = field(row, ...APPOINTMENT_ALIASES.phone);
+    const scheduledAt = parseDateOrNull(field(row, ...APPOINTMENT_ALIASES.scheduledAt));
+    const status = String(field(row, ...APPOINTMENT_ALIASES.status) || "completed").toLowerCase();
 
     if (!phone) {
       result.errors.push({ row: rowNum, message: "Missing donor phone number." });
