@@ -27,14 +27,6 @@ function priorityColorFor(priority) {
   return priority === "EMERGENCY" ? "text-[#c26460]" : "text-[#868686]";
 }
 
-// Same three states/colors as the Dashboard pill (kept in sync since both
-// read from the same live-checked GET .../system-health payload).
-const SYSTEM_HEALTH_BADGE = {
-  OPTIMAL: { label: "Optimal", border: "border-[#bfe3c8]", text: "text-[#1e7d32]" },
-  DEGRADED: { label: "Degraded", border: "border-[#f0dfa8]", text: "text-[#8a6d1f]" },
-  CRITICAL: { label: "Disconnected", border: "border-[#eec3c1]", text: "text-[#b94842]" },
-};
-
 function formatTrend(trendPct) {
   if (trendPct == null) return "--";
   return `${trendPct > 0 ? "+" : ""}${trendPct}%`;
@@ -117,7 +109,6 @@ export default function Reports() {
   const [responseTimeSeries, setResponseTimeSeries] = useState([]);
   const [fulfillmentLog, setFulfillmentLog] = useState([]);
   const [breakdown, setBreakdown] = useState(null);
-  const [systemHealth, setSystemHealth] = useState(null);
   const [demandForecast, setDemandForecast] = useState(null);
   const [loadError, setLoadError] = useState(null);
 
@@ -126,13 +117,12 @@ export default function Reports() {
 
     async function load() {
       try {
-        const [kpisData, dashboardStats, series, log, breakdownData, health, forecast] = await Promise.all([
+        const [kpisData, dashboardStats, series, log, breakdownData, forecast] = await Promise.all([
           api.get("/api/reports/kpis"),
           api.get("/api/dashboard/stats"),
           api.get("/api/reports/response-time"),
           api.get("/api/reports/fulfillment-log?limit=20"),
           api.get("/api/reports/fulfillment-breakdown"),
-          api.get("/api/reports/system-health"),
           api.get("/api/reports/demand-forecast"),
         ]);
         if (cancelled) return;
@@ -142,7 +132,6 @@ export default function Reports() {
         setResponseTimeSeries(series);
         setFulfillmentLog(log);
         setBreakdown(breakdownData);
-        setSystemHealth(health);
         setDemandForecast(forecast);
       } catch (err) {
         if (!cancelled) setLoadError(err.message);
@@ -196,19 +185,6 @@ export default function Reports() {
     acc.push({ ...item, start, end: start + item.pct });
     return acc;
   }, []);
-
-  // System Health card level bars. 200ms mirrors DB_DEGRADED_MS in
-  // server/src/utils/systemHealth.js — used only to scale the latency bar
-  // visually, not to re-derive the OPTIMAL/DEGRADED/CRITICAL classification
-  // (the badge above already reflects the server's own verdict on that).
-  const MAX_EXPECTED_LATENCY_MS = 200;
-  const latencyLevelPct = systemHealth
-    ? Math.min(100, Math.round((systemHealth.broadcastLatencyMs / MAX_EXPECTED_LATENCY_MS) * 100))
-    : 0;
-  const SYNC_LEVEL_BY_STATUS = { OPTIMAL: 100, DEGRADED: 55, CRITICAL: 8 };
-  const syncLevelPct = SYNC_LEVEL_BY_STATUS[systemHealth?.overallStatus] ?? 0;
-  const healthBarFillClass =
-    systemHealth?.overallStatus === "CRITICAL" ? "bg-[#b94842]" : "bg-[#9B1B20]";
 
   // Demand Forecast card copy, derived from the real 48h-trend payload
   // (see server getDemandForecast) instead of hardcoded text.
@@ -538,52 +514,10 @@ export default function Reports() {
           </div>
         ))}
 
-        {/* System Health card */}
-        <div className="absolute left-[778px] top-[813px] bg-white rounded-tr-[10px] rounded-br-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[172px]">
-          <div className="absolute left-0 top-0 w-[3px] h-full bg-[#9B1B20] rounded-tr-[3px] rounded-br-[3px]" />
-          <div className="pl-[22px] pr-[22px] pt-[16px] pb-[28px] flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <span className="font-poppins font-bold text-[15px] text-[#808080] tracking-wide">SYSTEM HEALTH</span>
-              {(() => {
-                const badge = SYSTEM_HEALTH_BADGE[systemHealth?.overallStatus] ?? null;
-                return (
-                  <span
-                    className={`border rounded-full px-3 h-[22px] flex items-center justify-center font-poppins font-bold text-[10px] tracking-wide transition-colors ${
-                      badge ? `${badge.border} ${badge.text}` : "border-[#b3b3b3] text-[#868686]"
-                    }`}
-                  >
-                    {badge ? badge.label.toUpperCase() : "--"}
-                  </span>
-                );
-              })()}
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="font-poppins font-medium text-[12px] text-[#868686]">Broadcast Latency</span>
-              <span className="font-poppins font-bold text-[12px] text-black">
-                {systemHealth ? `${systemHealth.broadcastLatencyMs}ms` : "--"}
-              </span>
-            </div>
-            <div className="w-full h-[3px] bg-[#f1dddc] rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${healthBarFillClass}`}
-                style={{ width: `${latencyLevelPct}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="font-poppins font-medium text-[12px] text-[#868686]">Database Sync</span>
-              <span className="font-poppins font-bold text-[12px] text-black">{systemHealth?.dbSyncStatus ?? "--"}</span>
-            </div>
-            <div className="w-full h-[3px] bg-[#f1dddc] rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${healthBarFillClass}`}
-                style={{ width: `${syncLevelPct}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Demand Forecast card */}
-        <div className="absolute left-[778px] top-[1010px] bg-[rgba(255,245,245,0.85)] rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[215px]">
+        {/* Demand Forecast card — moved up to top-[823px] (was 1010px) to
+            close the gap left by the removed System Health card, which sat
+            right above this one in the same left-778px column. */}
+        <div className="absolute left-[778px] top-[823px] bg-[rgba(255,245,245,0.85)] rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-[305px] h-[215px]">
           <p className="absolute left-[19px] top-[13px] font-poppins font-semibold text-[15px] text-[#9B1B20] tracking-wide">DEMAND FORECAST</p>
           {/* line-clamp keeps this within its allotted 50px (top-42 to
               top-92) no matter how long the live-computed sentence is, so it

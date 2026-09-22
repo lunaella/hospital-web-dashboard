@@ -7,7 +7,7 @@ import { api } from "../lib/apiClient";
 import { connectRealtime } from "../lib/realtime";
 import { useHospital } from "../context/HospitalContext";
 import Avatar from "../components/Avatar";
-import { IconFilter, IconShield, IconCalendar, IconCheck, IconPlus, IconClock, IconLock, IconX } from "../components/icons";
+import { IconFilter, IconCalendar, IconCheck, IconPlus, IconClock, IconLock, IconX } from "../components/icons";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -780,19 +780,6 @@ export default function DonorManagement() {
           <polyline points="9 18 15 12 9 6" />
         </svg>
       </button>
-
-      {/* DOH 90-Day Cooling Rule card */}
-      <div className="absolute bg-white border border-[#d9d9d9] border-solid h-[113px] left-[321px] rounded-[10px] shadow-[0px_9px_6px_0px_rgba(0,0,0,0.05),0px_4px_4px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] top-[823px] w-[671px]" />
-      <div className="absolute w-[28px] h-[28px] left-[355px] top-[845px] text-[#9B1B20]">
-        <IconShield className="block max-w-none size-full" />
-      </div>
-      <div className="absolute left-[405px] top-[846px] w-[565px] flex flex-col gap-2">
-        <p className="font-poppins font-bold text-[17px] text-black">DOH 90-Day Cooling Rule</p>
-        <p className="font-poppins font-medium text-[11px] text-[#aaa4a0]">
-          Donors are automatically locked for 90 days following a successful whole blood donation. Plasma and Platelet
-          donations follow different cycles. Contact System Admin to override for emergency triage.
-        </p>
-      </div>
 
       {/* Appointment View card */}
       <div className="absolute bg-white border border-[#d9d9d9] border-solid left-[1021px] rounded-[10px] shadow-[0px_9px_5px_0px_rgba(0,0,0,0.05),0px_4px_4px_0px_rgba(0,0,0,0.09),0px_1px_2px_0px_rgba(0,0,0,0.1)] top-[225px] w-[352px] h-[659px]" />
