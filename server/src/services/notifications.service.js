@@ -1,6 +1,7 @@
 import { pool } from "../db/pool.js";
 import { sendSms } from "../utils/sms.js";
 import { sendEmail } from "../utils/email.js";
+import { sendPush } from "../utils/push.js";
 import { MinHeap } from "../utils/minHeap.js";
 import { wrapBrandedEmail, buildBroadcastAlertEmailBody } from "../utils/emailTemplate.js";
 
@@ -32,6 +33,14 @@ function buildSmsBody(request) {
     `${request.bloodType} blood at ${request.hospitalName} (Ward: ${request.ward}). ` +
     `Request #${request.requestCode}. If you're able to donate, please contact the hospital.`
   );
+}
+
+function buildPushTitle(request) {
+  return `${PRIORITY_LABEL[request.priority] ?? request.priority} need: ${request.bloodType} blood`;
+}
+
+function buildPushBody(request) {
+  return `${request.hospitalName} needs ${request.bloodType} donors (Ward: ${request.ward}). Request #${request.requestCode}.`;
 }
 
 function buildEmailHtml(donorName, request) {
@@ -100,10 +109,13 @@ export async function notifyDonorsForRequest(request) {
 
   const { rows: donors } = await pool.query(
     `SELECT d.id, d.donor_code, d.name, d.phone, d.email, d.last_donation_at AS "lastDonationAt",
-            d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail"
+            d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
+            COALESCE(array_agg(dd.fcm_token) FILTER (WHERE dd.fcm_token IS NOT NULL), '{}') AS "pushTokens"
      FROM donors d
      JOIN donor_eligibility de ON de.id = d.id
-     WHERE d.blood_type = $1 AND de.is_eligible = true`,
+     LEFT JOIN donor_devices dd ON dd.donor_id = d.id
+     WHERE d.blood_type = $1 AND de.is_eligible = true
+     GROUP BY d.id`,
     [request.bloodType]
   );
 
@@ -148,6 +160,23 @@ export async function notifyDonorsForRequest(request) {
           channel: "email",
           recipient: donor.email,
           result,
+        }))
+      );
+    }
+    // No notify-push toggle to check (see registerDevice's comment) —
+    // having a device registered at all is the opt-in.
+    if (donor.pushTokens?.length) {
+      jobs.push(
+        sendPush({
+          tokens: donor.pushTokens,
+          title: buildPushTitle(request),
+          body: buildPushBody(request),
+          data: { type: "blood_request", requestId: request.id },
+        }).then((result) => ({
+          donor,
+          channel: "push",
+          recipient: `${donor.pushTokens.length} device(s)`,
+          result: { ok: result.ok, messageId: result.successCount ? String(result.successCount) : null, error: result.error },
         }))
       );
     }

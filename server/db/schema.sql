@@ -32,7 +32,7 @@ CREATE TYPE clearance_level AS ENUM ('FULL_ROOT_ACCESS_LEVEL_5', 'ADMIN', 'VIEWE
 CREATE TYPE permission_section AS ENUM ('dashboard', 'donor_management', 'reports', 'broadcasts', 'settings');
 CREATE TYPE permission_level AS ENUM ('none', 'view', 'edit');
 
-CREATE TYPE notification_channel AS ENUM ('sms', 'email');
+CREATE TYPE notification_channel AS ENUM ('sms', 'email', 'push');
 
 CREATE TYPE notification_status AS ENUM ('sent', 'failed');
 
@@ -241,6 +241,7 @@ CREATE TABLE appointments (
   hospital_id       UUID NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
   scheduled_at      TIMESTAMPTZ NOT NULL,
   status            appointment_status NOT NULL DEFAULT 'pending',
+  reminder_sent_at  TIMESTAMPTZ,     -- set once the reminder cron job pushes for this appointment, to avoid re-sending on the next run
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -248,6 +249,23 @@ CREATE TABLE appointments (
 CREATE INDEX idx_appointments_scheduled_at ON appointments(scheduled_at);
 CREATE INDEX idx_appointments_donor_id ON appointments(donor_id);
 CREATE INDEX idx_appointments_hospital_id ON appointments(hospital_id);
+
+-- FCM device registration tokens for push notifications. One row per
+-- donor+device (a donor can have more than one phone/tablet registered), so
+-- this can't be a column on donors. A device is implicitly opted in to push
+-- the moment it registers a token; there's no separate notify_push toggle —
+-- uninstalling the app / denying the OS permission just means no token ever
+-- gets registered (or the token later bounces and gets pruned).
+CREATE TABLE donor_devices (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  donor_id      UUID NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
+  fcm_token     TEXT NOT NULL UNIQUE,
+  platform      TEXT NOT NULL DEFAULT 'android',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_donor_devices_donor_id ON donor_devices(donor_id);
 
 -- Donor arrival events, feeding "Recent Arrivals" and "Live Match Monitoring"
 CREATE TABLE donor_arrivals (

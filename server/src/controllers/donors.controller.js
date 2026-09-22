@@ -7,6 +7,7 @@ import { broadcast } from "../realtime/hub.js";
 import { ratingFor } from "./requests.controller.js";
 import { classifyDonorRow } from "../utils/eligibilityClassifier.js";
 import { MinHeap } from "../utils/minHeap.js";
+import { sendPushToDonor } from "../utils/push.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
@@ -131,6 +132,20 @@ export const setDonorEligibility = asyncHandler(async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
   res.json(rows[0]);
+
+  // Only worth telling a donor about the "good news" direction — an admin
+  // force-locking someone isn't something to push-notify them about.
+  // Fire-and-forget after responding, same pattern as the broadcast/booking
+  // pushes elsewhere: an admin's click shouldn't wait on this.
+  if (eligible) {
+    sendPushToDonor(rows[0].id, {
+      title: "You're eligible to donate again!",
+      body: "Your 90-day waiting period is over. Book an appointment whenever you're ready.",
+      data: { type: "account_notice", reason: "eligible_again" },
+    }).catch((err) => {
+      console.error("Eligibility push failed:", err.message);
+    });
+  }
 });
 
 // Full unpaginated export for CSV download — separate from listDonors so

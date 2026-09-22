@@ -664,3 +664,42 @@ export const getAppointmentQrToken = asyncHandler(async (req, res) => {
   const token = signAppointmentCheckinToken(appt.id, req.donor.id);
   res.json({ token, expiresIn: CHECKIN_TOKEN_TTL_SECONDS });
 });
+
+// Registers (or re-registers) this device's FCM token for push. Called on
+// app start once notification permission is granted, and again whenever
+// Firebase rotates the token. ON CONFLICT covers two real cases: the same
+// donor re-registering the same device (just bumps last_seen_at, doubling as
+// a lightweight liveness signal for future token-pruning), and a token that
+// got reassigned to a different donor by Firebase (rare, but a stale
+// donor_id on a token neither donor owns anymore is worse than overwriting
+// it) — DO UPDATE SET donor_id keeps this table correct either way. No
+// separate notify_push opt-in column: registering a token *is* the opt-in,
+// same as having a phone on file implies SMS is possible (see notify_sms/
+// notify_email, which are opt-*outs* on top of a channel that's already
+// available — push has no such toggle yet since there's nothing to turn off
+// independently of just not registering a device).
+export const registerDevice = asyncHandler(async (req, res) => {
+  const { fcmToken, platform } = req.body;
+  if (!fcmToken || typeof fcmToken !== "string") {
+    return res.status(400).json({ error: "fcmToken is required." });
+  }
+  await pool.query(
+    `INSERT INTO donor_devices (donor_id, fcm_token, platform, last_seen_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (fcm_token) DO UPDATE SET donor_id = $1, platform = $3, last_seen_at = now()`,
+    [req.donor.id, fcmToken, platform || "android"]
+  );
+  res.status(204).send();
+});
+
+// Called on logout, so a signed-out device stops receiving pushes meant for
+// whichever donor is no longer signed in on it — unlike the session/JWT,
+// there's no natural expiry on a push token otherwise.
+export const unregisterDevice = asyncHandler(async (req, res) => {
+  const { fcmToken } = req.body;
+  if (!fcmToken) {
+    return res.status(400).json({ error: "fcmToken is required." });
+  }
+  await pool.query(`DELETE FROM donor_devices WHERE fcm_token = $1 AND donor_id = $2`, [fcmToken, req.donor.id]);
+  res.status(204).send();
+});

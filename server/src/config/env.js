@@ -37,4 +37,15 @@ export const env = {
   // The "ResQ Donor Verification" workflow — not a secret, just which
   // configured flow (ID + Liveness + Face Match) a session should run.
   diditWorkflowId: process.env.DIDIT_WORKFLOW_ID || "8011ee0f-0c26-4860-8a57-b0ee34eeabb6",
+
+  // Firebase Cloud Messaging (push notifications to the donor app). A
+  // Firebase service account is a whole JSON key file, not a single value —
+  // env vars don't hold multi-line JSON well (quoting/newlines get mangled
+  // by hosting dashboards), so this expects that file's contents
+  // base64-encoded into one line:
+  //   base64 -i service-account.json | tr -d '\n'
+  // Not required() for the same reason as SMS/email/Didit above: a dev
+  // environment without this shouldn't refuse to boot, it should just report
+  // "push not configured" per send attempt (see config/firebase.js).
+  firebaseServiceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || null,
 };

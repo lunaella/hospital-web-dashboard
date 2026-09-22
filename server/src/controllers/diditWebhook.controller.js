@@ -2,6 +2,13 @@ import crypto from "node:crypto";
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { env } from "../config/env.js";
+import { sendPushToDonor } from "../utils/push.js";
+
+const VERIFICATION_PUSH_COPY = {
+  verified: { title: "You're verified!", body: "Your donor identity has been verified. You're all set to book appointments." },
+  rejected: { title: "Verification needs another look", body: "We couldn't verify your ID. Please try again or contact support." },
+  in_review: { title: "Verification submitted", body: "Your ID is under review. We'll notify you once it's done." },
+};
 
 // Recursively rounds whole-number floats (1.0 -> 1) — Didit's server signs
 // a canonicalized version of the body where this has already happened, so
@@ -88,12 +95,25 @@ export const handleDiditWebhook = asyncHandler(async (req, res) => {
 
   const { session_id: sessionId, status } = req.body ?? {};
   if (sessionId && status) {
-    await pool.query(
+    const mappedStatus = mapDiditStatus(status);
+    const { rows } = await pool.query(
       `UPDATE donor_verifications
          SET status = $1, didit_status = $2, reviewed_at = now()
-       WHERE didit_session_id = $3`,
-      [mapDiditStatus(status), status, sessionId]
+       WHERE didit_session_id = $3
+       RETURNING donor_id`,
+      [mappedStatus, status, sessionId]
     );
+
+    // 'pending' isn't a real status change worth interrupting a donor for —
+    // it just means Didit hasn't reached a verdict yet, which is already
+    // the state they were in before submitting.
+    const donorId = rows[0]?.donor_id;
+    const copy = VERIFICATION_PUSH_COPY[mappedStatus];
+    if (donorId && copy) {
+      sendPushToDonor(donorId, { ...copy, data: { type: "verification_status", status: mappedStatus } }).catch((err) => {
+        console.error("Verification status push failed:", err.message);
+      });
+    }
   }
 
   res.status(200).send("ok");

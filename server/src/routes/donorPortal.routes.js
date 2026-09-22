@@ -14,6 +14,8 @@ import {
   deleteMyAccount,
   submitVerification,
   startDiditVerification,
+  registerDevice,
+  unregisterDevice,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
 import { uploadVerificationFiles } from "../middleware/upload.js";
@@ -37,3 +39,5 @@ donorPortalRouter.get("/appointments/:id/qr", getAppointmentQrToken);
 donorPortalRouter.get("/donations", listMyDonations);
 donorPortalRouter.get("/notifications", listMyNotifications);
 donorPortalRouter.patch("/notifications/read", markMyNotificationsRead);
+donorPortalRouter.post("/devices", registerDevice);
+donorPortalRouter.delete("/devices", unregisterDevice);
