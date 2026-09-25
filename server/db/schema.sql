@@ -32,7 +32,10 @@ CREATE TYPE clearance_level AS ENUM ('FULL_ROOT_ACCESS_LEVEL_5', 'ADMIN', 'VIEWE
 CREATE TYPE permission_section AS ENUM ('dashboard', 'donor_management', 'reports', 'broadcasts', 'settings');
 CREATE TYPE permission_level AS ENUM ('none', 'view', 'edit');
 
-CREATE TYPE notification_channel AS ENUM ('sms', 'email', 'push');
+-- 'in_app' is used only for the deferred-donor referral flow (see migration
+-- 017) -- every other channel is only ever logged when a real send attempt
+-- happened for it.
+CREATE TYPE notification_channel AS ENUM ('sms', 'email', 'push', 'in_app');
 
 CREATE TYPE notification_status AS ENUM ('sent', 'failed');
 
@@ -298,6 +301,10 @@ CREATE TABLE notifications (
   provider_message_id TEXT,            -- Semaphore/Resend's own id, for support lookups
   error_message        TEXT,
   read_at             TIMESTAMPTZ,     -- NULL = unread; set when the donor views it in-app (see migration 006)
+  -- 'direct' = the usual "please come donate" ask to an eligible match;
+  -- 'referral' = a deferred donor asked to refer someone instead (see
+  -- migration 017) -- lets the bell/admin view tell the two apart.
+  audience            TEXT NOT NULL DEFAULT 'direct' CHECK (audience IN ('direct', 'referral')),
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

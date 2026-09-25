@@ -43,6 +43,22 @@ function buildPushBody(request) {
   return `${request.hospitalName} needs ${request.bloodType} donors (Ward: ${request.ward}). Request #${request.requestCode}.`;
 }
 
+// Sent to donors who match the blood type but are currently deferred (see
+// the referralAttempts block in notifyDonorsForRequest below) — different
+// ask entirely: they can't donate themselves right now, so this asks them
+// to pass the word along instead of implying they should show up.
+function buildReferralPushTitle(request) {
+  return `Know someone who's ${request.bloodType}?`;
+}
+
+function buildReferralPushBody(request) {
+  return (
+    `You're on a short recovery hold, but ${request.hospitalName} needs ${request.bloodType} donors ` +
+    `(Ward: ${request.ward}). If you know someone who's ${request.bloodType} and eligible, please let them know. ` +
+    `Request #${request.requestCode}.`
+  );
+}
+
 function buildEmailHtml(donorName, request) {
   return wrapBrandedEmail(
     buildBroadcastAlertEmailBody({
@@ -133,6 +149,21 @@ export async function notifyDonorsForRequest(request) {
 
   const rankedDonors = rankDonorsByResponseTime(donors, avgResponseByDonorId);
 
+  // Donors who match the blood type but are currently deferred — can't
+  // donate themselves, so they never get a "please come donate" SMS/email
+  // (or an "eligible" slot to book), but they might know someone who can.
+  // In-app + push only, by design — no SMS/email for this group.
+  const { rows: deferredDonors } = await pool.query(
+    `SELECT d.id, d.donor_code, d.name,
+            COALESCE(array_agg(dd.fcm_token) FILTER (WHERE dd.fcm_token IS NOT NULL), '{}') AS "pushTokens"
+     FROM donors d
+     JOIN donor_eligibility de ON de.id = d.id
+     LEFT JOIN donor_devices dd ON dd.donor_id = d.id
+     WHERE d.blood_type = $1 AND de.is_eligible = false
+     GROUP BY d.id`,
+    [request.bloodType]
+  );
+
   // notify_sms/notify_email are the donor's own Settings > Notification
   // Preferences toggle (see migration 008) — a donor who's still a match
   // (right blood type, still eligible) but has opted a channel off simply
@@ -183,10 +214,45 @@ export async function notifyDonorsForRequest(request) {
     return jobs;
   });
 
-  const settled = await Promise.allSettled(attempts);
+  // Always one "in_app" row per deferred match — that's what actually makes
+  // it show up in the donor's bell (GET /api/donor/notifications), and it
+  // doesn't depend on whether a push can also be attempted. status is
+  // always "sent" for this one; there's no external delivery to fail, it's
+  // just a database record of "this was shown in-app."
+  const referralAttempts = deferredDonors.flatMap((donor) => {
+    const jobs = [
+      Promise.resolve({
+        donor,
+        channel: "in_app",
+        recipient: "in-app",
+        audience: "referral",
+        result: { ok: true, messageId: null, error: null },
+      }),
+    ];
+    if (donor.pushTokens?.length) {
+      jobs.push(
+        sendPush({
+          tokens: donor.pushTokens,
+          title: buildReferralPushTitle(request),
+          body: buildReferralPushBody(request),
+          data: { type: "blood_request_referral", requestId: request.id },
+        }).then((result) => ({
+          donor,
+          channel: "push",
+          recipient: `${donor.pushTokens.length} device(s)`,
+          audience: "referral",
+          result: { ok: result.ok, messageId: result.successCount ? String(result.successCount) : null, error: result.error },
+        }))
+      );
+    }
+    return jobs;
+  });
+
+  const settled = await Promise.allSettled([...attempts, ...referralAttempts]);
 
   const summary = {
     totalDonors: donors.length,
+    totalDeferredDonors: deferredDonors.length,
     smsSent: 0,
     smsFailed: 0,
     emailSent: 0,
@@ -198,12 +264,12 @@ export async function notifyDonorsForRequest(request) {
 
   for (const outcome of settled) {
     if (outcome.status !== "fulfilled") continue; // sendSms/sendEmail never throw, but stay defensive
-    const { donor, channel, recipient, result } = outcome.value;
+    const { donor, channel, recipient, audience, result } = outcome.value;
 
     await pool.query(
-      `INSERT INTO notifications (donor_id, request_id, channel, recipient, status, provider_message_id, error_message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [donor.id, request.id, channel, recipient, result.ok ? "sent" : "failed", result.messageId, result.error]
+      `INSERT INTO notifications (donor_id, request_id, channel, recipient, status, provider_message_id, error_message, audience)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [donor.id, request.id, channel, recipient, result.ok ? "sent" : "failed", result.messageId, result.error, audience ?? "direct"]
     );
 
     const key = `${channel}${result.ok ? "Sent" : "Failed"}`;

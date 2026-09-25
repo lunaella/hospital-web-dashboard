@@ -622,7 +622,11 @@ export const listMyNotifications = asyncHandler(async (req, res) => {
        h.id AS "hospitalId",
        h.name AS "hospitalName",
        min(n.created_at) AS "createdAt",
-       bool_and(n.read_at IS NOT NULL) AS "isRead"
+       bool_and(n.read_at IS NOT NULL) AS "isRead",
+       -- A donor's own rows for one broadcast are always consistently one
+       -- audience or the other (see notifyDonorsForRequest) — bool_and is
+       -- just a safe way to collapse them to a single value.
+       bool_and(n.audience = 'referral') AS "isReferral"
      FROM notifications n
      JOIN blood_requests r ON r.id = n.request_id
      JOIN hospitals h ON h.id = r.hospital_id
