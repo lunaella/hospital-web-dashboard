@@ -16,9 +16,10 @@ import {
   startDiditVerification,
   registerDevice,
   unregisterDevice,
+  uploadMyPhoto,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
-import { uploadVerificationFiles } from "../middleware/upload.js";
+import { uploadVerificationFiles, uploadProfilePhoto } from "../middleware/upload.js";
 
 // Everything here requires a real donor session (see middleware/donorAuth.js)
 // — this is the "logged in" surface of the Android app's API.
@@ -28,6 +29,7 @@ donorPortalRouter.use(requireDonorAuth);
 donorPortalRouter.get("/me", getMyProfile);
 donorPortalRouter.patch("/me", updateMyProfile);
 donorPortalRouter.delete("/me", deleteMyAccount);
+donorPortalRouter.post("/me/photo", uploadProfilePhoto, uploadMyPhoto);
 donorPortalRouter.post("/me/verification", uploadVerificationFiles, submitVerification); // legacy on-device flow, no longer called by the app
 donorPortalRouter.post("/me/verification/didit-session", startDiditVerification);
 donorPortalRouter.get("/requests", listOpenRequestsForDonor);

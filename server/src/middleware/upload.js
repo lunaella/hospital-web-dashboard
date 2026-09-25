@@ -23,3 +23,9 @@ export const uploadVerificationFiles = upload.fields([
   { name: "face_up", maxCount: 1 },
   { name: "face_down", maxCount: 1 },
 ]);
+
+// Profile photo (donor mobile app, Settings/Profile screen) — same memory
+// storage as above, stored as bytea on the donors row itself rather than
+// its own table (see migration 016), since it's a single photo per donor
+// rather than a set like the verification files.
+export const uploadProfilePhoto = upload.single("photo");

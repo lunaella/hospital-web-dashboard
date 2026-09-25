@@ -26,12 +26,28 @@ const COORDINATING_HOSPITAL_NAME = "Philippine Red Cross - Quezon Chapter";
 // and exportDonors (donors.controller.js) — duplicated as a WHERE id = $1
 // query rather than joining the view, since the view isn't donor-scoped and
 // this just needs the one row.
+// Builds an absolute URL to GET /api/donor-photos/:id (a public route, see
+// app.js) from whatever host this request actually came in on, rather than
+// a hardcoded/env-configured base — works the same in local dev, Render,
+// and behind a custom domain without needing a separate env var (trust
+// proxy is already enabled in app.js, so req.protocol/req.get("host")
+// resolve to the real public host even behind Render's proxy). The ?v=
+// timestamp is a cache-buster: the URL is otherwise identical before and
+// after a donor replaces their photo, and NetworkImage/browsers would
+// otherwise keep showing the old cached bytes.
+function buildPhotoUrl(req, donorId, photoUpdatedAt) {
+  const base = `${req.protocol}://${req.get("host")}`;
+  const version = photoUpdatedAt ? new Date(photoUpdatedAt).getTime() : 0;
+  return `${base}/api/donor-photos/${donorId}?v=${version}`;
+}
+
 export const getMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT d.id, d.donor_code AS "donorCode", d.name, d.phone, d.email, d.blood_type AS "bloodType",
             d.last_donation_at AS "lastDonationAt",
             d.age, d.weight_kg AS "weightKg", d.gender, d.health_screening AS "healthScreening",
             d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
+            (d.photo IS NOT NULL) AS "hasPhoto", d.photo_updated_at AS "photoUpdatedAt",
             CASE
               WHEN d.last_donation_at IS NULL THEN true
               WHEN now() - d.last_donation_at >= INTERVAL '90 days' THEN true
@@ -53,8 +69,64 @@ export const getMyProfile = asyncHandler(async (req, res) => {
      FROM donors d WHERE d.id = $1`,
     [req.donor.id]
   );
-  if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
-  res.json(rows[0]);
+  const donor = rows[0];
+  if (!donor) return res.status(404).json({ error: "Donor not found." });
+
+  donor.photoUrl = donor.hasPhoto ? buildPhotoUrl(req, donor.id, donor.photoUpdatedAt) : null;
+  delete donor.hasPhoto;
+  delete donor.photoUpdatedAt;
+  res.json(donor);
+});
+
+// POST /api/donor/me/photo (multipart, field "photo") — the endpoint
+// editable_avatar.dart has always called; it just never existed
+// server-side until now (see migration 016's doc comment). Stored as bytea
+// directly on the donors row, same as donor_verifications, since this
+// project has no disk/object storage configured.
+export const uploadMyPhoto = asyncHandler(async (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: "photo is required." });
+  if (!file.mimetype?.startsWith("image/")) {
+    return res.status(400).json({ error: "photo must be an image file." });
+  }
+  // Confirms it actually decodes as an image (catches corrupted uploads
+  // and non-image files a spoofed mimetype could slip past the check
+  // above) — same library already used for verification photos, but no
+  // minimum-dimension floor here since a profile photo isn't a compliance
+  // document and the client already caps it at 800px wide.
+  try {
+    imageSize(file.buffer);
+  } catch {
+    return res.status(400).json({ error: "Could not process that image — please try a different photo." });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE donors SET photo = $1, photo_mime_type = $2, photo_updated_at = now()
+     WHERE id = $3 RETURNING photo_updated_at AS "photoUpdatedAt"`,
+    [file.buffer, file.mimetype, req.donor.id]
+  );
+  res.json({ photoUrl: buildPhotoUrl(req, req.donor.id, rows[0].photoUpdatedAt) });
+});
+
+// GET /api/donor-photos/:id — deliberately public (see app.js), not behind
+// requireDonorAuth like the rest of this file's routes. A profile photo
+// isn't sensitive medical data the way verification photos are, and
+// keeping it public lets the mobile app's plain NetworkImage load it
+// without attaching an Authorization header. :id is a UUID, not
+// sequential, so this isn't meaningfully enumerable.
+export const getDonorPhoto = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(`SELECT photo, photo_mime_type AS "mimeType" FROM donors WHERE id = $1`, [
+    req.params.id,
+  ]);
+  const donor = rows[0];
+  if (!donor?.photo) return res.status(404).end();
+
+  res.set("Content-Type", donor.mimeType || "image/jpeg");
+  // Safe to cache aggressively — the URL is versioned with ?v=<timestamp>
+  // (see buildPhotoUrl), so a new photo gets a new URL rather than
+  // invalidating this one.
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.send(donor.photo);
 });
 
 // Self-service profile edit: name, phone, email, and the mobile app's

@@ -201,7 +201,10 @@ CREATE TABLE donors (
   phone             VARCHAR(30) NOT NULL,
   email             VARCHAR(255),         -- optional; SMS is the primary channel since every donor has a phone
   blood_type        blood_type NOT NULL,
-  avatar_url        TEXT,
+  avatar_url        TEXT,                 -- unused; see photo/photo_mime_type below (migration 016) for the actual profile photo
+  photo             BYTEA,                -- profile photo bytes, served back via GET /api/donor-photos/:id
+  photo_mime_type   TEXT,
+  photo_updated_at  TIMESTAMPTZ,          -- cache-busts the serving URL when a donor replaces their photo
   last_donation_at  TIMESTAMPTZ,          -- drives the DOH 90-day cooling rule
   age               INT,                  -- self-reported at mobile registration; see migration 007
   weight_kg         NUMERIC(5,2),         -- self-reported; the mobile app's decision-tree screening reads this
