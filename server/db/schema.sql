@@ -212,6 +212,9 @@ CREATE TABLE donors (
   age               INT,                  -- self-reported at mobile registration; see migration 007
   weight_kg         NUMERIC(5,2),         -- self-reported; the mobile app's decision-tree screening reads this
   gender            donor_gender,         -- self-reported; see migration 010
+  birth_date              DATE,           -- optional; set from Settings — shown on the Digital Health Card (migration 018)
+  emergency_contact_name  TEXT,           -- optional; see migration 018
+  emergency_contact_phone TEXT,
   health_screening  JSONB,                -- mobile app's raw intake answers — the decision tree itself lives client-side
   notify_sms        BOOLEAN NOT NULL DEFAULT true,  -- per-channel opt-out; see migration 008
   notify_email      BOOLEAN NOT NULL DEFAULT true,

@@ -46,6 +46,9 @@ export const getMyProfile = asyncHandler(async (req, res) => {
     `SELECT d.id, d.donor_code AS "donorCode", d.name, d.phone, d.email, d.blood_type AS "bloodType",
             d.last_donation_at AS "lastDonationAt", d.created_at AS "memberSince",
             d.age, d.weight_kg AS "weightKg", d.gender, d.health_screening AS "healthScreening",
+            d.birth_date AS "birthDate",
+            d.emergency_contact_name AS "emergencyContactName",
+            d.emergency_contact_phone AS "emergencyContactPhone",
             d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
             (d.photo IS NOT NULL) AS "hasPhoto", d.photo_updated_at AS "photoUpdatedAt",
             CASE
@@ -149,6 +152,9 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     notifyEmail,
     password,
     currentPassword,
+    birthDate,
+    emergencyContactName,
+    emergencyContactPhone,
   } = req.body;
   const updates = [];
   const params = [];
@@ -222,6 +228,27 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
     updates.push(`health_screening = $${params.length}`);
   }
 
+  // Digital Health Card fields (migration 018) — both optional, edited from
+  // Settings, no validation beyond "is this a real-ish date/string" since
+  // neither drives any eligibility or matching logic elsewhere.
+  if (birthDate !== undefined) {
+    if (birthDate !== null && Number.isNaN(Date.parse(birthDate))) {
+      return res.status(400).json({ error: "birthDate must be a valid date." });
+    }
+    params.push(birthDate);
+    updates.push(`birth_date = $${params.length}`);
+  }
+
+  if (emergencyContactName !== undefined) {
+    params.push(emergencyContactName === null ? null : String(emergencyContactName).trim() || null);
+    updates.push(`emergency_contact_name = $${params.length}`);
+  }
+
+  if (emergencyContactPhone !== undefined) {
+    params.push(emergencyContactPhone === null ? null : String(emergencyContactPhone).trim() || null);
+    updates.push(`emergency_contact_phone = $${params.length}`);
+  }
+
   // Settings > Notification Preferences toggle — which channel(s) an
   // eligible, blood-type-matching donor actually gets contacted on for a
   // broadcast (see notifyDonorsForRequest, notifications.service.js). Plain
@@ -271,7 +298,9 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
      WHERE id = $${params.length}
      RETURNING id, donor_code AS "donorCode", name, phone, email, blood_type AS "bloodType",
                age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
-               notify_sms AS "notifySms", notify_email AS "notifyEmail"`,
+               notify_sms AS "notifySms", notify_email AS "notifyEmail",
+               birth_date AS "birthDate", emergency_contact_name AS "emergencyContactName",
+               emergency_contact_phone AS "emergencyContactPhone"`,
     params
   );
   res.json(rows[0]);
