@@ -49,6 +49,20 @@ function buildSignatureUrl(req, donorId, signatureUpdatedAt) {
   return `${base}/api/donor-signatures/${donorId}?v=${version}`;
 }
 
+// image-size's `.type` is a short format tag (jpg, png, heic, ...), not a
+// full MIME type — used as a fallback for the photo_mime_type/
+// signature_mime_type columns when the client's declared Content-Type
+// wasn't a usable "image/..." value (see uploadMyPhoto's doc comment).
+// Doesn't need to be exhaustive: it only affects the Content-Type header
+// getDonorPhoto/getDonorSignature serve back with, which browsers and
+// Flutter's Image.network both already tolerate being approximate for,
+// since they sniff the actual bytes rather than trusting it blindly.
+function imageTypeToMime(type) {
+  const known = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
+    heic: "image/heic", heif: "image/heif", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml" };
+  return known[type] || "application/octet-stream";
+}
+
 export const getMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT d.id, d.donor_code AS "donorCode", d.name, d.phone, d.email, d.blood_type AS "bloodType",
@@ -101,24 +115,28 @@ export const getMyProfile = asyncHandler(async (req, res) => {
 export const uploadMyPhoto = asyncHandler(async (req, res) => {
   const file = req.file;
   if (!file) return res.status(400).json({ error: "photo is required." });
-  if (!file.mimetype?.startsWith("image/")) {
-    return res.status(400).json({ error: "photo must be an image file." });
-  }
-  // Confirms it actually decodes as an image (catches corrupted uploads
-  // and non-image files a spoofed mimetype could slip past the check
-  // above) — same library already used for verification photos, but no
-  // minimum-dimension floor here since a profile photo isn't a compliance
-  // document and the client already caps it at 800px wide.
+  // The real check: does it actually decode as an image? We used to also
+  // gate on file.mimetype?.startsWith("image/") first, but that's just
+  // whatever Content-Type the client's multipart library guessed from the
+  // file's extension — the Flutter app's http package derives it from the
+  // picked file's extension, and iPhone gallery photos are HEIC by
+  // default, which that lookup doesn't recognize, so it fell back to
+  // application/octet-stream and got rejected here even though the file
+  // was a perfectly good photo. imageSize actually parses the bytes
+  // (jpg/png/gif/webp/heic/avif/etc.), so it's both a stricter and more
+  // permissive check than trusting a client-declared header.
+  let detectedType;
   try {
-    imageSize(file.buffer);
+    detectedType = imageSize(file.buffer).type;
   } catch {
     return res.status(400).json({ error: "Could not process that image — please try a different photo." });
   }
+  const mimeType = file.mimetype?.startsWith("image/") ? file.mimetype : imageTypeToMime(detectedType);
 
   const { rows } = await pool.query(
     `UPDATE donors SET photo = $1, photo_mime_type = $2, photo_updated_at = now()
      WHERE id = $3 RETURNING photo_updated_at AS "photoUpdatedAt"`,
-    [file.buffer, file.mimetype, req.donor.id]
+    [file.buffer, mimeType, req.donor.id]
   );
   res.json({ photoUrl: buildPhotoUrl(req, req.donor.id, rows[0].photoUpdatedAt) });
 });
@@ -152,19 +170,20 @@ export const getDonorPhoto = asyncHandler(async (req, res) => {
 export const uploadMySignature = asyncHandler(async (req, res) => {
   const file = req.file;
   if (!file) return res.status(400).json({ error: "signature is required." });
-  if (!file.mimetype?.startsWith("image/")) {
-    return res.status(400).json({ error: "signature must be an image file." });
-  }
+  // Same reasoning as uploadMyPhoto above — trust imageSize's actual byte
+  // parsing over the client-declared Content-Type.
+  let detectedType;
   try {
-    imageSize(file.buffer);
+    detectedType = imageSize(file.buffer).type;
   } catch {
     return res.status(400).json({ error: "Could not process that signature — please try drawing it again." });
   }
+  const mimeType = file.mimetype?.startsWith("image/") ? file.mimetype : imageTypeToMime(detectedType);
 
   const { rows } = await pool.query(
     `UPDATE donors SET signature = $1, signature_mime_type = $2, signature_updated_at = now()
      WHERE id = $3 RETURNING signature_updated_at AS "signatureUpdatedAt"`,
-    [file.buffer, file.mimetype, req.donor.id]
+    [file.buffer, mimeType, req.donor.id]
   );
   res.json({ signatureUrl: buildSignatureUrl(req, req.donor.id, rows[0].signatureUpdatedAt) });
 });
