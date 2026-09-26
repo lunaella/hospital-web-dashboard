@@ -12,7 +12,7 @@ import { teamRouter } from "./routes/team.routes.js";
 import { donorAuthRouter } from "./routes/donorAuth.routes.js";
 import { donorPortalRouter } from "./routes/donorPortal.routes.js";
 import { diditWebhookRouter } from "./routes/diditWebhook.routes.js";
-import { getDonorPhoto } from "./controllers/donorPortal.controller.js";
+import { getDonorPhoto, getDonorSignature } from "./controllers/donorPortal.controller.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 export const app = express();
@@ -53,6 +53,9 @@ app.use("/api/webhooks/didit", diditWebhookRouter);
 // requireDonorAuth so the mobile app's plain NetworkImage can load them
 // without an Authorization header (see getDonorPhoto's doc comment).
 app.get("/api/donor-photos/:id", getDonorPhoto);
+
+// Public — donor signatures (Digital Health Card), same reasoning as above.
+app.get("/api/donor-signatures/:id", getDonorSignature);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -41,6 +41,14 @@ function buildPhotoUrl(req, donorId, photoUpdatedAt) {
   return `${base}/api/donor-photos/${donorId}?v=${version}`;
 }
 
+// Same idea as buildPhotoUrl above, for the Digital Health Card's drawn
+// signature (see migration 019) — GET /api/donor-signatures/:id.
+function buildSignatureUrl(req, donorId, signatureUpdatedAt) {
+  const base = `${req.protocol}://${req.get("host")}`;
+  const version = signatureUpdatedAt ? new Date(signatureUpdatedAt).getTime() : 0;
+  return `${base}/api/donor-signatures/${donorId}?v=${version}`;
+}
+
 export const getMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT d.id, d.donor_code AS "donorCode", d.name, d.phone, d.email, d.blood_type AS "bloodType",
@@ -51,6 +59,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
             d.emergency_contact_phone AS "emergencyContactPhone",
             d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
             (d.photo IS NOT NULL) AS "hasPhoto", d.photo_updated_at AS "photoUpdatedAt",
+            (d.signature IS NOT NULL) AS "hasSignature", d.signature_updated_at AS "signatureUpdatedAt",
             CASE
               WHEN d.last_donation_at IS NULL THEN true
               WHEN now() - d.last_donation_at >= INTERVAL '90 days' THEN true
@@ -78,6 +87,9 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   donor.photoUrl = donor.hasPhoto ? buildPhotoUrl(req, donor.id, donor.photoUpdatedAt) : null;
   delete donor.hasPhoto;
   delete donor.photoUpdatedAt;
+  donor.signatureUrl = donor.hasSignature ? buildSignatureUrl(req, donor.id, donor.signatureUpdatedAt) : null;
+  delete donor.hasSignature;
+  delete donor.signatureUpdatedAt;
   res.json(donor);
 });
 
@@ -130,6 +142,48 @@ export const getDonorPhoto = asyncHandler(async (req, res) => {
   // invalidating this one.
   res.set("Cache-Control", "public, max-age=31536000, immutable");
   res.send(donor.photo);
+});
+
+// POST /api/donor/me/signature (multipart, field "signature") — the
+// Digital Health Card's signature box calls this after the donor draws
+// their signature in signature_pad_view.dart and exports it as a PNG.
+// Same bytea-on-the-donors-row pattern as uploadMyPhoto above (see
+// migration 019).
+export const uploadMySignature = asyncHandler(async (req, res) => {
+  const file = req.file;
+  if (!file) return res.status(400).json({ error: "signature is required." });
+  if (!file.mimetype?.startsWith("image/")) {
+    return res.status(400).json({ error: "signature must be an image file." });
+  }
+  try {
+    imageSize(file.buffer);
+  } catch {
+    return res.status(400).json({ error: "Could not process that signature — please try drawing it again." });
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE donors SET signature = $1, signature_mime_type = $2, signature_updated_at = now()
+     WHERE id = $3 RETURNING signature_updated_at AS "signatureUpdatedAt"`,
+    [file.buffer, file.mimetype, req.donor.id]
+  );
+  res.json({ signatureUrl: buildSignatureUrl(req, req.donor.id, rows[0].signatureUpdatedAt) });
+});
+
+// GET /api/donor-signatures/:id — public, same reasoning as
+// getDonorPhoto above: not sensitive medical data, needs to load in a
+// plain NetworkImage without an Authorization header, :id is a
+// non-enumerable UUID.
+export const getDonorSignature = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT signature, signature_mime_type AS "mimeType" FROM donors WHERE id = $1`,
+    [req.params.id]
+  );
+  const donor = rows[0];
+  if (!donor?.signature) return res.status(404).end();
+
+  res.set("Content-Type", donor.mimeType || "image/png");
+  res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.send(donor.signature);
 });
 
 // Self-service profile edit: name, phone, email, and the mobile app's

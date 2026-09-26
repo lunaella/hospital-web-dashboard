@@ -208,6 +208,9 @@ CREATE TABLE donors (
   photo             BYTEA,                -- profile photo bytes, served back via GET /api/donor-photos/:id
   photo_mime_type   TEXT,
   photo_updated_at  TIMESTAMPTZ,          -- cache-busts the serving URL when a donor replaces their photo
+  signature             BYTEA,            -- drawn signature bytes (migration 019), served via GET /api/donor-signatures/:id
+  signature_mime_type   TEXT,
+  signature_updated_at  TIMESTAMPTZ,      -- cache-busts the serving URL when a donor redraws their signature
   last_donation_at  TIMESTAMPTZ,          -- drives the DOH 90-day cooling rule
   age               INT,                  -- self-reported at mobile registration; see migration 007
   weight_kg         NUMERIC(5,2),         -- self-reported; the mobile app's decision-tree screening reads this

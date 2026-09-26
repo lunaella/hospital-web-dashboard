@@ -29,3 +29,8 @@ export const uploadVerificationFiles = upload.fields([
 // its own table (see migration 016), since it's a single photo per donor
 // rather than a set like the verification files.
 export const uploadProfilePhoto = upload.single("photo");
+
+// Digital Health Card signature (donor mobile app) — same memory storage,
+// stored as bytea on the donors row (see migration 019), same reasoning
+// as uploadProfilePhoto above.
+export const uploadSignature = upload.single("signature");
