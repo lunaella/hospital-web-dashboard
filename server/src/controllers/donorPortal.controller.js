@@ -44,7 +44,7 @@ function buildPhotoUrl(req, donorId, photoUpdatedAt) {
 export const getMyProfile = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT d.id, d.donor_code AS "donorCode", d.name, d.phone, d.email, d.blood_type AS "bloodType",
-            d.last_donation_at AS "lastDonationAt",
+            d.last_donation_at AS "lastDonationAt", d.created_at AS "memberSince",
             d.age, d.weight_kg AS "weightKg", d.gender, d.health_screening AS "healthScreening",
             d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
             (d.photo IS NOT NULL) AS "hasPhoto", d.photo_updated_at AS "photoUpdatedAt",
