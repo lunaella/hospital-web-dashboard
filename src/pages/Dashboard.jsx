@@ -158,6 +158,7 @@ export default function Dashboard() {
             name: person.name,
             bloodType: person.bloodType,
             time: formatRelativeTime(person.arrivedAt),
+            avatar: person.avatar,
           }))
         );
       } catch (err) {
@@ -401,7 +402,7 @@ export default function Dashboard() {
           <div className="flex flex-col gap-[13px] px-[25px] pt-[15px] max-h-[228px] overflow-y-auto">
             {filteredRecentArrivals.map((person) => (
               <div key={person.name} className="flex items-center gap-3 shrink-0">
-                <Avatar name={person.name} size={45} />
+                <Avatar name={person.name} photoUrl={person.avatar} size={45} />
                 <div className="flex-1">
                   <div className="font-poppins font-medium text-[15px] text-black">{person.name}</div>
                   <div className="flex items-center gap-1 font-poppins font-medium text-[12px] text-[#aaa4a0]">

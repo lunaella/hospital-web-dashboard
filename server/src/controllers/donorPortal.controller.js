@@ -9,6 +9,7 @@ import { ensureRedisConnected } from "../db/redis.js";
 import { broadcast } from "../realtime/hub.js";
 import { imageSize } from "image-size";
 import { env } from "../config/env.js";
+import { buildPhotoUrl, buildSignatureUrl } from "../utils/mediaUrl.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
@@ -26,28 +27,8 @@ const COORDINATING_HOSPITAL_NAME = "Philippine Red Cross - Quezon Chapter";
 // and exportDonors (donors.controller.js) — duplicated as a WHERE id = $1
 // query rather than joining the view, since the view isn't donor-scoped and
 // this just needs the one row.
-// Builds an absolute URL to GET /api/donor-photos/:id (a public route, see
-// app.js) from whatever host this request actually came in on, rather than
-// a hardcoded/env-configured base — works the same in local dev, Render,
-// and behind a custom domain without needing a separate env var (trust
-// proxy is already enabled in app.js, so req.protocol/req.get("host")
-// resolve to the real public host even behind Render's proxy). The ?v=
-// timestamp is a cache-buster: the URL is otherwise identical before and
-// after a donor replaces their photo, and NetworkImage/browsers would
-// otherwise keep showing the old cached bytes.
-function buildPhotoUrl(req, donorId, photoUpdatedAt) {
-  const base = `${req.protocol}://${req.get("host")}`;
-  const version = photoUpdatedAt ? new Date(photoUpdatedAt).getTime() : 0;
-  return `${base}/api/donor-photos/${donorId}?v=${version}`;
-}
-
-// Same idea as buildPhotoUrl above, for the Digital Health Card's drawn
-// signature (see migration 019) — GET /api/donor-signatures/:id.
-function buildSignatureUrl(req, donorId, signatureUpdatedAt) {
-  const base = `${req.protocol}://${req.get("host")}`;
-  const version = signatureUpdatedAt ? new Date(signatureUpdatedAt).getTime() : 0;
-  return `${base}/api/donor-signatures/${donorId}?v=${version}`;
-}
+// buildPhotoUrl/buildSignatureUrl now live in utils/mediaUrl.js, shared with
+// donors.controller.js (the admin-facing donor list/profile).
 
 // image-size's `.type` is a short format tag (jpg, png, heic, ...), not a
 // full MIME type — used as a fallback for the photo_mime_type/

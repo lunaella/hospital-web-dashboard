@@ -3,6 +3,7 @@ import { ensureRedisConnected } from "../db/redis.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { getLiveSystemHealth } from "../utils/systemHealth.js";
 import { hospitalIdParam } from "../utils/hospitalScope.js";
+import { buildPhotoUrl } from "../utils/mediaUrl.js";
 
 const STATS_CACHE_TTL_SECONDS = 8; // short TTL: keeps concurrent admins off Postgres without serving stale data long
 
@@ -179,7 +180,8 @@ export const getArrivals = asyncHandler(async (req, res) => {
   const params = hospitalId ? [limit, hospitalId] : [limit];
 
   const { rows } = await pool.query(
-    `SELECT d.name, d.blood_type AS "bloodType", d.avatar_url AS avatar, a.arrived_at AS "arrivedAt"
+    `SELECT d.name, d.blood_type AS "bloodType", a.arrived_at AS "arrivedAt",
+            (d.photo IS NOT NULL) AS "hasPhoto", d.id AS "donorId", d.photo_updated_at AS "photoUpdatedAt"
      FROM donor_arrivals a
      JOIN donors d ON d.id = a.donor_id
      WHERE true ${hospitalClause}
@@ -187,5 +189,11 @@ export const getArrivals = asyncHandler(async (req, res) => {
      LIMIT $1`,
     params
   );
+  for (const row of rows) {
+    row.avatar = row.hasPhoto ? buildPhotoUrl(req, row.donorId, row.photoUpdatedAt) : null;
+    delete row.hasPhoto;
+    delete row.donorId;
+    delete row.photoUpdatedAt;
+  }
   res.json(rows);
 });

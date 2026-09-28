@@ -8,6 +8,7 @@ import { ratingFor } from "./requests.controller.js";
 import { classifyDonorRow } from "../utils/eligibilityClassifier.js";
 import { MinHeap } from "../utils/minHeap.js";
 import { sendPushToDonor } from "../utils/push.js";
+import { buildPhotoUrl } from "../utils/mediaUrl.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
@@ -57,7 +58,8 @@ export const listDonors = asyncHandler(async (req, res) => {
   params.push(pageSize, offset);
   const { rows } = await pool.query(
     `SELECT
-       id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType", avatar_url AS avatar,
+       id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType",
+       (photo IS NOT NULL) AS "hasPhoto", photo_updated_at AS "photoUpdatedAt",
        last_donation_at AS "lastDonationAt",
        CASE
          WHEN last_donation_at IS NULL THEN true
@@ -71,6 +73,15 @@ export const listDonors = asyncHandler(async (req, res) => {
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
+
+  // Real donor-uploaded photo (migration 016), not the unused avatar_url
+  // column — see donorPortal.controller.js's buildPhotoUrl doc comment for
+  // why this is built per-request rather than stored.
+  for (const donor of rows) {
+    donor.avatar = donor.hasPhoto ? buildPhotoUrl(req, donor.id, donor.photoUpdatedAt) : null;
+    delete donor.hasPhoto;
+    delete donor.photoUpdatedAt;
+  }
 
   res.json({
     donors: rows,
@@ -179,14 +190,19 @@ export const exportDonors = asyncHandler(async (req, res) => {
 
 export const getDonor = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType", avatar_url AS avatar,
+    `SELECT id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType",
+            (photo IS NOT NULL) AS "hasPhoto", photo_updated_at AS "photoUpdatedAt",
             last_donation_at AS "lastDonationAt", age, weight_kg AS "weightKg", gender,
             created_at AS "memberSince"
      FROM donors WHERE id = $1`,
     [req.params.id]
   );
   if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
-  res.json(rows[0]);
+  const donor = rows[0];
+  donor.avatar = donor.hasPhoto ? buildPhotoUrl(req, donor.id, donor.photoUpdatedAt) : null;
+  delete donor.hasPhoto;
+  delete donor.photoUpdatedAt;
+  res.json(donor);
 });
 
 // Donor Profile popup (Donor Management screen) — donation history. Only
@@ -220,13 +236,20 @@ export const listAppointmentsForDay = asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT a.id, a.scheduled_at AS "scheduledAt", a.status,
-            d.name, d.blood_type AS "bloodType", d.avatar_url AS avatar
+            d.name, d.blood_type AS "bloodType",
+            (d.photo IS NOT NULL) AS "hasPhoto", d.id AS "donorId", d.photo_updated_at AS "photoUpdatedAt"
      FROM appointments a
      JOIN donors d ON d.id = a.donor_id
      WHERE a.scheduled_at::date = $1::date ${hospitalClause}
      ORDER BY a.scheduled_at ASC`,
     params
   );
+  for (const row of rows) {
+    row.avatar = row.hasPhoto ? buildPhotoUrl(req, row.donorId, row.photoUpdatedAt) : null;
+    delete row.hasPhoto;
+    delete row.donorId;
+    delete row.photoUpdatedAt;
+  }
   res.json(rows);
 });
 

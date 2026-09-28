@@ -20,6 +20,7 @@ function mapDonor(d) {
     name: d.name,
     phone: d.phone,
     bloodType: d.bloodType,
+    avatar: d.avatar,
     status: d.isEligible ? { type: "eligible" } : { type: "locked", days: d.daysUntilEligible },
   };
 }
@@ -32,6 +33,7 @@ function mapAppointment(a) {
     name: a.name,
     bloodType: a.bloodType,
     status: a.status,
+    avatar: a.avatar,
   };
 }
 
@@ -671,7 +673,7 @@ export default function DonorManagement() {
           >
             <div className="w-[80px] text-center text-[11px] font-medium text-[#aaa4a0]">{donor.id}</div>
             <div className="w-[224px] flex items-center gap-3 pl-2">
-              <Avatar name={donor.name} size={45} />
+              <Avatar name={donor.name} photoUrl={donor.avatar} size={45} />
               <div>
                 <button
                   type="button"
@@ -863,7 +865,7 @@ export default function DonorManagement() {
               {apt.time}
             </p>
             <div className="absolute left-[17px] top-[47px]">
-              <Avatar name={apt.name} size={45} />
+              <Avatar name={apt.name} photoUrl={apt.avatar} size={45} />
             </div>
             <div className="absolute left-[71px] top-[47px]">
               <p className="text-[13px] font-medium text-black leading-tight">{apt.name}</p>

@@ -17,6 +17,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/apiClient";
 import { maskPhone } from "../utils/pii";
+import Avatar from "./Avatar";
 
 const STATUS_STYLE = {
   ELIGIBLE: "bg-[#eafaf0] text-[#1e7d32]",
@@ -100,9 +101,12 @@ export default function DonorProfileModal({ donorId, onClose }) {
         {!loading && !error && donor && (
           <>
             <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-poppins font-bold text-[19px] text-black">{donor.name}</h3>
-                <p className="text-[12px] text-[#aaa4a0]">{donor.donorCode}</p>
+              <div className="flex items-center gap-3">
+                <Avatar name={donor.name} photoUrl={donor.avatar} size={52} />
+                <div>
+                  <h3 className="font-poppins font-bold text-[19px] text-black">{donor.name}</h3>
+                  <p className="text-[12px] text-[#aaa4a0]">{donor.donorCode}</p>
+                </div>
               </div>
               <span className="inline-flex items-center justify-center w-[58px] h-[28px] bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] text-[12px] font-semibold text-[#9B1B20]">
                 {donor.bloodType}
