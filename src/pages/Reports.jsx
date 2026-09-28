@@ -540,7 +540,20 @@ export default function Reports() {
           </div>
           <button
             type="button"
-            onClick={() => navigate("/donor-management")}
+            onClick={() => {
+              // Takes the admin straight to the donors this advisory is
+              // actually about — eligible donors of whichever blood
+              // type(s) are currently short (demandForecast.advisoryTypes,
+              // the same list advisoryText above is built from) — instead
+              // of dumping them on an unfiltered Donor Management list
+              // they'd have to filter themselves. See DonorManagement.jsx's
+              // initialSearchParams for the receiving end.
+              const params = new URLSearchParams();
+              (demandForecast?.advisoryTypes ?? []).forEach((t) => params.append("bloodType", t));
+              params.set("eligibility", "eligible");
+              navigate(`/donor-management?${params.toString()}`);
+            }}
+            title="Review the eligible donors this advisory recommends contacting"
             className="absolute left-[19px] top-[168px] bg-[#9B1B20] rounded-[16px] w-[265px] h-[37px] flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
           >
             <span className="font-poppins font-bold text-[15px] text-white">Review Prep List</span>

@@ -60,6 +60,13 @@ const PAGE_SIZE = 7;
 
 export default function DonorManagement() {
   const { hospitalId } = useHospital();
+  // Read once on mount — lets Reports.jsx's "Review Prep List" button (see
+  // Reports.jsx's advisoryTypes-driven navigate call) land here already
+  // filtered to the blood type(s) currently short on stock and eligible
+  // donors only, instead of dumping the admin on an unfiltered list they'd
+  // have to filter themselves. bloodType may repeat (?bloodType=A%2B&
+  // bloodType=O-) since the filter itself is multi-select.
+  const [initialSearchParams] = useSearchParams();
   const [donors, setDonors] = useState([]);
   const [totalDonors, setTotalDonors] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -69,8 +76,8 @@ export default function DonorManagement() {
   const [appointmentsError, setAppointmentsError] = useState(null);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [bloodTypeFilter, setBloodTypeFilter] = useState([]);
-  const [eligibilityFilter, setEligibilityFilter] = useState("all");
+  const [bloodTypeFilter, setBloodTypeFilter] = useState(() => initialSearchParams.getAll("bloodType"));
+  const [eligibilityFilter, setEligibilityFilter] = useState(() => initialSearchParams.get("eligibility") || "all");
   const [viewDate, setViewDate] = useState(() => new Date());
   const [openRowMenu, setOpenRowMenu] = useState(null);
   const [page, setPage] = useState(0);
@@ -970,6 +977,7 @@ export default function DonorManagement() {
               onClick={() => setCheckinBanner(null)}
               className="cursor-pointer opacity-80 hover:opacity-100 text-[15px] leading-none"
               aria-label="Dismiss"
+              title="Dismiss"
             >
               &times;
             </button>
