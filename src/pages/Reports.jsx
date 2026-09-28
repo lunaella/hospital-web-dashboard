@@ -97,7 +97,7 @@ const chartGridYs = [0, 62, 124, 186, 248];
 
 export default function Reports() {
   const navigate = useNavigate();
-  const { hospitalId } = useHospital();
+  const { hospitalId, hospitalRestricted, hospitalsLoading } = useHospital();
   const [dateRange, setDateRange] = useState("Last 30 days");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -113,6 +113,11 @@ export default function Reports() {
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
+    // See Dashboard.jsx's identical guard: a hospital-restricted admin
+    // starts on hospitalId "all" for one render before HospitalContext
+    // corrects it, and firing this fetch during that window always 403s.
+    if (hospitalRestricted && (hospitalsLoading || hospitalId === "all")) return;
+
     let cancelled = false;
 
     async function load() {
@@ -127,6 +132,7 @@ export default function Reports() {
         ]);
         if (cancelled) return;
 
+        setLoadError(null);
         setKpis(kpisData);
         setFulfillmentRatePct(dashboardStats.fulfillmentRatePct);
         setResponseTimeSeries(series);
@@ -142,7 +148,7 @@ export default function Reports() {
     return () => {
       cancelled = true;
     };
-  }, [hospitalId]);
+  }, [hospitalId, hospitalRestricted, hospitalsLoading]);
 
   function cycleDateRange() {
     setDateRange((prev) => {

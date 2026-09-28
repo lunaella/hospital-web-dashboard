@@ -98,7 +98,7 @@ function PriorityBadge({ priority }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { hospitalId, hospitals } = useHospital();
+  const { hospitalId, hospitals, hospitalRestricted, hospitalsLoading } = useHospital();
   const selectedHospitalName = hospitals.find((h) => h.id === hospitalId)?.name;
   const hospitalScopeLabel = hospitalId === "all" ? "all hospitals" : selectedHospitalName || "the selected hospital";
   const [searchQuery, setSearchQuery] = useState("");
@@ -109,6 +109,17 @@ export default function Dashboard() {
   const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
+    // A hospital-restricted admin (a hospital's own team member account,
+    // e.g. makatimed/stlukes/pgh) starts on hospitalId "all" for one brief
+    // render before HospitalContext's own correction effect flips them onto
+    // their real assigned hospital — see that effect's comment. Firing this
+    // fetch during that window always hit requireHospitalScope's 403
+    // ("Select one of your assigned hospitals"), and that error banner
+    // never went away even once the corrected request right after it
+    // succeeded, because the success path below never cleared loadError.
+    // Waiting out that window (and clearing loadError below) fixes both.
+    if (hospitalRestricted && (hospitalsLoading || hospitalId === "all")) return;
+
     let cancelled = false;
 
     async function load() {
@@ -121,6 +132,7 @@ export default function Dashboard() {
         ]);
         if (cancelled) return;
 
+        setLoadError(null);
         setStats(statsData);
         setMonitoringRows(
           monitoring.map((row) => ({
@@ -157,7 +169,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [hospitalId]);
+  }, [hospitalId, hospitalRestricted, hospitalsLoading]);
 
   const statCards = stats
     ? [
