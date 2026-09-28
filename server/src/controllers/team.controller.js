@@ -18,6 +18,30 @@ async function loadPermissionsMap(adminIds) {
   return map;
 }
 
+// The hospital(s) *the caller themselves* is assigned to — [] means
+// unrestricted (a real super admin, or a "global" team manager with no
+// hospital rows, same pre-existing case as any admin created before per-
+// hospital team scoping existed). A team manager who *does* have specific
+// hospital rows is a "hospital admin": someone a super admin scoped down to
+// running Team Access for just their own hospital(s), not the whole org.
+async function myHospitalIds(adminId) {
+  const { rows } = await pool.query("SELECT hospital_id AS id FROM admin_hospital_assignments WHERE admin_id = $1", [
+    adminId,
+  ]);
+  return rows.map((r) => r.id);
+}
+
+// Whether `targetAdminId` is assigned to at least one hospital in
+// `callerHospitalIds` — used to gate update/delete for a hospital-scoped
+// caller so they can only ever touch accounts within their own hospital(s).
+async function sharesHospitalWith(targetAdminId, callerHospitalIds) {
+  const { rows } = await pool.query(
+    "SELECT 1 FROM admin_hospital_assignments WHERE admin_id = $1 AND hospital_id = ANY($2) LIMIT 1",
+    [targetAdminId, callerHospitalIds]
+  );
+  return rows.length > 0;
+}
+
 // Empty array = unrestricted (every hospital) — same convention as the
 // admin_hospital_assignments table itself.
 async function loadHospitalIdsMap(adminIds) {
@@ -78,13 +102,31 @@ function badRequest(message) {
   return err;
 }
 
-// GET /api/team — everyone who can reach this route (requireTeamManager)
-// sees the full roster, including the super admin's own row.
+// GET /api/team — a real super admin (or a "global" team manager with no
+// hospital assignment rows of their own — see myHospitalIds) sees the full
+// roster, same as before. A hospital-scoped team manager only sees their
+// own row plus admins assigned to at least one of their own hospital(s) —
+// other hospitals' teams (and unrestricted accounts like the super admin)
+// stay invisible to them, so "the team" a hospital admin sees really is
+// just their hospital's team.
 export const listTeam = asyncHandler(async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT id, username, email, clearance, can_manage_team AS "canManageTeam", created_at AS "createdAt"
-     FROM admins ORDER BY created_at ASC`
-  );
+  const callerHospitalIds = req.admin.isSuperAdmin ? [] : await myHospitalIds(req.admin.id);
+
+  const { rows } =
+    callerHospitalIds.length === 0
+      ? await pool.query(
+          `SELECT id, username, email, clearance, can_manage_team AS "canManageTeam", created_at AS "createdAt"
+           FROM admins ORDER BY created_at ASC`
+        )
+      : await pool.query(
+          `SELECT DISTINCT a.id, a.username, a.email, a.clearance, a.can_manage_team AS "canManageTeam", a.created_at AS "createdAt"
+           FROM admins a
+           LEFT JOIN admin_hospital_assignments aha ON aha.admin_id = a.id
+           WHERE a.id = $1 OR aha.hospital_id = ANY($2)
+           ORDER BY a.created_at ASC`,
+          [req.admin.id, callerHospitalIds]
+        );
+
   const ids = rows.map((r) => r.id);
   const [permissionsMap, hospitalIdsMap] = await Promise.all([loadPermissionsMap(ids), loadHospitalIdsMap(ids)]);
   res.json(rows.map((row) => shapeAdmin(row, permissionsMap[row.id], hospitalIdsMap[row.id])));
@@ -99,7 +141,7 @@ export const listTeam = asyncHandler(async (req, res) => {
 export const createTeamMember = asyncHandler(async (req, res) => {
   const { username, email, tempPassword, canManageTeam, makeSuperAdmin } = req.body;
   const permissions = validatePermissions(req.body.permissions);
-  const hospitalIds = validateHospitalIds(req.body.hospitalIds) ?? [];
+  let hospitalIds = validateHospitalIds(req.body.hospitalIds) ?? [];
 
   if (!username || !email || !tempPassword) {
     return res.status(400).json({ error: "username, email, and tempPassword are required." });
@@ -109,6 +151,17 @@ export const createTeamMember = asyncHandler(async (req, res) => {
   }
   if ((canManageTeam || makeSuperAdmin) && !req.admin.isSuperAdmin) {
     return res.status(403).json({ error: "Only the super admin can grant team management or super admin access." });
+  }
+
+  // A hospital-scoped team manager can only ever staff their own
+  // hospital(s) — whatever hospitalIds the request asked for is replaced
+  // with the caller's own assignment, so there's no way to request a new
+  // account scoped to (or unrestricted across) a hospital you don't
+  // yourself administer. A real super admin, or a "global" team manager
+  // with no hospital rows of their own, keeps choosing hospitalIds freely.
+  if (!req.admin.isSuperAdmin) {
+    const callerHospitalIds = await myHospitalIds(req.admin.id);
+    if (callerHospitalIds.length > 0) hospitalIds = callerHospitalIds;
   }
 
   const passwordHash = await bcrypt.hash(tempPassword, HASH_ROUNDS);
@@ -178,7 +231,7 @@ export const updateTeamMember = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { email, canManageTeam, makeSuperAdmin, resetPassword } = req.body;
   const permissions = validatePermissions(req.body.permissions);
-  const hospitalIds = validateHospitalIds(req.body.hospitalIds); // undefined = leave assignments untouched
+  let hospitalIds = validateHospitalIds(req.body.hospitalIds); // undefined = leave assignments untouched
 
   const { rows: targetRows } = await pool.query(
     `SELECT id, username, email, clearance, can_manage_team AS "canManageTeam" FROM admins WHERE id = $1`,
@@ -191,6 +244,23 @@ export const updateTeamMember = asyncHandler(async (req, res) => {
   if (targetIsSuperAdmin && !req.admin.isSuperAdmin) {
     return res.status(403).json({ error: "Only the super admin can modify another super admin's account." });
   }
+
+  // A hospital-scoped team manager can only touch accounts within their own
+  // hospital(s) — anything else (another hospital's team, or an
+  // unrestricted account like the super admin) 404s exactly like a
+  // nonexistent id would, rather than a 403 that would confirm some other
+  // hospital's team member exists. If they do send hospitalIds, it's
+  // forced back to their own set — same reasoning as createTeamMember: no
+  // way to reassign someone to a hospital you don't administer yourself.
+  if (!req.admin.isSuperAdmin) {
+    const callerHospitalIds = await myHospitalIds(req.admin.id);
+    if (callerHospitalIds.length > 0) {
+      const allowed = id === req.admin.id || (await sharesHospitalWith(id, callerHospitalIds));
+      if (!allowed) return res.status(404).json({ error: "Admin not found." });
+      if (hospitalIds !== undefined) hospitalIds = callerHospitalIds;
+    }
+  }
+
   if ((canManageTeam !== undefined || makeSuperAdmin !== undefined) && !req.admin.isSuperAdmin) {
     return res.status(403).json({ error: "Only the super admin can grant team management or super admin access." });
   }
@@ -302,6 +372,15 @@ export const deleteTeamMember = asyncHandler(async (req, res) => {
     );
     if (superAdmins[0].count <= 1) {
       return res.status(400).json({ error: "There must always be at least one super admin." });
+    }
+  }
+
+  // Same hospital-scoping as updateTeamMember: a hospital-scoped team
+  // manager can only remove accounts within their own hospital(s).
+  if (!req.admin.isSuperAdmin) {
+    const callerHospitalIds = await myHospitalIds(req.admin.id);
+    if (callerHospitalIds.length > 0 && !(await sharesHospitalWith(id, callerHospitalIds))) {
+      return res.status(404).json({ error: "Admin not found." });
     }
   }
 

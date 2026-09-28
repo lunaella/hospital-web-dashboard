@@ -133,6 +133,16 @@ export default function TeamAccessCard({ currentAdminId }) {
 
   const currentAdmin = team.find((a) => a.id === currentAdminId);
   const isRealSuperAdmin = currentAdmin?.isSuperAdmin ?? false;
+  // A "hospital admin": a team manager who is themselves assigned to
+  // specific hospital(s) rather than unrestricted. The backend already
+  // scopes everything this component does (list/add/edit/remove) to just
+  // their own hospital(s) — this just drives the matching UI: hide the
+  // hospital picker (there's nothing to choose; new/edited people always
+  // land in the same hospital(s) as the admin adding them) and say so
+  // plainly instead.
+  const myHospitalIds = currentAdmin?.hospitalIds ?? [];
+  const isHospitalScopedManager = !isRealSuperAdmin && myHospitalIds.length > 0;
+  const myHospitalNames = hospitals.filter((h) => myHospitalIds.includes(h.id)).map((h) => h.name);
 
   function openAddForm() {
     setAddForm(EMPTY_ADD_FORM);
@@ -195,7 +205,12 @@ export default function TeamAccessCard({ currentAdminId }) {
     setEditSubmitting(true);
     setEditFormError(null);
     try {
-      const body = { email: editEmail, permissions: editPermissions, hospitalIds: editHospitalIds };
+      const body = { email: editEmail, permissions: editPermissions };
+      // A hospital-scoped manager never sees the hospital picker (it's
+      // always their own hospital, unchangeable from here) — leave
+      // hospitalIds out entirely rather than resubmit a value that was
+      // never actually editable in this form.
+      if (!isHospitalScopedManager) body.hospitalIds = editHospitalIds;
       if (isRealSuperAdmin) body.canManageTeam = editCanManageTeam;
       if (editResetPassword) body.resetPassword = editResetPassword;
       await api.patch(`/api/team/${adminId}`, body);
@@ -223,8 +238,9 @@ export default function TeamAccessCard({ currentAdminId }) {
     <>
       <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Team Access</h2>
       <p className="mt-1.5 font-poppins font-semibold text-[15px] text-[#808080] max-w-[616px]">
-        Add people who need to use this portal and choose exactly what each of them can see and do. Only the
-        super admin{isRealSuperAdmin ? "" : " and delegated team managers"} can make changes here.
+        {isHospitalScopedManager
+          ? `Add people to your hospital's team and choose exactly what each of them can see and do. You're only seeing (and can only manage) your own hospital's team — the super admin can see every hospital's.`
+          : `Add people who need to use this portal and choose exactly what each of them can see and do. Only the super admin${isRealSuperAdmin ? "" : " and delegated team managers"} can make changes here.`}
       </p>
 
       <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full overflow-hidden">
@@ -319,7 +335,17 @@ export default function TeamAccessCard({ currentAdminId }) {
                 <PermissionsGrid value={addPermissions} onChange={(k, v) => setAddPermissions((p) => ({ ...p, [k]: v }))} />
               </div>
 
-              <HospitalChecklist hospitals={hospitals} value={addHospitalIds} onChange={setAddHospitalIds} />
+              {isHospitalScopedManager ? (
+                <p className="font-poppins text-[12px] text-[#808080]">
+                  They'll be added to your hospital{myHospitalNames.length > 1 ? "s" : ""}:{" "}
+                  <span className="font-semibold text-black">
+                    {myHospitalNames.join(", ") || `${myHospitalIds.length} assigned`}
+                  </span>
+                  . Only the super admin can move someone to a different hospital.
+                </p>
+              ) : (
+                <HospitalChecklist hospitals={hospitals} value={addHospitalIds} onChange={setAddHospitalIds} />
+              )}
 
               {isRealSuperAdmin && (
                 <div className="flex flex-col gap-2 rounded-[10px] bg-[#f6f5f4] p-4">
@@ -407,7 +433,16 @@ export default function TeamAccessCard({ currentAdminId }) {
                       </div>
                     )}
 
-                    {!admin.isSuperAdmin && (
+                    {!admin.isSuperAdmin && isHospitalScopedManager && (
+                      <p className="font-poppins text-[12px] text-[#808080]">
+                        Hospital{myHospitalNames.length > 1 ? "s" : ""}:{" "}
+                        <span className="font-semibold text-black">
+                          {myHospitalNames.join(", ") || `${myHospitalIds.length} assigned`}
+                        </span>
+                        . Only the super admin can move someone to a different hospital.
+                      </p>
+                    )}
+                    {!admin.isSuperAdmin && !isHospitalScopedManager && (
                       <HospitalChecklist hospitals={hospitals} value={editHospitalIds} onChange={setEditHospitalIds} />
                     )}
 
