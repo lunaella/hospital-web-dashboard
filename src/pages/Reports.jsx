@@ -359,7 +359,7 @@ export default function Reports() {
         </div>
 
         {/* Donor Response Time chart */}
-        <div className="absolute left-[15px] top-[370px] bg-white rounded-[10px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[725px] h-[446px]">
+        <div className="absolute left-[15px] top-[370px] bg-white rounded-[10px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[725px] h-[466px]">
           {/* Genuinely true: broadcast dispatch (server/src/services/notifications.service.js
               -> rankDonorsByResponseTime) ranks matching donors with a real
               binary min-heap keyed on their historical average response
@@ -381,7 +381,7 @@ export default function Reports() {
             {responseSummary}
           </p>
 
-          <div className="absolute left-[75px] top-[110px] w-[575px] h-[280px]">
+          <div className="absolute left-[75px] top-[130px] w-[575px] h-[280px]">
             {/* Y axis labels */}
             {chartYAxis.map((label, i) => (
               <span
@@ -427,11 +427,11 @@ export default function Reports() {
             ))}
           </div>
 
-          <div className="absolute left-[131px] top-[410px] flex items-center gap-2">
+          <div className="absolute left-[131px] top-[430px] flex items-center gap-2">
             <span className="w-[14px] h-[14px] rounded-[5px] bg-[#9B1B20] shrink-0" />
             <span className="font-poppins font-bold text-[11px] text-black whitespace-nowrap">Avg Response (min)</span>
           </div>
-          <div className="absolute left-[333px] top-[410px] flex items-center gap-2">
+          <div className="absolute left-[333px] top-[430px] flex items-center gap-2">
             <span className="w-[14px] h-[14px] rounded-[5px] bg-[#b3b3b3] shrink-0" />
             <span className="font-poppins font-bold text-[11px] text-black whitespace-nowrap">Response Target</span>
           </div>
