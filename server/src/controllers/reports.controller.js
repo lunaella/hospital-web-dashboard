@@ -129,15 +129,20 @@ export const getSystemHealth = asyncHandler(async (req, res) => {
   res.json(await getLiveSystemHealth());
 });
 
-// KPI cards: Units Processed, Mean Response Time, Active Donors Reach —
-// each compared against the prior 24h window for the trend indicator.
+// KPI cards: Units Processed, Blood Units in Stock, Active Donors Reach —
+// each of the first and third compared against the prior 24h window for
+// the trend indicator. Blood Units in Stock is a live gauge (current
+// inventory on hand), not a 24h flow — blood_inventory only tracks the
+// current units_available per hospital+type with no historical snapshots
+// to compare against, so it's reported without a trend (same "--" the
+// KPI card already shows for any trendPct: null).
 export const getKpis = asyncHandler(async (req, res) => {
   const hospitalId = hospitalIdParam(req);
   const params = hospitalId ? [hospitalId] : [];
   const whereClause = hospitalId ? "WHERE hospital_id = $1" : "";
   const andClause = hospitalId ? "AND hospital_id = $1" : "";
 
-  const [unitsProcessed, meanResponseTime, activeDonors] = await Promise.all([
+  const [unitsProcessed, unitsInStock, activeDonors] = await Promise.all([
     pool.query(
       `SELECT
         coalesce(sum(units_fulfilled) FILTER (WHERE created_at >= now() - INTERVAL '24 hours'), 0)::int AS current,
@@ -147,11 +152,9 @@ export const getKpis = asyncHandler(async (req, res) => {
       params
     ),
     pool.query(
-      `SELECT
-        round(avg(extract(epoch FROM (resolved_at - created_at)) / 60) FILTER (WHERE resolved_at >= now() - INTERVAL '24 hours'), 1) AS current,
-        round(avg(extract(epoch FROM (resolved_at - created_at)) / 60) FILTER (WHERE resolved_at >= now() - INTERVAL '48 hours' AND resolved_at < now() - INTERVAL '24 hours'), 1) AS previous
-      FROM blood_requests
-      WHERE resolved_at IS NOT NULL ${andClause}`,
+      `SELECT coalesce(sum(units_available), 0)::int AS total
+       FROM blood_inventory
+       ${whereClause}`,
       params
     ),
     pool.query(
@@ -173,7 +176,7 @@ export const getKpis = asyncHandler(async (req, res) => {
 
   res.json({
     unitsProcessed: withTrend(unitsProcessed.rows[0].current, unitsProcessed.rows[0].previous),
-    meanResponseTimeMinutes: withTrend(meanResponseTime.rows[0].current, meanResponseTime.rows[0].previous),
+    bloodUnitsInStock: { value: unitsInStock.rows[0].total, trendPct: null },
     activeDonorsReach: withTrend(activeDonors.rows[0].current, activeDonors.rows[0].previous),
   });
 });

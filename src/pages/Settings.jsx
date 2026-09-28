@@ -8,9 +8,8 @@ import { DIRECTORY_CITIES, hospitalsForCity } from "../data/hospitalDirectory";
 import {
   IconIdCard,
   IconShield,
-  IconTerminal,
+  IconLock,
   IconInfoCircle,
-  IconCpu,
   IconMonitor,
   IconWifi,
   IconMapPin,
@@ -55,11 +54,15 @@ const IMPORT_TYPES = [
 ];
 
 // Static per-tile chrome; values come from GET /api/settings/session.
+// Engine (browser) and system (OS) are combined into one "Device" tile —
+// separate ENGINE/SYSTEM/NETWORK IP/REGION tiles read like a developer's
+// diagnostics panel rather than something a hospital admin needs to see
+// day to day, so this keeps the same underlying data in fewer, plainer-
+// labeled tiles.
 const SESSION_TILE_META = [
-  { key: "engine", label: "ENGINE", icon: IconCpu },
-  { key: "system", label: "SYSTEM", icon: IconMonitor },
-  { key: "network", label: "NETWORK IP", icon: IconWifi },
-  { key: "region", label: "REGION", icon: IconMapPin },
+  { key: "device", label: "DEVICE", icon: IconMonitor },
+  { key: "network", label: "IP ADDRESS", icon: IconWifi },
+  { key: "region", label: "LOCATION", icon: IconMapPin },
 ];
 
 function formatRelativeTime(isoString) {
@@ -490,8 +493,7 @@ export default function Settings() {
     ...meta,
     value:
       {
-        engine: session?.engine,
-        system: session?.system,
+        device: session?.engine && session?.system ? `${session.engine} · ${session.system}` : session?.engine ?? session?.system,
         network: session?.ipAddress,
         region: session?.region,
       }[meta.key] ?? "--",
@@ -633,14 +635,14 @@ export default function Settings() {
           </div>
         </form>
 
-        {/* Session & Environmental Security */}
-        <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Session &amp; Environmental Security</h2>
+        {/* Login Session */}
+        <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Login Session</h2>
         <div className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full p-6">
           <div className="flex items-center gap-4 pb-4 mb-6 border-b border-[#efeeed]">
             <div className="bg-[#f1dddc] rounded-[5px] w-[56px] h-[52px] flex items-center justify-center shrink-0">
-              <IconTerminal className="w-6 h-6 text-[#9B1B20]" />
+              <IconLock className="w-6 h-6 text-[#9B1B20]" />
             </div>
-            <p className="font-poppins font-medium text-[20px] text-black">Active Terminal Session</p>
+            <p className="font-poppins font-medium text-[20px] text-black">Current Session</p>
           </div>
 
           <div className="flex gap-6 items-start">
@@ -650,7 +652,7 @@ export default function Settings() {
                   Active Now
                 </span>
                 <p className="font-poppins font-medium text-[15px] text-black">
-                  Established Session ID: {session?.sessionCode ?? "--"}
+                  Session ID: {session?.sessionCode ?? "--"}
                 </p>
               </div>
               <div className="flex gap-3">
@@ -670,17 +672,17 @@ export default function Settings() {
             <div className="w-px self-stretch bg-[#d9d9d9]" />
 
             <div className="w-[231px] flex flex-col gap-3">
-              <p className="font-poppins font-medium text-[12px] text-[#d80b07] tracking-wide">DANGER ZONE</p>
+              <p className="font-poppins font-medium text-[12px] text-[#d80b07] tracking-wide">END SESSION</p>
               <button
                 type="button"
                 onClick={() => navigate("/logout-confirmation", { state: { backgroundLocation: location } })}
                 className="border-[1.5px] border-[#ce4444] rounded-[16px] w-full h-[49px] flex items-center justify-center cursor-pointer"
               >
-                <span className="font-poppins font-bold text-[17px] text-[#d70b07]">Logout of Session</span>
+                <span className="font-poppins font-bold text-[17px] text-[#d70b07]">Log Out</span>
               </button>
               <p className="flex items-start gap-1.5 font-poppins text-[11px] text-[#808080]">
                 <IconInfoCircle className="w-3 h-3 mt-0.5 shrink-0" />
-                Terminating this session will immediately invalidate your JWT and clear all storage.
+                Logging out will immediately end this session and sign you out on this device.
               </p>
             </div>
           </div>

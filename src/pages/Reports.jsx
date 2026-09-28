@@ -7,7 +7,6 @@ import {
   IconDownload,
   IconCalendar,
   IconFilter,
-  IconClock,
   IconUsers,
   IconCheckCircle,
   IconArrowUp,
@@ -20,7 +19,7 @@ import FulfillmentLogModal from "../components/FulfillmentLogModal";
 
 // Static per-card chrome; value/trend come from the API.
 const KPI_META = {
-  meanResponseTimeMinutes: { key: "response-time", left: "left-[277px]", label: "Mean Response Time", badgeIcon: IconClock },
+  bloodUnitsInStock: { key: "units-in-stock", left: "left-[277px]", label: "Blood Units in Stock", badgeIcon: IconDroplet },
   activeDonorsReach: { key: "active-donors", left: "left-[554px]", label: "Active Donors Reach", badgeIcon: IconUsers },
 };
 
@@ -189,7 +188,7 @@ export default function Reports() {
 
   const kpiCards = kpis
     ? [
-        { ...KPI_META.meanResponseTimeMinutes, value: `${kpis.meanResponseTimeMinutes.value} min`, trendPct: kpis.meanResponseTimeMinutes.trendPct },
+        { ...KPI_META.bloodUnitsInStock, value: String(kpis.bloodUnitsInStock.value), trendPct: kpis.bloodUnitsInStock.trendPct },
         { ...KPI_META.activeDonorsReach, value: String(kpis.activeDonorsReach.value), trendPct: kpis.activeDonorsReach.trendPct },
       ]
     : [];
@@ -340,9 +339,12 @@ export default function Reports() {
           {/* Genuinely true: broadcast dispatch (server/src/services/notifications.service.js
               -> rankDonorsByResponseTime) ranks matching donors with a real
               binary min-heap keyed on their historical average response
-              time, and contacts the fastest-typical responders first. */}
+              time, and contacts the fastest-typical responders first — this
+              badge just describes that in clinical-operations language
+              ("Min-Heap Optimized" reads as engineering jargon on an admin
+              portal meant to feel like a hospital system, not a dev tool). */}
           <div className="absolute left-[543px] top-[18px] bg-[rgba(173,43,33,0.1)] rounded-[10px] w-[145px] h-[19px] flex items-center justify-center">
-            <span className="font-poppins font-bold text-[10px] text-[#9B1B20]">Min-Heap Optimized</span>
+            <span className="font-poppins font-bold text-[10px] text-[#9B1B20]">Priority Matching</span>
           </div>
           <p className="absolute left-[22px] top-[36px] font-poppins font-semibold text-[20px] text-black">Donor Response Time</p>
           <p className="absolute left-[22px] top-[66px] font-poppins font-semibold text-[15px] text-[#808080] w-[600px] whitespace-nowrap">
