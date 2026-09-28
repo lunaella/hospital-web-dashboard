@@ -71,3 +71,16 @@ export function requireTeamManager(req, res, next) {
   if (req.admin.isSuperAdmin || req.admin.canManageTeam) return next();
   return res.status(403).json({ error: "Only the super admin or a delegated team manager can do that." });
 }
+
+// Stricter than requireSection("settings", ...) or requireTeamManager: for
+// actions that affect the whole network rather than one admin's own
+// hospital — adding/editing/removing a hospital itself. Even a delegated
+// team manager or an admin with edit access on the Settings section
+// shouldn't be able to do this; only a real super admin manages which
+// hospitals exist at all. A hospital-scoped admin adding staff to their own
+// hospital is a different, already-scoped action (see team.controller.js),
+// not gated by this.
+export function requireSuperAdmin(req, res, next) {
+  if (req.admin.isSuperAdmin) return next();
+  return res.status(403).json({ error: "Only the super admin can do that." });
+}

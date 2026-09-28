@@ -688,11 +688,14 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Hospital Network — a real administrative capability (not
-            self-service like the cards above), so it's hidden entirely for
-            an admin with 'none' on the settings section rather than shown
-            in a way that would just 403 on every request. */}
-        {profile && profile.permissions?.settings !== "none" && (
+        {/* Hospital Network — adding/removing a hospital affects the whole
+            network, not just one admin's own hospital, so it's super-admin
+            only (see requireSuperAdmin on the backend hospital routes) —
+            not just anyone with edit access on the Settings section. A
+            hospital-scoped team manager still manages their own hospital's
+            *team* via the Team Access card below; they just never see this
+            one at all. */}
+        {profile && profile.isSuperAdmin && (
         <>
         <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Hospital Network</h2>
         <p className="mt-1.5 font-poppins font-semibold text-[15px] text-[#808080] max-w-[616px]">
