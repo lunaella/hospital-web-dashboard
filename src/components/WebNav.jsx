@@ -36,11 +36,12 @@ export default function WebNav({ className }) {
   // failed) — falls back to the generic label rather than something that
   // implies a specific (possibly wrong) access level.
   const badgeLabel = profileError ? "ADMIN" : roleLabel({ isSuperAdmin, permissions });
-  // Longer labels (LIMITED ACCESS, DONOR MGMT, ...) don't fit the sidebar's
-  // fixed badge slot at the default 13px/0.2em tracking sized for "ADMIN" —
-  // shrink both down together rather than letting the text clip or spill
-  // past the sidebar edge.
-  const badgeTextStyle = badgeLabel.length > 8 ? { fontSize: 10, letterSpacing: "0.12em" } : undefined;
+  // The badge slot has ~184px of room before the sidebar clips it (the text
+  // starts at left-112 inside a 296px-wide container) — plenty for every
+  // label at the original 13px/0.2em except the single longest one
+  // ("LIMITED ACCESS"), which gets a small, still-readable trim instead of
+  // the same shrink every other label doesn't need.
+  const badgeTextStyle = badgeLabel.length > 11 ? { fontSize: 12, letterSpacing: "0.14em" } : undefined;
 
   const activePath = ACTIVE_PATH_OVERRIDES[location.pathname] || location.pathname;
   // On a genuine permissions restriction, hide the item — navigating there
