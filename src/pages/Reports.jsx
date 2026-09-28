@@ -361,7 +361,12 @@ export default function Reports() {
               </span>
             ))}
 
-            <svg className="absolute left-[12px] top-0" width="551" height={CHART_PLOT_HEIGHT} viewBox={`0 0 575 ${CHART_PLOT_HEIGHT}`}>
+            <svg
+              className="absolute left-[12px] top-0 overflow-visible"
+              width="551"
+              height={CHART_PLOT_HEIGHT}
+              viewBox={`0 0 575 ${CHART_PLOT_HEIGHT}`}
+            >
               {/* Dotted horizontal gridlines at each y-axis tick */}
               {chartGridYs.map((y) => (
                 <line key={y} x1="0" y1={y} x2="575" y2={y} stroke="#d9d9d9" strokeWidth="1.5" strokeDasharray="2 5" strokeLinecap="round" />
