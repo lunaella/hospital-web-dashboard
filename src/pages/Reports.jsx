@@ -192,13 +192,23 @@ export default function Reports() {
   // ("donors are responding within target") instead of leaving the admin to
   // interpret a raw line graph themselves — the most recent day with data
   // in the 7-day window is treated as "current".
-  const latestResponseMinutes = [...responseTimeSeries].reverse().find((d) => d.avgMinutes != null)?.avgMinutes;
+  const latestResponseMinutesRaw = [...responseTimeSeries].reverse().find((d) => d.avgMinutes != null)?.avgMinutes;
+  // Whole-number minutes read cleanly for typical values; once it's into the
+  // hours a decimal-minute figure ("3631.3 min") is both unreadable and, at
+  // that length, the likeliest thing to force the summary line to wrap and
+  // overlap the chart below it — hours reads shorter and clearer either way.
+  const latestResponseDisplay =
+    latestResponseMinutesRaw == null
+      ? null
+      : latestResponseMinutesRaw >= 60
+        ? `${(latestResponseMinutesRaw / 60).toFixed(1)} hrs`
+        : `${Math.round(latestResponseMinutesRaw)} min`;
   const responseSummary =
-    latestResponseMinutes == null
+    latestResponseMinutesRaw == null
       ? "Not enough recent activity to report a current response time."
-      : latestResponseMinutes <= RESPONSE_TARGET_MINUTES
-        ? `Donors are responding in ${latestResponseMinutes} min on average — within the ${RESPONSE_TARGET_MINUTES}-minute target.`
-        : `Donors are responding in ${latestResponseMinutes} min on average — above the ${RESPONSE_TARGET_MINUTES}-minute target.`;
+      : latestResponseMinutesRaw <= RESPONSE_TARGET_MINUTES
+        ? `Donors are responding in ${latestResponseDisplay} on average — within the ${RESPONSE_TARGET_MINUTES}-minute target.`
+        : `Donors are responding in ${latestResponseDisplay} on average — above the ${RESPONSE_TARGET_MINUTES}-minute target.`;
 
   const kpiCards = kpis
     ? [
@@ -364,7 +374,10 @@ export default function Reports() {
           <p className="absolute left-[22px] top-[62px] font-poppins font-semibold text-[13px] text-[#808080] w-[600px]">
             Average minutes from request broadcast to donor confirmation
           </p>
-          <p className="absolute left-[22px] top-[82px] font-poppins font-semibold text-[13px] text-[#9B1B20] w-[500px]">
+          <p
+            className="absolute left-[22px] top-[84px] font-poppins font-semibold text-[13px] text-[#9B1B20] w-[681px] truncate"
+            title={responseSummary}
+          >
             {responseSummary}
           </p>
 
