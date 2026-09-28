@@ -103,11 +103,13 @@ export default function Reports() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [openLogMenu, setOpenLogMenu] = useState(null);
+  const [showAllCompleted, setShowAllCompleted] = useState(false);
 
   const [kpis, setKpis] = useState(null);
   const [fulfillmentRatePct, setFulfillmentRatePct] = useState(null);
   const [responseTimeSeries, setResponseTimeSeries] = useState([]);
   const [fulfillmentLog, setFulfillmentLog] = useState([]);
+  const [completedRequests, setCompletedRequests] = useState([]);
   const [breakdown, setBreakdown] = useState(null);
   const [demandForecast, setDemandForecast] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -122,11 +124,12 @@ export default function Reports() {
 
     async function load() {
       try {
-        const [kpisData, dashboardStats, series, log, breakdownData, forecast] = await Promise.all([
+        const [kpisData, dashboardStats, series, log, completed, breakdownData, forecast] = await Promise.all([
           api.get("/api/reports/kpis"),
           api.get("/api/dashboard/stats"),
           api.get("/api/reports/response-time"),
           api.get("/api/reports/fulfillment-log?limit=20"),
+          api.get("/api/reports/completed-requests?limit=50"),
           api.get("/api/reports/fulfillment-breakdown"),
           api.get("/api/reports/demand-forecast"),
         ]);
@@ -137,6 +140,7 @@ export default function Reports() {
         setFulfillmentRatePct(dashboardStats.fulfillmentRatePct);
         setResponseTimeSeries(series);
         setFulfillmentLog(log);
+        setCompletedRequests(completed);
         setBreakdown(breakdownData);
         setDemandForecast(forecast);
       } catch (err) {
@@ -162,7 +166,15 @@ export default function Reports() {
   ).slice(0, showAllLogs ? undefined : 4);
   const extraRowCount = Math.max(0, visibleRows.length - 4);
   const logCardHeight = 446 + extraRowCount * 62;
-  const rootHeight = 1350 + extraRowCount * 62;
+
+  // Completed Requests section (traceability/audit table, separate from the
+  // Recent Fulfillment Log above) — sits below both the log card and the
+  // Demand Forecast card, so its top depends on whichever of those two is
+  // currently taller.
+  const completedVisibleRows = completedRequests.slice(0, showAllCompleted ? undefined : 5);
+  const completedCardTop = Math.max(855 + logCardHeight, 823 + 215) + 40;
+  const completedCardHeight = 172 + Math.max(completedVisibleRows.length, 1) * 62;
+  const rootHeight = completedCardTop + completedCardHeight + 40;
 
   // Chart geometry derived from the fetched 7-day series.
   const chartPoints = responseTimeSeries.map((d, i) => ({ x: 22 + i * 86, y: valueToY(d.avgMinutes ?? 0) }));
@@ -559,6 +571,106 @@ export default function Reports() {
             <span className="font-poppins font-bold text-[15px] text-white">Review Prep List</span>
           </button>
         </div>
+
+        {/* Completed Requests — traceability/audit table (recommended by Sir
+            Darwin): every FULFILLED request with its full lifecycle, not
+            just the compact Recent Fulfillment Log above. "Assigned
+            Donor(s)" is populated from donor_arrivals rows linked back to
+            this request (completeAppointment now backfills that link) — a
+            request fulfilled through the manual "Add units" flow on All
+            Broadcasts has no such link and will correctly show "—" here. */}
+        <div
+          className="absolute left-[15px] bg-white rounded-[10px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.1)] w-[1068px]"
+          style={{ top: completedCardTop, height: completedCardHeight }}
+        />
+        <p
+          className="absolute left-[22px] font-poppins font-semibold text-[20px] text-black"
+          style={{ top: completedCardTop + 23 }}
+        >
+          Completed Requests
+        </p>
+        <p
+          className="absolute left-[22px] font-poppins font-semibold text-[15px] text-[#808080] w-[600px]"
+          style={{ top: completedCardTop + 53 }}
+        >
+          Full audit record of fulfilled requests, for traceability and historical reporting.
+        </p>
+        {completedRequests.length > 5 && (
+          <button
+            type="button"
+            onClick={() => setShowAllCompleted((v) => !v)}
+            title={showAllCompleted ? "Show fewer completed requests" : "Show all completed requests"}
+            className="absolute right-[22px] border-2 border-[#d9d9d9] rounded-[16px] w-[191px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#f6f5f4] transition-colors"
+            style={{ top: completedCardTop + 26 }}
+          >
+            <span className="font-poppins font-medium text-[17px] text-black whitespace-nowrap">
+              {showAllCompleted ? "Show Less" : "View All"}
+            </span>
+          </button>
+        )}
+
+        <div
+          className="absolute left-[22px] bg-[#fff5f5] border border-[#efeeed] w-[1024px] h-[54px] flex items-center px-3 text-[12px] font-poppins font-semibold text-[#808080] tracking-wide"
+          style={{ top: completedCardTop + 110 }}
+        >
+          <span className="w-[100px] text-center">REQUEST ID</span>
+          <span className="w-[170px] text-center">HOSPITAL</span>
+          <span className="w-[80px] text-center">BLOOD TYPE</span>
+          <span className="w-[80px] text-center">QUANTITY</span>
+          <span className="w-[120px] text-center">REQUEST DATE</span>
+          <span className="w-[120px] text-center">FULFILLMENT DATE</span>
+          <span className="w-[240px] text-center">ASSIGNED DONOR(S)</span>
+          <span className="w-[100px] text-center">STATUS</span>
+        </div>
+
+        {completedVisibleRows.length === 0 && (
+          <div
+            className="absolute left-[22px] w-[1024px] h-[62px] flex items-center justify-center text-[13px] text-[#aaa4a0] font-medium border border-[#c0bfbf]"
+            style={{ top: completedCardTop + 164 }}
+          >
+            No fulfilled requests yet.
+          </div>
+        )}
+
+        {completedVisibleRows.map((row, i) => (
+          <div
+            key={row.id}
+            className="absolute left-[22px] bg-white border border-[#c0bfbf] shadow-[0px_3px_6px_0px_rgba(0,0,0,0.1)] w-[1024px] h-[62px] flex items-center px-3"
+            style={{ top: completedCardTop + 164 + i * 62 }}
+          >
+            <span className="w-[100px] text-center font-poppins font-semibold text-[13px] text-[#9B1B20]">
+              {row.requestId}
+            </span>
+            <span className="w-[170px] text-center font-poppins font-medium text-[12px] text-black truncate px-1" title={row.hospital}>
+              {row.hospital}
+            </span>
+            <div className="w-[80px] flex justify-center">
+              <div className="border-2 border-[#c5c4c4] rounded-[10px] px-2 h-[24px] flex items-center justify-center">
+                <span className="font-poppins font-semibold text-[11px] text-[#868686]">{row.bloodType}</span>
+              </div>
+            </div>
+            <span className="w-[80px] text-center font-poppins font-semibold text-[13px] text-[#868686]">
+              {row.quantityRequested}
+            </span>
+            <span className="w-[120px] text-center font-poppins font-medium text-[12px] text-[#868686]">
+              {row.requestDate ? new Date(row.requestDate).toLocaleDateString() : "—"}
+            </span>
+            <span className="w-[120px] text-center font-poppins font-medium text-[12px] text-[#868686]">
+              {row.fulfillmentDate ? new Date(row.fulfillmentDate).toLocaleDateString() : "—"}
+            </span>
+            <span
+              className="w-[240px] text-center font-poppins font-medium text-[12px] text-black truncate px-1"
+              title={row.assignedDonors?.length ? row.assignedDonors.join(", ") : ""}
+            >
+              {row.assignedDonors?.length ? row.assignedDonors.join(", ") : "—"}
+            </span>
+            <div className="w-[100px] flex justify-center">
+              <span className="border-2 border-[#c5c4c4] rounded-full px-3 h-[24px] flex items-center justify-center font-poppins font-semibold text-[11px] text-[#1e7d32] whitespace-nowrap">
+                {row.status}
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

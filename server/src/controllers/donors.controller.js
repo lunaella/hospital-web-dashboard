@@ -402,10 +402,16 @@ export const completeAppointment = asyncHandler(async (req, res) => {
       "UPDATE donors SET last_donation_at = now(), updated_at = now() WHERE id = $1",
       [appt.donorId]
     );
-    await client.query(
-      "INSERT INTO donor_arrivals (donor_id, hospital_id, arrived_at) VALUES ($1, $2, now())",
+    // request_id starts NULL and is backfilled below once the matching
+    // request (if any) is determined — this is the one place donor_arrivals
+    // rows get created, so it's also the only place that can ever link a
+    // visit to the request it fulfilled (the Completed Requests report's
+    // "Assigned Donor(s)" column reads this).
+    const { rows: arrivalRows } = await client.query(
+      "INSERT INTO donor_arrivals (donor_id, hospital_id, arrived_at) VALUES ($1, $2, now()) RETURNING id",
       [appt.donorId, appt.hospitalId]
     );
+    const arrivalId = arrivalRows[0].id;
     // Upsert rather than a plain UPDATE: a hospital might not have a
     // pre-seeded inventory row for every blood type, and the first
     // completed donation of a given type at a given hospital should still
@@ -465,6 +471,7 @@ export const completeAppointment = asyncHandler(async (req, res) => {
         [newFulfilled, isNowFulfilled ? "FULFILLED" : "PARTIALLY_FULFILLED", resolvedAt, rating, match.id]
       );
       fulfilledRequest = updated[0];
+      await client.query("UPDATE donor_arrivals SET request_id = $1 WHERE id = $2", [match.id, arrivalId]);
     }
 
     await client.query("COMMIT");

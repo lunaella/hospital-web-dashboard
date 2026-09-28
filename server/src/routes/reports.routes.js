@@ -6,6 +6,7 @@ import {
   getSystemHealth,
   getKpis,
   getDemandForecast,
+  getCompletedRequests,
 } from "../controllers/reports.controller.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireSection, requireHospitalScope } from "../middleware/permissions.js";
@@ -20,3 +21,4 @@ reportsRouter.get("/fulfillment-breakdown", requireHospitalScope(), getFulfillme
 reportsRouter.get("/system-health", getSystemHealth);
 reportsRouter.get("/kpis", requireHospitalScope(), getKpis);
 reportsRouter.get("/demand-forecast", requireHospitalScope(), getDemandForecast);
+reportsRouter.get("/completed-requests", requireHospitalScope(), getCompletedRequests);

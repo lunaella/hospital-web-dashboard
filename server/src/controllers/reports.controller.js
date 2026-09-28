@@ -52,6 +52,49 @@ export const getFulfillmentLog = asyncHandler(async (req, res) => {
   res.json(rows);
 });
 
+// Completed Requests table (traceability/audit view, distinct from the
+// compact Recent Fulfillment Log above — this is meant to be read as a
+// record, not a live feed). One row per FULFILLED request, with the
+// hospital and every donor whose donor_arrivals visit was credited toward
+// it (via the request_id backfilled in completeAppointment). A request
+// fulfilled through the manual "Add units" flow on All Broadcasts
+// (requests.controller.js's fulfillRequest) has no donor_arrivals row at
+// all, so it will correctly show an empty assignedDonors list here rather
+// than a fabricated one — that flow records units without recording who
+// gave them, a real data-model gap, not a bug in this query.
+export const getCompletedRequests = asyncHandler(async (req, res) => {
+  const hospitalId = hospitalIdParam(req);
+  const limit = Math.min(Number(req.query.limit) || 50, 200);
+  const hospitalClause = hospitalId ? "AND r.hospital_id = $2" : "";
+  const params = hospitalId ? [limit, hospitalId] : [limit];
+
+  const { rows } = await pool.query(
+    `SELECT
+       r.id,
+       r.request_code AS "requestId",
+       h.name AS hospital,
+       r.blood_type AS "bloodType",
+       r.units_needed AS "quantityRequested",
+       r.created_at AS "requestDate",
+       r.resolved_at AS "fulfillmentDate",
+       r.status,
+       coalesce(
+         array_agg(d.name) FILTER (WHERE d.name IS NOT NULL),
+         '{}'
+       ) AS "assignedDonors"
+     FROM blood_requests r
+     JOIN hospitals h ON h.id = r.hospital_id
+     LEFT JOIN donor_arrivals da ON da.request_id = r.id
+     LEFT JOIN donors d ON d.id = da.donor_id
+     WHERE r.status = 'FULFILLED' ${hospitalClause}
+     GROUP BY r.id, h.name
+     ORDER BY r.resolved_at DESC
+     LIMIT $1`,
+    params
+  );
+  res.json(rows);
+});
+
 // Fulfillment Rate donut: avg(units_fulfilled/units_needed) grouped by
 // priority tier, across all requests (not just resolved ones) so partially
 // fulfilled emergencies still count against the rate.
