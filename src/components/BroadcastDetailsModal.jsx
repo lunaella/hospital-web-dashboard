@@ -5,6 +5,13 @@
 // time elapsed, ward/unit, and request ID. Same overlay pattern as
 // QrScannerModal.jsx (fixed backdrop + centered card), just bigger since
 // there's more to show.
+//
+// Portaled to document.body — see FulfillmentLogModal.jsx's comment: every
+// page renders inside AppShell's `transform: scale(...)` zoom wrapper,
+// which breaks `position: fixed` centering/sizing for anything rendered
+// inline instead of portaled out of it.
+import { createPortal } from "react-dom";
+
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
   URGENT: "text-black",
@@ -30,7 +37,7 @@ export default function BroadcastDetailsModal({ broadcast, onClose }) {
   if (!broadcast) return null;
   const b = broadcast;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] font-poppins flex items-center justify-center p-6">
       <div className="absolute inset-0 backdrop-blur-[7.5px] bg-[rgba(217,217,217,0.85)]" onClick={onClose} />
       <div className="relative bg-white rounded-[16px] p-6 w-[460px] max-w-[92vw] shadow-xl flex flex-col gap-4">
@@ -79,6 +86,7 @@ export default function BroadcastDetailsModal({ broadcast, onClose }) {
           <DetailRow label="Time Elapsed" value={b.time} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

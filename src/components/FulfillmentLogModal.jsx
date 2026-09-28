@@ -4,6 +4,16 @@
 // the more rows there were — this keeps the Reports page a fixed height and
 // puts every row in one scrollable popup instead. Same overlay pattern as
 // BroadcastDetailsModal.jsx/DonorProfileModal.jsx.
+//
+// Portaled to document.body: every page renders inside AppShell's
+// `transform: scale(...)` zoom-to-fit wrapper (see AppShell.jsx), and a
+// `position: fixed` element inside a transformed ancestor is positioned
+// relative to THAT ancestor's (very tall, unscaled) box instead of the
+// real viewport — which is why this used to render low and shrunk down by
+// the zoom factor instead of centered at full size. Escaping via a portal,
+// same fix DonorManagement.jsx's walk-in modal already uses, sidesteps
+// that entirely.
+import { createPortal } from "react-dom";
 import { IconAlert } from "./icons";
 
 function priorityColorFor(priority) {
@@ -13,7 +23,7 @@ function priorityColorFor(priority) {
 export default function FulfillmentLogModal({ open, rows, onClose, onViewBroadcast }) {
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] font-poppins flex items-center justify-center p-6">
       <div className="absolute inset-0 backdrop-blur-[7.5px] bg-[rgba(217,217,217,0.85)]" onClick={onClose} />
       <div className="relative bg-white rounded-[16px] p-6 w-[760px] max-w-[92vw] h-[80vh] max-h-[720px] shadow-xl flex flex-col gap-4">
@@ -89,6 +99,7 @@ export default function FulfillmentLogModal({ open, rows, onClose, onViewBroadca
           ))}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

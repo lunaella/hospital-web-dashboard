@@ -8,7 +8,13 @@
 // answers, no emergency contact, no address. The phone number stays masked
 // by default (same masking as the donor list) with an explicit Show toggle,
 // so nothing sensitive is exposed just by opening the popup.
+//
+// Portaled to document.body — see FulfillmentLogModal.jsx's comment: every
+// page renders inside AppShell's `transform: scale(...)` zoom wrapper,
+// which breaks `position: fixed` centering/sizing for anything rendered
+// inline instead of portaled out of it.
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../lib/apiClient";
 import { maskPhone } from "../utils/pii";
 
@@ -71,7 +77,7 @@ export default function DonorProfileModal({ donorId, onClose }) {
 
   if (!donorId) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[70] font-poppins flex items-center justify-center p-6">
       <div className="absolute inset-0 backdrop-blur-[7.5px] bg-[rgba(217,217,217,0.85)]" onClick={onClose} />
       <div className="relative bg-white rounded-[16px] p-6 w-[480px] max-w-[92vw] max-h-[85vh] overflow-y-auto shadow-xl flex flex-col gap-4">
@@ -159,6 +165,7 @@ export default function DonorProfileModal({ donorId, onClose }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
