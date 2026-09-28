@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { api, setToken } from "../lib/apiClient";
+import { useAuth } from "../context/AuthContext";
 
 import resqLogo from "../assets/resq-logo.png";
 
@@ -13,6 +14,7 @@ const imgResQLogo = resqLogo;
 export default function LoginFailed() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { refreshProfile } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -31,6 +33,13 @@ export default function LoginFailed() {
     try {
       const data = await api.post("/api/auth/login", { username, password });
       setToken(data.token);
+      // Without this, AuthContext's `profile` was still whatever it fetched
+      // on the very first app-mount render — before any token existed, so
+      // permissions defaulted to all-"none" — and this retry form never
+      // re-fetched it after logging in, unlike Login.jsx's own handler. The
+      // login itself succeeded, but every section then rendered SectionGuard's
+      // "Access Restricted" for a fully valid, correctly-permissioned account.
+      await refreshProfile();
       navigate("/dashboard");
     } catch (err) {
       setError(err.message);
