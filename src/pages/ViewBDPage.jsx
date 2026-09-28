@@ -4,6 +4,7 @@ import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
 import { IconAlert, IconClock, IconSearch } from "../components/icons";
 import PageHeader from "../components/PageHeader";
+import BroadcastDetailsModal from "../components/BroadcastDetailsModal";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -34,6 +35,7 @@ export default function ViewBDPage() {
   const [fulfillError, setFulfillError] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [notifications, setNotifications] = useState({}); // code -> { loading, error, summary, attempts }
+  const [selectedBroadcast, setSelectedBroadcast] = useState(null);
 
   function mapBroadcast(r) {
     return {
@@ -196,11 +198,16 @@ export default function ViewBDPage() {
             {filtered.map((b, i) => (
               <Fragment key={`${b.id}-${i}`}>
               <div
-                className="grid grid-cols-[100px_90px_130px_130px_1fr_80px_190px] items-center px-6 py-4 bg-white"
+                className="grid grid-cols-[100px_90px_130px_130px_1fr_80px_190px] items-center px-6 py-4 bg-white cursor-pointer hover:bg-[#fafafa] transition-colors"
+                onClick={() => setSelectedBroadcast(b)}
+                title="View broadcast details"
               >
                 <button
                   type="button"
-                  onClick={() => toggleNotifications(b.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleNotifications(b.id);
+                  }}
                   className="text-left text-[13px] font-semibold text-[#9B1B20] underline decoration-dotted cursor-pointer"
                   title="View donor notification status"
                 >
@@ -248,14 +255,19 @@ export default function ViewBDPage() {
                         min="1"
                         value={unitsInput[b.id] ?? ""}
                         onChange={(e) => setUnitsInput((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                        onClick={(e) => e.stopPropagation()}
                         placeholder="Units"
                         className="w-[56px] text-[12px] border border-[#d9d9d9] rounded-[4px] px-2 py-1 outline-none"
                       />
                       <button
                         type="button"
                         disabled={fulfillingId === b.id}
-                        onClick={() => handleFulfill(b.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFulfill(b.id);
+                        }}
                         className="text-[11px] font-semibold text-white bg-[#9B1B20] rounded-full px-3 py-1.5 hover:bg-[#8B1218] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Add fulfilled units to this request"
                       >
                         {fulfillingId === b.id ? "..." : "Add"}
                       </button>
@@ -318,6 +330,8 @@ export default function ViewBDPage() {
           </div>
         </div>
       </div>
+
+      <BroadcastDetailsModal broadcast={selectedBroadcast} onClose={() => setSelectedBroadcast(null)} />
     </div>
   );
 }
