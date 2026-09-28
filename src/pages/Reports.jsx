@@ -16,6 +16,7 @@ import {
   IconAlert,
   IconStethoscope,
 } from "../components/icons";
+import FulfillmentLogModal from "../components/FulfillmentLogModal";
 
 // Static per-card chrome; value/trend come from the API.
 const KPI_META = {
@@ -101,8 +102,8 @@ export default function Reports() {
   const [dateRange, setDateRange] = useState("Last 30 days");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState("all");
-  const [showAllLogs, setShowAllLogs] = useState(false);
   const [openLogMenu, setOpenLogMenu] = useState(null);
+  const [logModalOpen, setLogModalOpen] = useState(false);
   const [showAllCompleted, setShowAllCompleted] = useState(false);
 
   const [kpis, setKpis] = useState(null);
@@ -128,7 +129,7 @@ export default function Reports() {
           api.get("/api/reports/kpis"),
           api.get("/api/dashboard/stats"),
           api.get("/api/reports/response-time"),
-          api.get("/api/reports/fulfillment-log?limit=20"),
+          api.get("/api/reports/fulfillment-log?limit=100"),
           api.get("/api/reports/completed-requests?limit=50"),
           api.get("/api/reports/fulfillment-breakdown"),
           api.get("/api/reports/demand-forecast"),
@@ -161,11 +162,10 @@ export default function Reports() {
     });
   }
 
-  const visibleRows = (
-    priorityFilter === "all" ? fulfillmentLog : fulfillmentLog.filter((r) => r.priority === priorityFilter)
-  ).slice(0, showAllLogs ? undefined : 4);
-  const extraRowCount = Math.max(0, visibleRows.length - 4);
-  const logCardHeight = 446 + extraRowCount * 62;
+  const filteredLog =
+    priorityFilter === "all" ? fulfillmentLog : fulfillmentLog.filter((r) => r.priority === priorityFilter);
+  const visibleRows = filteredLog.slice(0, 4);
+  const logCardHeight = 446;
 
   // Completed Requests section (traceability/audit table, separate from the
   // Recent Fulfillment Log above) — sits below both the log card and the
@@ -436,16 +436,15 @@ export default function Reports() {
         />
         <p className="absolute left-[22px] top-[878px] font-poppins font-semibold text-[20px] text-black">Recent Fulfillment Log</p>
         <p className="absolute left-[22px] top-[908px] font-poppins font-semibold text-[15px] text-[#808080] w-[420px]">
-          Detailed audit of the last {visibleRows.length} high-priority requests.
+          Detailed audit of the last {filteredLog.length} high-priority requests.
         </p>
         <button
           type="button"
-          onClick={() => setShowAllLogs((v) => !v)}
+          onClick={() => setLogModalOpen(true)}
+          title="Open the full scrollable fulfillment log"
           className="absolute left-[520px] top-[881px] border-2 border-[#d9d9d9] rounded-[16px] w-[191px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#f6f5f4] transition-colors"
         >
-          <span className="font-poppins font-medium text-[17px] text-black whitespace-nowrap">
-            {showAllLogs ? "Show Less" : "View Detailed Log"}
-          </span>
+          <span className="font-poppins font-medium text-[17px] text-black whitespace-nowrap">View Detailed Log</span>
         </button>
 
         <div className="absolute left-[42px] top-[962px] bg-[#fff5f5] border border-[#efeeed] w-[672px] h-[54px] flex items-center px-4 text-[13px] font-poppins font-semibold text-[#808080] tracking-wide">
@@ -672,6 +671,16 @@ export default function Reports() {
           </div>
         ))}
       </div>
+
+      <FulfillmentLogModal
+        open={logModalOpen}
+        rows={filteredLog}
+        onClose={() => setLogModalOpen(false)}
+        onViewBroadcast={(reqId) => {
+          setLogModalOpen(false);
+          navigate("/view-broadcasts", { state: { presetSearch: reqId } });
+        }}
+      />
     </div>
   );
 }
