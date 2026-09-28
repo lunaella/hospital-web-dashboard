@@ -14,6 +14,17 @@ import { buildPhotoUrl, buildSignatureUrl } from "../utils/mediaUrl.js";
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
 
+// A donor's signature is meant to be a stable, sole-control identifier on
+// their Digital Health Card (RA 8792/E-Commerce Act — an electronic
+// signature must be "unique to the signer" and "under the signer's sole
+// control" to carry legal weight), not something redrawn on a whim every
+// time the card is opened. At the same time, RA 10173 (Data Privacy Act)
+// gives donors the right to have inaccurate/outdated personal data
+// corrected on request, so it can't be locked forever either. A cooldown
+// is the balance: the first signature is always free to set, and after
+// that a donor can redo it again, just not more than once per window.
+const SIGNATURE_COOLDOWN_DAYS = 180;
+
 // PRC coordinates all donor-facing blood requests on behalf of the partner
 // hospitals — the app's Priority Request Feed and "Schedule New Appointment"
 // flow should only ever surface broadcasts from this one hospital row, even
@@ -83,6 +94,19 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   delete donor.hasPhoto;
   delete donor.photoUpdatedAt;
   donor.signatureUrl = donor.hasSignature ? buildSignatureUrl(req, donor.id, donor.signatureUpdatedAt) : null;
+  // Lets the app gate the "redo signature" action client-side (grey it out,
+  // show "You can update this on <date>") without guessing — null means
+  // either no signature yet (always editable) or the cooldown has already
+  // passed (also editable). Mirrors the same SIGNATURE_COOLDOWN_DAYS math
+  // uploadMySignature enforces server-side, which is the real gate.
+  donor.signatureEditableAt =
+    donor.hasSignature && donor.signatureUpdatedAt
+      ? (() => {
+          const next = new Date(donor.signatureUpdatedAt);
+          next.setDate(next.getDate() + SIGNATURE_COOLDOWN_DAYS);
+          return next > new Date() ? next.toISOString() : null;
+        })()
+      : null;
   delete donor.hasSignature;
   delete donor.signatureUpdatedAt;
   res.json(donor);
@@ -160,6 +184,26 @@ export const uploadMySignature = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Could not process that signature — please try drawing it again." });
   }
   const mimeType = file.mimetype?.startsWith("image/") ? file.mimetype : imageTypeToMime(detectedType);
+
+  // Enforce SIGNATURE_COOLDOWN_DAYS server-side — this is the real gate;
+  // the app's own check (via getMyProfile's signatureEditableAt) is just
+  // there to avoid wasting the donor's time drawing one it'll reject.
+  const { rows: existingRows } = await pool.query(
+    `SELECT signature IS NOT NULL AS "hasSignature", signature_updated_at AS "signatureUpdatedAt"
+     FROM donors WHERE id = $1`,
+    [req.donor.id]
+  );
+  const existing = existingRows[0];
+  if (existing?.hasSignature && existing.signatureUpdatedAt) {
+    const nextEligibleAt = new Date(existing.signatureUpdatedAt);
+    nextEligibleAt.setDate(nextEligibleAt.getDate() + SIGNATURE_COOLDOWN_DAYS);
+    if (nextEligibleAt > new Date()) {
+      return res.status(403).json({
+        error: `Your signature was already set. You can update it again on ${nextEligibleAt.toISOString().slice(0, 10)}.`,
+        nextEligibleAt: nextEligibleAt.toISOString(),
+      });
+    }
+  }
 
   const { rows } = await pool.query(
     `UPDATE donors SET signature = $1, signature_mime_type = $2, signature_updated_at = now()
