@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import resqLogo from "../assets/resq-logo.png";
 import { IconUsers, IconChart, IconGrid, IconGear } from "./icons";
 import { useAuth } from "../context/AuthContext";
+import { roleLabel } from "../utils/roleLabel";
 
 // Nav icons render inline instead of via <img src="figma.com/api/mcp/asset/...">
 // — those were ephemeral Figma design-tool links, not a real asset host, so
@@ -29,7 +30,17 @@ const ITEM_GAP = 56;
 
 export default function WebNav({ className }) {
   const location = useLocation();
-  const { permissions, profileError } = useAuth();
+  const { permissions, profileError, isSuperAdmin } = useAuth();
+
+  // "ADMIN" until we actually know better (still loading, or the /me fetch
+  // failed) — falls back to the generic label rather than something that
+  // implies a specific (possibly wrong) access level.
+  const badgeLabel = profileError ? "ADMIN" : roleLabel({ isSuperAdmin, permissions });
+  // Longer labels (LIMITED ACCESS, DONOR MGMT, ...) don't fit the sidebar's
+  // fixed badge slot at the default 13px/0.2em tracking sized for "ADMIN" —
+  // shrink both down together rather than letting the text clip or spill
+  // past the sidebar edge.
+  const badgeTextStyle = badgeLabel.length > 8 ? { fontSize: 10, letterSpacing: "0.12em" } : undefined;
 
   const activePath = ACTIVE_PATH_OVERRIDES[location.pathname] || location.pathname;
   // On a genuine permissions restriction, hide the item — navigating there
@@ -60,8 +71,12 @@ export default function WebNav({ className }) {
           </div>
         </div>
         <div className="absolute bg-[rgba(255,255,255,0.25)] h-[38px] left-[100px] top-[38px] w-[1.5px]" />
-        <p className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap">
-          ADMIN
+        <p
+          className="absolute font-poppins font-semibold leading-[normal] left-[112px] not-italic text-[13px] text-[rgba(255,255,255,0.85)] top-[48px] tracking-[0.2em] whitespace-nowrap"
+          style={badgeTextStyle}
+          title={profileError ? undefined : `Access level: ${badgeLabel}`}
+        >
+          {badgeLabel}
         </p>
       </div>
 
