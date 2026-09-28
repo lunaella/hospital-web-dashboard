@@ -14,9 +14,9 @@ export default function FulfillmentLogModal({ open, rows, onClose, onViewBroadca
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] font-poppins">
+    <div className="fixed inset-0 z-[70] font-poppins flex items-center justify-center p-6">
       <div className="absolute inset-0 backdrop-blur-[7.5px] bg-[rgba(217,217,217,0.85)]" onClick={onClose} />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[16px] p-6 w-[720px] max-w-[92vw] max-h-[80vh] shadow-xl flex flex-col gap-4">
+      <div className="relative bg-white rounded-[16px] p-6 w-[760px] max-w-[92vw] h-[80vh] max-h-[720px] shadow-xl flex flex-col gap-4">
         <div className="flex items-center justify-between shrink-0">
           <div>
             <p className="text-[11px] font-semibold text-[#8a8a8a] tracking-wide uppercase">Reports</p>
@@ -41,7 +41,7 @@ export default function FulfillmentLogModal({ open, rows, onClose, onViewBroadca
           <span className="w-[100px] text-center">RATING</span>
         </div>
 
-        <div className="overflow-y-auto flex flex-col gap-2 pr-1">
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pr-1">
           {rows.length === 0 && (
             <div className="flex items-center justify-center h-[80px] text-[13px] text-[#aaa4a0] font-medium">
               No requests match this priority.

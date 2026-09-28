@@ -72,9 +72,9 @@ export default function DonorProfileModal({ donorId, onClose }) {
   if (!donorId) return null;
 
   return (
-    <div className="fixed inset-0 z-[70] font-poppins">
+    <div className="fixed inset-0 z-[70] font-poppins flex items-center justify-center p-6">
       <div className="absolute inset-0 backdrop-blur-[7.5px] bg-[rgba(217,217,217,0.85)]" onClick={onClose} />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[16px] p-6 w-[480px] max-w-[92vw] max-h-[85vh] overflow-y-auto shadow-xl flex flex-col gap-4">
+      <div className="relative bg-white rounded-[16px] p-6 w-[480px] max-w-[92vw] max-h-[85vh] overflow-y-auto shadow-xl flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <p className="text-[11px] font-semibold text-[#8a8a8a] tracking-wide uppercase">Donor Profile</p>
           <button
