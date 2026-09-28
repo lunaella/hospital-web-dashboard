@@ -17,6 +17,7 @@ import {
 } from "../components/icons";
 import FulfillmentLogModal from "../components/FulfillmentLogModal";
 import CompletedRequestsModal from "../components/CompletedRequestsModal";
+import { exportReportPdf } from "../utils/exportReportPdf";
 
 // Static per-card chrome; value/trend come from the API.
 const KPI_META = {
@@ -99,7 +100,7 @@ const chartGridYs = [0, 62, 124, 186, 248];
 
 export default function Reports() {
   const navigate = useNavigate();
-  const { hospitalId, hospitalRestricted, hospitalsLoading } = useHospital();
+  const { hospitalId, hospitals, hospitalRestricted, hospitalsLoading } = useHospital();
   const [dateRange, setDateRange] = useState("Last 30 days");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState("all");
@@ -239,6 +240,28 @@ export default function Reports() {
     return `Based on the past 48 hours, ${h.bloodType} demand rose ${h.pctChange}% compared to the prior 48 hours — expect continued elevated need if the trend holds.`;
   })();
 
+  // Builds the real, data-driven PDF (see exportReportPdf.js) from exactly
+  // what's already on screen — the same filteredLog the Recent Fulfillment
+  // Log table shows, not the unfiltered fulfillmentLog underneath it.
+  function handleExportPdf() {
+    const hospitalName =
+      hospitalId === "all" || !hospitalId ? "All Hospitals" : hospitals.find((h) => h.id === hospitalId)?.name;
+    exportReportPdf({
+      hospitalName,
+      dateRange,
+      priorityFilter,
+      kpiCards,
+      fulfillmentRatePct,
+      responseSummary,
+      responseTimeSeries,
+      fulfillmentBreakdown,
+      forecastHeadline,
+      advisoryText,
+      fulfillmentLog: filteredLog,
+      completedRequests,
+    });
+  }
+
   const advisoryText = (() => {
     if (!demandForecast) return "Checking current stock levels...";
     const types = demandForecast.advisoryTypes;
@@ -271,7 +294,7 @@ export default function Reports() {
         {/* Action buttons */}
         <button
           type="button"
-          onClick={() => window.print()}
+          onClick={handleExportPdf}
           className="absolute left-[899px] top-[109px] bg-[#9B1B20] rounded-[16px] w-[166px] h-[49px] flex items-center justify-center gap-2 cursor-pointer hover:bg-[#8B1218] transition-colors"
         >
           <span className="font-poppins font-bold text-[17px] text-white">Export PDF</span>
