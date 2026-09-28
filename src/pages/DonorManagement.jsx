@@ -673,7 +673,14 @@ export default function DonorManagement() {
             <div className="w-[224px] flex items-center gap-3 pl-2">
               <Avatar name={donor.name} size={45} />
               <div>
-                <p className="text-[13px] font-medium text-black leading-tight">{donor.name}</p>
+                <button
+                  type="button"
+                  onClick={() => setProfileDonorId(donor.dbId)}
+                  title="View donor profile"
+                  className="text-[13px] font-medium text-black leading-tight hover:text-[#9B1B20] hover:underline cursor-pointer text-left"
+                >
+                  {donor.name}
+                </button>
                 <div className="flex items-center gap-[6px]">
                   <p className="text-[10px] font-medium text-[#aaa4a0] leading-tight">
                     {revealedPhones.has(donor.id) ? donor.phone : maskPhone(donor.phone)}
