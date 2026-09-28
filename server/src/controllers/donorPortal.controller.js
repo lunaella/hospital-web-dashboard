@@ -607,11 +607,19 @@ export const startDiditVerification = asyncHandler(async (req, res) => {
 // first always, then by proximity to ?lat=&lng= (the donor's current GPS
 // position, passed as query params since donors don't have a fixed stored
 // location — a hospital does) when supplied, falling back to most-recent
-// first when it isn't.
+// first when it isn't. ?radiusKm=, if also supplied, is a hard cutoff —
+// the Settings "Urgent Alert Radius" picker in the mobile app — excluding
+// any request whose hospital is farther away than that.
 export const listOpenRequestsForDonor = asyncHandler(async (req, res) => {
   const lat = req.query.lat !== undefined ? Number(req.query.lat) : null;
   const lng = req.query.lng !== undefined ? Number(req.query.lng) : null;
   const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+
+  // Urgent Alert Radius (Settings, mobile app) — a real hard cutoff, not
+  // just a sort tiebreaker: only meaningful alongside a position, since
+  // there's nothing to measure the radius from otherwise.
+  const radiusKm = req.query.radiusKm !== undefined ? Number(req.query.radiusKm) : null;
+  const hasRadius = hasLocation && Number.isFinite(radiusKm);
 
   // Haversine distance in km — only computed when the app actually sent a
   // position; NULL (and therefore last in NULLS LAST ordering) otherwise
@@ -649,12 +657,15 @@ export const listOpenRequestsForDonor = asyncHandler(async (req, res) => {
      JOIN hospitals h ON h.id = r.hospital_id
      WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED') AND r.blood_type = $1
        AND h.name = $${hasLocation ? 4 : 2}
+       ${hasRadius ? `AND (${distanceExpr}) <= $5` : ""}
      ORDER BY
        CASE r.priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END,
        (${distanceExpr}) ASC NULLS LAST,
        r.created_at DESC`,
     hasLocation
-      ? [req.donor.bloodType, lat, lng, COORDINATING_HOSPITAL_NAME]
+      ? hasRadius
+        ? [req.donor.bloodType, lat, lng, COORDINATING_HOSPITAL_NAME, radiusKm]
+        : [req.donor.bloodType, lat, lng, COORDINATING_HOSPITAL_NAME]
       : [req.donor.bloodType, COORDINATING_HOSPITAL_NAME]
   );
   res.json(rows);
