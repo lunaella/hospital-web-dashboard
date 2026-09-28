@@ -13,6 +13,7 @@ import {
   checkInByQr,
   getActiveAppointmentForDonor,
   getScreeningSummary,
+  getDonationHistory,
 } from "../controllers/donors.controller.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireSection, requireHospitalScope } from "../middleware/permissions.js";
@@ -33,6 +34,7 @@ donorsRouter.post("/", requireSection("donor_management", "edit"), createDonor);
 donorsRouter.get("/:id", getDonor);
 donorsRouter.get("/:id/active-appointment", getActiveAppointmentForDonor);
 donorsRouter.get("/:id/screening-summary", getScreeningSummary);
+donorsRouter.get("/:id/donation-history", getDonationHistory);
 donorsRouter.patch("/:id/eligibility", requireSection("donor_management", "edit"), setDonorEligibility);
 
 // Looks up an existing appointment's own hospital_id — updateAppointmentStatus

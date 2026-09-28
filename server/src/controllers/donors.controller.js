@@ -180,12 +180,32 @@ export const exportDonors = asyncHandler(async (req, res) => {
 export const getDonor = asyncHandler(async (req, res) => {
   const { rows } = await pool.query(
     `SELECT id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType", avatar_url AS avatar,
-            last_donation_at AS "lastDonationAt"
+            last_donation_at AS "lastDonationAt", age, weight_kg AS "weightKg", gender,
+            created_at AS "memberSince"
      FROM donors WHERE id = $1`,
     [req.params.id]
   );
   if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
   res.json(rows[0]);
+});
+
+// Donor Profile popup (Donor Management screen) — donation history. Only
+// arrived/completed visits count as "history" (donor_arrivals is written
+// exclusively by completeAppointment, never for a pending/cancelled
+// appointment), so this is already exactly "donations this donor actually
+// showed up and gave blood for", one row per visit. Deliberately returns
+// only hospital + date, not any request/PII beyond what's already visible
+// elsewhere in the admin — this powers a history list, not a report.
+export const getDonationHistory = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT da.id, da.arrived_at AS "arrivedAt", h.name AS "hospitalName"
+     FROM donor_arrivals da
+     JOIN hospitals h ON h.id = da.hospital_id
+     WHERE da.donor_id = $1
+     ORDER BY da.arrived_at DESC`,
+    [req.params.id]
+  );
+  res.json(rows);
 });
 
 // Appointment View: donations scheduled for a single day, with left/right

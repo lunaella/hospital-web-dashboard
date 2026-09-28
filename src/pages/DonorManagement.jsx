@@ -8,17 +8,10 @@ import { connectRealtime } from "../lib/realtime";
 import { useHospital } from "../context/HospitalContext";
 import Avatar from "../components/Avatar";
 import { IconFilter, IconCalendar, IconCheck, IconPlus, IconClock, IconLock, IconX } from "../components/icons";
+import { maskPhone } from "../utils/pii";
+import DonorProfileModal from "../components/DonorProfileModal";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
-
-// Keeps only the last 4 digits visible, e.g. "09171234567" -> "•••••••4567".
-// Falls back to the raw value if it's too short to meaningfully mask.
-function maskPhone(phone) {
-  if (!phone) return "—";
-  const digits = String(phone).trim();
-  if (digits.length <= 4) return digits;
-  return "•".repeat(digits.length - 4) + digits.slice(-4);
-}
 
 function mapDonor(d) {
   return {
@@ -80,6 +73,7 @@ export default function DonorManagement() {
   const [eligibilityFilter, setEligibilityFilter] = useState(() => initialSearchParams.get("eligibility") || "all");
   const [viewDate, setViewDate] = useState(() => new Date());
   const [openRowMenu, setOpenRowMenu] = useState(null);
+  const [profileDonorId, setProfileDonorId] = useState(null);
   const [page, setPage] = useState(0);
   // Data Privacy Act (RA 10173) consideration: a donor's phone number is
   // personal data with no reason to sit in plaintext on a screen that isn't
@@ -737,6 +731,16 @@ export default function DonorManagement() {
                 <div className="absolute right-2 top-[52px] w-[170px] bg-white rounded-[10px] border border-[#d9d9d9] shadow-[0px_8px_8px_0px_rgba(0,0,0,0.09)] py-1 z-30">
                   <button
                     type="button"
+                    onClick={() => {
+                      setOpenRowMenu(null);
+                      setProfileDonorId(donor.dbId);
+                    }}
+                    className="w-full text-left px-3 py-2 text-[12px] font-poppins font-medium text-black hover:bg-[#fbf3f3] cursor-pointer"
+                  >
+                    View Profile
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => toggleDonorLock(donor)}
                     className="w-full text-left px-3 py-2 text-[12px] font-poppins font-medium text-black hover:bg-[#fbf3f3] cursor-pointer"
                   >
@@ -1169,6 +1173,8 @@ export default function DonorManagement() {
           </div>,
           document.body
         )}
+
+      <DonorProfileModal donorId={profileDonorId} onClose={() => setProfileDonorId(null)} />
     </div>
   );
 }
