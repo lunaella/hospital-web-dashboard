@@ -16,6 +16,7 @@ import {
   IconStethoscope,
 } from "../components/icons";
 import FulfillmentLogModal from "../components/FulfillmentLogModal";
+import CompletedRequestsModal from "../components/CompletedRequestsModal";
 
 // Static per-card chrome; value/trend come from the API.
 const KPI_META = {
@@ -103,7 +104,7 @@ export default function Reports() {
   const [priorityFilter, setPriorityFilter] = useState("all");
   const [openLogMenu, setOpenLogMenu] = useState(null);
   const [logModalOpen, setLogModalOpen] = useState(false);
-  const [showAllCompleted, setShowAllCompleted] = useState(false);
+  const [completedModalOpen, setCompletedModalOpen] = useState(false);
 
   const [kpis, setKpis] = useState(null);
   const [fulfillmentRatePct, setFulfillmentRatePct] = useState(null);
@@ -170,7 +171,7 @@ export default function Reports() {
   // Recent Fulfillment Log above) — sits below both the log card and the
   // Demand Forecast card, so its top depends on whichever of those two is
   // currently taller.
-  const completedVisibleRows = completedRequests.slice(0, showAllCompleted ? undefined : 5);
+  const completedVisibleRows = completedRequests.slice(0, 5);
   const completedCardTop = Math.max(855 + logCardHeight, 823 + 215) + 40;
   const completedCardHeight = 172 + Math.max(completedVisibleRows.length, 1) * 62;
   const rootHeight = completedCardTop + completedCardHeight + 40;
@@ -604,14 +605,12 @@ export default function Reports() {
         {completedRequests.length > 5 && (
           <button
             type="button"
-            onClick={() => setShowAllCompleted((v) => !v)}
-            title={showAllCompleted ? "Show fewer completed requests" : "Show all completed requests"}
+            onClick={() => setCompletedModalOpen(true)}
+            title="Open the full scrollable completed requests list"
             className="absolute right-[22px] border-2 border-[#d9d9d9] rounded-[16px] w-[191px] h-[49px] flex items-center justify-center cursor-pointer hover:bg-[#f6f5f4] transition-colors"
             style={{ top: completedCardTop + 26 }}
           >
-            <span className="font-poppins font-medium text-[17px] text-black whitespace-nowrap">
-              {showAllCompleted ? "Show Less" : "View All"}
-            </span>
+            <span className="font-poppins font-medium text-[17px] text-black whitespace-nowrap">View All</span>
           </button>
         )}
 
@@ -687,6 +686,12 @@ export default function Reports() {
           setLogModalOpen(false);
           navigate("/view-broadcasts", { state: { presetSearch: reqId } });
         }}
+      />
+
+      <CompletedRequestsModal
+        open={completedModalOpen}
+        rows={completedRequests}
+        onClose={() => setCompletedModalOpen(false)}
       />
     </div>
   );
