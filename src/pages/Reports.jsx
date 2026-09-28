@@ -73,7 +73,8 @@ const chartYAxis = ["24", "18", "12", "6", "0"];
 const CHART_MAX = 24;
 const CHART_PLOT_HEIGHT = 248;
 const valueToY = (value) => ((CHART_MAX - Math.min(value, CHART_MAX)) / CHART_MAX) * CHART_PLOT_HEIGHT;
-const SLA_TARGET_Y = valueToY(20.5);
+const RESPONSE_TARGET_MINUTES = 20.5;
+const RESPONSE_TARGET_Y = valueToY(RESPONSE_TARGET_MINUTES);
 
 // Catmull-Rom -> cubic Bezier smoothing so the line reads as a smooth curve
 // instead of sharp straight segments between data points.
@@ -186,6 +187,18 @@ export default function Reports() {
   const chartXAxis = responseTimeSeries.map((d) =>
     new Date(d.date).toLocaleDateString("en-US", { day: "2-digit", month: "short" })
   );
+
+  // Plain-language read of the chart, so the card states an actual finding
+  // ("donors are responding within target") instead of leaving the admin to
+  // interpret a raw line graph themselves — the most recent day with data
+  // in the 7-day window is treated as "current".
+  const latestResponseMinutes = [...responseTimeSeries].reverse().find((d) => d.avgMinutes != null)?.avgMinutes;
+  const responseSummary =
+    latestResponseMinutes == null
+      ? "Not enough recent activity to report a current response time."
+      : latestResponseMinutes <= RESPONSE_TARGET_MINUTES
+        ? `Donors are responding in ${latestResponseMinutes} min on average — within the ${RESPONSE_TARGET_MINUTES}-minute target.`
+        : `Donors are responding in ${latestResponseMinutes} min on average — above the ${RESPONSE_TARGET_MINUTES}-minute target.`;
 
   const kpiCards = kpis
     ? [
@@ -348,8 +361,11 @@ export default function Reports() {
             <span className="font-poppins font-bold text-[10px] text-[#9B1B20]">Priority Matching</span>
           </div>
           <p className="absolute left-[22px] top-[36px] font-poppins font-semibold text-[20px] text-black">Donor Response Time</p>
-          <p className="absolute left-[22px] top-[66px] font-poppins font-semibold text-[15px] text-[#808080] w-[600px] whitespace-nowrap">
+          <p className="absolute left-[22px] top-[62px] font-poppins font-semibold text-[13px] text-[#808080] w-[600px]">
             Average minutes from request broadcast to donor confirmation
+          </p>
+          <p className="absolute left-[22px] top-[82px] font-poppins font-semibold text-[13px] text-[#9B1B20] w-[500px]">
+            {responseSummary}
           </p>
 
           <div className="absolute left-[75px] top-[110px] w-[575px] h-[280px]">
@@ -374,8 +390,8 @@ export default function Reports() {
               {chartGridYs.map((y) => (
                 <line key={y} x1="0" y1={y} x2="575" y2={y} stroke="#d9d9d9" strokeWidth="1.5" strokeDasharray="2 5" strokeLinecap="round" />
               ))}
-              {/* Dashed SLA target line */}
-              <line x1="0" y1={SLA_TARGET_Y} x2="575" y2={SLA_TARGET_Y} stroke="#aaaaaa" strokeWidth="1.5" strokeDasharray="7 5" />
+              {/* Dashed response-time target line */}
+              <line x1="0" y1={RESPONSE_TARGET_Y} x2="575" y2={RESPONSE_TARGET_Y} stroke="#aaaaaa" strokeWidth="1.5" strokeDasharray="7 5" />
               {/* Area fill under the curve */}
               <path d={chartAreaPath} fill="#f1dddc" opacity="0.7" />
               {/* Response time line */}
@@ -404,7 +420,7 @@ export default function Reports() {
           </div>
           <div className="absolute left-[333px] top-[410px] flex items-center gap-2">
             <span className="w-[14px] h-[14px] rounded-[5px] bg-[#b3b3b3] shrink-0" />
-            <span className="font-poppins font-bold text-[11px] text-black whitespace-nowrap">SLA Target</span>
+            <span className="font-poppins font-bold text-[11px] text-black whitespace-nowrap">Response Target</span>
           </div>
         </div>
 
