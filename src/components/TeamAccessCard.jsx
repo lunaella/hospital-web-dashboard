@@ -86,6 +86,17 @@ function HospitalChecklist({ hospitals, value, onChange }) {
 
 const EMPTY_ADD_FORM = { username: "", email: "", tempPassword: "", canManageTeam: false, makeSuperAdmin: false };
 
+// Hospitals often route every team account through the same shared inbox
+// (e.g. the department's own address) rather than each person's personal
+// email, so remembering the last one typed here — persisted in
+// localStorage, not just this session's state — saves re-typing it for
+// every new person added afterward. Each admin gets their own remembered
+// value (keyed by their id) since different team managers may use
+// different shared inboxes.
+function lastTeamEmailKey(adminId) {
+  return `resq_last_team_email_${adminId ?? "unknown"}`;
+}
+
 // The Settings page only renders this when the logged-in admin is the super
 // admin or a delegated team manager (see requireTeamManager on the
 // backend) — everyone else never even fetches the team roster.
@@ -150,7 +161,8 @@ export default function TeamAccessCard({ currentAdminId }) {
   const myHospitalNames = hospitals.filter((h) => myHospitalIds.includes(h.id)).map((h) => h.name);
 
   function openAddForm() {
-    setAddForm(EMPTY_ADD_FORM);
+    const rememberedEmail = localStorage.getItem(lastTeamEmailKey(currentAdminId)) ?? "";
+    setAddForm({ ...EMPTY_ADD_FORM, email: rememberedEmail });
     setAddUsernameSuffix("");
     setAddPermissions(emptyPermissionsForm());
     setAddHospitalIds([]);
@@ -192,8 +204,12 @@ export default function TeamAccessCard({ currentAdminId }) {
         permissions: addPermissions,
         hospitalIds: addHospitalIds,
       });
+      localStorage.setItem(lastTeamEmailKey(currentAdminId), addForm.email.trim());
       setJustCreated({ username: effectiveUsername, tempPassword: addForm.tempPassword });
-      setAddForm(EMPTY_ADD_FORM);
+      // Keep the email that was just used rather than wiping it — adding
+      // several people in a row through the same shared inbox is the
+      // common case this is meant to save retyping for.
+      setAddForm({ ...EMPTY_ADD_FORM, email: addForm.email });
       setAddUsernameSuffix("");
       setAddPermissions(emptyPermissionsForm());
       setAddHospitalIds([]);
