@@ -160,6 +160,14 @@ export default function Login() {
               {isSubmitting ? "Signing in..." : "Log in"}
             </span>
           </button>
+
+          {/* No self-service reset: admin accounts are staff-managed, not
+              public signups, and (per the hospital-shared-email design —
+              see migration 020) an email-link reset would actually be
+              unsafe here, since several people already share one inbox. */}
+          <p className="font-poppins text-[12px] text-[rgba(255,255,255,0.7)] text-center">
+            Forgot your password? Ask your hospital's team manager or the super admin to reset it for you.
+          </p>
         </form>
       </div>
     </div>
