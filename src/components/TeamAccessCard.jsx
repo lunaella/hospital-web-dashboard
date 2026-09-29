@@ -97,6 +97,11 @@ export default function TeamAccessCard({ currentAdminId }) {
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState(EMPTY_ADD_FORM);
+  // For a hospital-scoped team manager, the new person's username is their
+  // own username with more typed onto the end (e.g. "makatimed" ->
+  // "makatimed2"), so it's obvious at a glance which hospital an account
+  // belongs to — the prefix itself isn't editable here, only this suffix.
+  const [addUsernameSuffix, setAddUsernameSuffix] = useState("");
   const [addPermissions, setAddPermissions] = useState(emptyPermissionsForm());
   const [addHospitalIds, setAddHospitalIds] = useState([]);
   const [addFormError, setAddFormError] = useState(null);
@@ -146,6 +151,7 @@ export default function TeamAccessCard({ currentAdminId }) {
 
   function openAddForm() {
     setAddForm(EMPTY_ADD_FORM);
+    setAddUsernameSuffix("");
     setAddPermissions(emptyPermissionsForm());
     setAddHospitalIds([]);
     setAddFormError(null);
@@ -153,9 +159,22 @@ export default function TeamAccessCard({ currentAdminId }) {
     setShowAddForm(true);
   }
 
+  // A hospital-scoped manager doesn't type a whole username — their own
+  // username is the fixed prefix, and addUsernameSuffix is whatever they
+  // add onto it. Everyone else (super admin, an unrestricted team manager)
+  // still types the full thing into addForm.username as before.
+  const usernamePrefix = isHospitalScopedManager ? currentAdmin.username : "";
+  const effectiveUsername = isHospitalScopedManager
+    ? `${usernamePrefix}${addUsernameSuffix.trim()}`
+    : addForm.username.trim();
+
   async function submitAddForm(e) {
     e.preventDefault();
-    if (!addForm.username.trim() || !addForm.email.trim() || !addForm.tempPassword) {
+    if (isHospitalScopedManager && !addUsernameSuffix.trim()) {
+      setAddFormError("Add something after your username so their login is unique.");
+      return;
+    }
+    if (!effectiveUsername || !addForm.email.trim() || !addForm.tempPassword) {
       setAddFormError("Username, email, and a temporary password are required.");
       return;
     }
@@ -167,9 +186,15 @@ export default function TeamAccessCard({ currentAdminId }) {
     setAddSubmitting(true);
     setAddFormError(null);
     try {
-      await api.post("/api/team", { ...addForm, permissions: addPermissions, hospitalIds: addHospitalIds });
-      setJustCreated({ username: addForm.username, tempPassword: addForm.tempPassword });
+      await api.post("/api/team", {
+        ...addForm,
+        username: effectiveUsername,
+        permissions: addPermissions,
+        hospitalIds: addHospitalIds,
+      });
+      setJustCreated({ username: effectiveUsername, tempPassword: addForm.tempPassword });
       setAddForm(EMPTY_ADD_FORM);
+      setAddUsernameSuffix("");
       setAddPermissions(emptyPermissionsForm());
       setAddHospitalIds([]);
       await refreshTeam();
@@ -304,11 +329,28 @@ export default function TeamAccessCard({ currentAdminId }) {
               <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <label className="flex flex-col gap-1.5">
                   <span className="font-poppins font-medium text-[13px] text-black">Username</span>
-                  <input
-                    value={addForm.username}
-                    onChange={(e) => setAddForm((p) => ({ ...p, username: e.target.value }))}
-                    className="border border-[#aaa4a0] rounded-[8px] h-[38px] px-3 font-poppins text-[13px] text-black outline-none"
-                  />
+                  {isHospitalScopedManager ? (
+                    <div className="flex items-center border border-[#aaa4a0] rounded-[8px] h-[38px] overflow-hidden focus-within:border-[#9B1B20]">
+                      <span
+                        title="Your username — new accounts build on top of it"
+                        className="shrink-0 h-full flex items-center pl-3 pr-1 font-poppins text-[13px] text-[#808080] bg-[#f7f5f5] select-none"
+                      >
+                        {usernamePrefix}
+                      </span>
+                      <input
+                        value={addUsernameSuffix}
+                        onChange={(e) => setAddUsernameSuffix(e.target.value)}
+                        placeholder="add something here"
+                        className="min-w-0 flex-1 h-full pl-1 pr-3 font-poppins text-[13px] text-black outline-none"
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      value={addForm.username}
+                      onChange={(e) => setAddForm((p) => ({ ...p, username: e.target.value }))}
+                      className="border border-[#aaa4a0] rounded-[8px] h-[38px] px-3 font-poppins text-[13px] text-black outline-none"
+                    />
+                  )}
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="font-poppins font-medium text-[13px] text-black">Email</span>
