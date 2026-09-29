@@ -182,7 +182,9 @@ export const createTeamMember = asyncHandler(async (req, res) => {
     } catch (err) {
       await client.query("ROLLBACK");
       if (err.code === "23505") {
-        return res.status(409).json({ error: "That username or email is already in use." });
+        // Only username is unique now (see migration 020) — email is
+        // meant to be shared across a hospital's whole team.
+        return res.status(409).json({ error: "That username is already in use." });
       }
       throw err;
     }
@@ -326,8 +328,12 @@ export const updateTeamMember = asyncHandler(async (req, res) => {
       }
     }
   } catch (err) {
+    // email is no longer unique (see migration 020), so this UPDATE (which
+    // only ever touches email/can_manage_team/clearance/password_hash, none
+    // else unique) shouldn't actually hit 23505 anymore — kept as a
+    // defensive fallback rather than assumed unreachable.
     if (err.code === "23505") {
-      return res.status(409).json({ error: "That email is already in use." });
+      return res.status(409).json({ error: "That update conflicts with an existing account." });
     }
     if (err.code === "23503") {
       return res.status(400).json({ error: "One of the selected hospitals doesn't exist." });

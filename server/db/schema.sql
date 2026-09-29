@@ -77,7 +77,11 @@ CREATE TABLE hospitals (
 CREATE TABLE admins (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username          VARCHAR(50) UNIQUE NOT NULL,
-  email             VARCHAR(255) UNIQUE NOT NULL,
+  -- Not unique (see migration 020): hospital teams commonly share one
+  -- inbox across every account, and login/password-reset both key off
+  -- username, never email, so there's nothing that depends on this being
+  -- distinct per row.
+  email             VARCHAR(255) NOT NULL,
   password_hash     TEXT NOT NULL,
   clearance         clearance_level NOT NULL DEFAULT 'ADMIN',
   -- Lets the super admin delegate "add/edit/remove team members and their

@@ -161,8 +161,14 @@ export default function TeamAccessCard({ currentAdminId }) {
   const myHospitalNames = hospitals.filter((h) => myHospitalIds.includes(h.id)).map((h) => h.name);
 
   function openAddForm() {
-    const rememberedEmail = localStorage.getItem(lastTeamEmailKey(currentAdminId)) ?? "";
-    setAddForm({ ...EMPTY_ADD_FORM, email: rememberedEmail });
+    // A hospital-scoped manager's team all shares their own email (e.g.
+    // makatimed@gov.ph) — nothing to remember or type, it's just always
+    // that. Everyone else keeps whatever they last typed, since there's no
+    // single "their own" email to default to.
+    const startingEmail = isHospitalScopedManager
+      ? currentAdmin.email
+      : localStorage.getItem(lastTeamEmailKey(currentAdminId)) ?? "";
+    setAddForm({ ...EMPTY_ADD_FORM, email: startingEmail });
     setAddUsernameSuffix("");
     setAddPermissions(emptyPermissionsForm());
     setAddHospitalIds([]);
@@ -179,6 +185,10 @@ export default function TeamAccessCard({ currentAdminId }) {
   const effectiveUsername = isHospitalScopedManager
     ? `${usernamePrefix}${addUsernameSuffix.trim()}`
     : addForm.username.trim();
+  // Same idea for email, but there's no suffix to add — every account a
+  // hospital-scoped manager creates uses their exact email, full stop, so
+  // this can't drift from what openAddForm set it to.
+  const effectiveEmail = isHospitalScopedManager ? currentAdmin.email : addForm.email.trim();
 
   async function submitAddForm(e) {
     e.preventDefault();
@@ -186,7 +196,7 @@ export default function TeamAccessCard({ currentAdminId }) {
       setAddFormError("Add something after your username so their login is unique.");
       return;
     }
-    if (!effectiveUsername || !addForm.email.trim() || !addForm.tempPassword) {
+    if (!effectiveUsername || !effectiveEmail || !addForm.tempPassword) {
       setAddFormError("Username, email, and a temporary password are required.");
       return;
     }
@@ -201,15 +211,16 @@ export default function TeamAccessCard({ currentAdminId }) {
       await api.post("/api/team", {
         ...addForm,
         username: effectiveUsername,
+        email: effectiveEmail,
         permissions: addPermissions,
         hospitalIds: addHospitalIds,
       });
-      localStorage.setItem(lastTeamEmailKey(currentAdminId), addForm.email.trim());
+      if (!isHospitalScopedManager) localStorage.setItem(lastTeamEmailKey(currentAdminId), effectiveEmail);
       setJustCreated({ username: effectiveUsername, tempPassword: addForm.tempPassword });
       // Keep the email that was just used rather than wiping it — adding
       // several people in a row through the same shared inbox is the
       // common case this is meant to save retyping for.
-      setAddForm({ ...EMPTY_ADD_FORM, email: addForm.email });
+      setAddForm({ ...EMPTY_ADD_FORM, email: effectiveEmail });
       setAddUsernameSuffix("");
       setAddPermissions(emptyPermissionsForm());
       setAddHospitalIds([]);
@@ -370,12 +381,21 @@ export default function TeamAccessCard({ currentAdminId }) {
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="font-poppins font-medium text-[13px] text-black">Email</span>
-                  <input
-                    type="email"
-                    value={addForm.email}
-                    onChange={(e) => setAddForm((p) => ({ ...p, email: e.target.value }))}
-                    className="border border-[#aaa4a0] rounded-[8px] h-[38px] px-3 font-poppins text-[13px] text-black outline-none"
-                  />
+                  {isHospitalScopedManager ? (
+                    <div
+                      title="Everyone on your team uses this same email"
+                      className="flex items-center h-[38px] px-3 rounded-[8px] border border-[#aaa4a0] bg-[#f7f5f5] font-poppins text-[13px] text-[#808080]"
+                    >
+                      {effectiveEmail}
+                    </div>
+                  ) : (
+                    <input
+                      type="email"
+                      value={addForm.email}
+                      onChange={(e) => setAddForm((p) => ({ ...p, email: e.target.value }))}
+                      className="border border-[#aaa4a0] rounded-[8px] h-[38px] px-3 font-poppins text-[13px] text-black outline-none"
+                    />
+                  )}
                 </label>
                 <label className="flex flex-col gap-1.5 col-span-2">
                   <span className="font-poppins font-medium text-[13px] text-black">Temporary password</span>
