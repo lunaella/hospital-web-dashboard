@@ -18,6 +18,8 @@ import {
   unregisterDevice,
   uploadMyPhoto,
   uploadMySignature,
+  checkNearbyRequest,
+  updateMyLocation,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
 import { uploadVerificationFiles, uploadProfilePhoto, uploadSignature } from "../middleware/upload.js";
@@ -35,6 +37,8 @@ donorPortalRouter.post("/me/signature", uploadSignature, uploadMySignature);
 donorPortalRouter.post("/me/verification", uploadVerificationFiles, submitVerification); // legacy on-device flow, no longer called by the app
 donorPortalRouter.post("/me/verification/didit-session", startDiditVerification);
 donorPortalRouter.get("/requests", listOpenRequestsForDonor);
+donorPortalRouter.get("/requests/nearby", checkNearbyRequest);
+donorPortalRouter.patch("/location", updateMyLocation);
 donorPortalRouter.get("/hospitals", listHospitalsForDonors);
 donorPortalRouter.get("/appointments", listMyAppointments);
 donorPortalRouter.post("/appointments", bookMyAppointment);

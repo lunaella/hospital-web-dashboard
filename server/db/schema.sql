@@ -226,6 +226,14 @@ CREATE TABLE donors (
   notify_sms        BOOLEAN NOT NULL DEFAULT true,  -- per-channel opt-out; see migration 008
   notify_email      BOOLEAN NOT NULL DEFAULT true,
   password_hash     TEXT,                 -- nullable; OTP-only donors have never set one — see migration 009
+  -- Most recent GPS fix reported by the mobile app's background location
+  -- stream (see migration 021) — NOT the one-shot read used for
+  -- GET /api/donor/requests?lat=&lng=, which is request-scoped and never
+  -- persisted. Powers proximity pushes for donors near a hospital with an
+  -- open broadcast even when they aren't registered with that hospital.
+  last_lat          NUMERIC(9,6),
+  last_lng          NUMERIC(9,6),
+  last_location_at  TIMESTAMPTZ,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -320,6 +328,21 @@ CREATE TABLE notifications (
 
 CREATE INDEX idx_notifications_request_id ON notifications(request_id);
 CREATE INDEX idx_notifications_donor_id ON notifications(donor_id);
+
+-- Dedup for proximity-based pushes (migration 021): a donor lingering near,
+-- or repeatedly passing, a hospital with a still-open request shouldn't get
+-- re-pushed for that same request on every background location update.
+-- Checked/inserted by notifyDonorsForRequest's proximity path before it
+-- actually sends.
+CREATE TABLE donor_request_notifications (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  donor_id      UUID NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
+  request_id    UUID NOT NULL REFERENCES blood_requests(id) ON DELETE CASCADE,
+  notified_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (donor_id, request_id)
+);
+
+CREATE INDEX idx_donor_request_notifications_request_id ON donor_request_notifications(request_id);
 
 -- Donor identity verification submissions ("Get Verified" in the mobile
 -- app) — see migration 012 for why these are bytea columns rather than

@@ -10,6 +10,7 @@ import { broadcast } from "../realtime/hub.js";
 import { imageSize } from "image-size";
 import { env } from "../config/env.js";
 import { buildPhotoUrl, buildSignatureUrl } from "../utils/mediaUrl.js";
+import { sendPushToDonor } from "../utils/push.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
@@ -916,4 +917,117 @@ export const unregisterDevice = asyncHandler(async (req, res) => {
   }
   await pool.query(`DELETE FROM donor_devices WHERE fcm_token = $1 AND donor_id = $2`, [fcmToken, req.donor.id]);
   res.status(204).send();
+});
+
+// Haversine distance (km) between a live (lat, lng) and the coordinating
+// hospital — same formula as listOpenRequestsForDonor's distanceExpr, kept
+// separate here because that query sorts a whole feed while this is a
+// single point check against one specific hospital.
+const NEARBY_DISTANCE_EXPR = `6371 * acos(least(1, greatest(-1,
+   cos(radians($1)) * cos(radians(h.latitude)) * cos(radians(h.longitude) - radians($2))
+   + sin(radians($1)) * sin(radians(h.latitude))
+ )))`;
+
+// Fallback search radius (km) for a donor who's never set an "Urgent Alert
+// Radius" in Settings — wide enough to cover "same city" rather than
+// silently finding nothing for a donor who hasn't touched that setting.
+const DEFAULT_NEARBY_RADIUS_KM = 20;
+
+// Shared by checkNearbyRequest (read-only) and updateMyLocation (the
+// reminder-push trigger) below: is there a still-open request, matching
+// this donor's blood type, at the one coordinating hospital, within
+// radiusKm of (lat, lng)? Returns the request row (with distanceKm) or null.
+async function findNearbyOpenRequest({ bloodType, lat, lng, radiusKm }) {
+  const { rows } = await pool.query(
+    `SELECT
+       r.id,
+       r.request_code AS "requestCode",
+       r.blood_type AS "bloodType",
+       r.priority,
+       r.ward,
+       h.id AS "hospitalId",
+       h.name AS "hospitalName",
+       round((${NEARBY_DISTANCE_EXPR})::numeric, 1) AS "distanceKm"
+     FROM blood_requests r
+     JOIN hospitals h ON h.id = r.hospital_id
+     WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED')
+       AND r.blood_type = $3
+       AND h.name = $4
+       AND (${NEARBY_DISTANCE_EXPR}) <= $5
+     ORDER BY (${NEARBY_DISTANCE_EXPR}) ASC
+     LIMIT 1`,
+    [lat, lng, bloodType, COORDINATING_HOSPITAL_NAME, radiusKm]
+  );
+  return rows[0] ?? null;
+}
+
+// On-demand "is there something open near me right now" check — a home
+// screen banner or a manual refresh can call this directly instead of
+// waiting on a background location update. Purely read-only: never sends a
+// push or touches the dedup table (see updateMyLocation below for that).
+export const checkNearbyRequest = asyncHandler(async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ error: "lat and lng are required." });
+  }
+  const parsedRadius = Number(req.query.radiusKm);
+  const radiusKm = Number.isFinite(parsedRadius) ? parsedRadius : DEFAULT_NEARBY_RADIUS_KM;
+
+  const match = await findNearbyOpenRequest({ bloodType: req.donor.bloodType, lat, lng, radiusKm });
+  res.json({ match });
+});
+
+// The mobile app's background location stream (see LocationService) calls
+// this on every meaningful position change — distinct from the one-shot
+// read GET /api/donor/requests?lat=&lng= already uses, which is never
+// persisted. Two things happen: (1) donors.last_lat/lng/last_location_at is
+// updated, giving a future broadcast's initial push (notifyDonorsForRequest)
+// something to measure proximity from later; (2) if this position is
+// already within range of a still-open request matching this donor's blood
+// type that they haven't been reminded about yet, a push nudge goes out
+// immediately. Donors already got the original blast when the request first
+// opened — notifyDonorsForRequest notifies every matching eligible donor
+// nationally, not just ones tied to this hospital, since donors are
+// hospital-agnostic by design (see hospitals' schema.sql comment) — so this
+// is a reminder for whoever missed, dismissed, or wasn't eligible for that
+// first push, not a replacement for it.
+export const updateMyLocation = asyncHandler(async (req, res) => {
+  const lat = Number(req.body.lat);
+  const lng = Number(req.body.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return res.status(400).json({ error: "lat and lng are required." });
+  }
+  const parsedRadius = Number(req.body.radiusKm);
+  const radiusKm = Number.isFinite(parsedRadius) ? parsedRadius : DEFAULT_NEARBY_RADIUS_KM;
+
+  await pool.query(`UPDATE donors SET last_lat = $1, last_lng = $2, last_location_at = now() WHERE id = $3`, [
+    lat,
+    lng,
+    req.donor.id,
+  ]);
+
+  const match = await findNearbyOpenRequest({ bloodType: req.donor.bloodType, lat, lng, radiusKm });
+  if (!match) {
+    return res.json({ ok: true, reminded: false });
+  }
+
+  // ON CONFLICT DO NOTHING: the dedup row is only actually inserted (and
+  // rowCount > 0) the first time this donor+request pair is seen, so the
+  // reminder push fires once per request no matter how many more position
+  // updates land while the donor lingers nearby.
+  const { rowCount } = await pool.query(
+    `INSERT INTO donor_request_notifications (donor_id, request_id) VALUES ($1, $2) ON CONFLICT (donor_id, request_id) DO NOTHING`,
+    [req.donor.id, match.id]
+  );
+
+  if (rowCount > 0) {
+    await sendPushToDonor(req.donor.id, {
+      title: "Open request nearby",
+      body: `${match.hospitalName} still needs ${match.bloodType} donors, about ${match.distanceKm} km away (Ward: ${match.ward}).`,
+      data: { type: "blood_request_nearby", requestId: match.id },
+    }).catch(() => {}); // best-effort — a failed push shouldn't fail the location update itself
+  }
+
+  res.json({ ok: true, reminded: rowCount > 0 });
 });
