@@ -823,7 +823,7 @@ export default function Settings() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-x-10 gap-y-8">
-                  <Field label="CODE" hint="Short unique identifier, e.g. SLMC-QC — auto-filled when you pick a hospital, but editable">
+                  <Field label="CODE" hint="Short unique identifier, e.g. QMC-LC — auto-filled when you pick a hospital, but editable">
                     <input
                       value={hospitalForm.code}
                       onChange={(e) => updateHospitalField("code", e.target.value)}

@@ -56,7 +56,7 @@ CREATE TYPE donor_gender AS ENUM ('male', 'female');
 
 CREATE TABLE hospitals (
   id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code                  VARCHAR(20) UNIQUE NOT NULL, -- e.g. "SLMC-QC"
+  code                  VARCHAR(20) UNIQUE NOT NULL, -- e.g. "QMC-LC"
   name                  VARCHAR(150) NOT NULL,
   city                  VARCHAR(100),
   address               TEXT,
@@ -422,11 +422,15 @@ CREATE INDEX idx_system_health_recorded_at ON system_health_snapshots(recorded_a
 -- Three hospitals so the super admin's hospital switcher has something real
 -- to switch between, with deliberately different stock situations per
 -- hospital (see blood_inventory below) instead of identical numbers
--- everywhere.
+-- everywhere. Real Lucena City, Quezon PROVINCE hospitals (not Quezon
+-- CITY/Metro Manila — this project's PRC coordinating hospital, see
+-- COORDINATING_HOSPITAL_NAME in donorPortal.controller.js, is the
+-- Quezon-LUCENA Chapter). Names/codes match src/data/hospitalDirectory.js's
+-- existing Lucena City list — see migration 022 for coordinate sourcing.
 INSERT INTO hospitals (code, name, city, latitude, longitude) VALUES
-  ('SLMC-QC', 'St. Luke''s Medical Center', 'Quezon City', 14.6091, 121.0223),
-  ('PGH-MNL', 'Philippine General Hospital', 'Manila', 14.5778, 120.9860),
-  ('MMC-MKT', 'Makati Medical Center', 'Makati', 14.5648, 121.0247);
+  ('QMC-LC', 'Quezon Medical Center', 'Lucena City', 13.942109, 121.612569),
+  ('MMG-LC', 'Lucena MMG General Hospital', 'Lucena City', 13.944940, 121.630930),
+  ('LUDH-LC', 'Lucena United Doctors Hospital and Medical Center', 'Lucena City', 13.946990, 121.585091);
 
 -- Default dev login: username "admin", password "1234"
 -- Change this (via PATCH /api/settings/password) before this ever touches
@@ -445,18 +449,18 @@ INSERT INTO admins (username, email, password_hash, clearance) VALUES
 -- starting defaults, not a fixed rule; admins can tune per hospital via
 -- Settings > Inventory Thresholds (PATCH /api/dashboard/stock/:bloodType).
 INSERT INTO blood_inventory (hospital_id, blood_type, units_available, critical_threshold, low_threshold)
-SELECT id, 'O-', 12, 18, 30 FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'AB-', 12, 15, 25 FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'A+', 12, 10, 15 FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'O+', 12, 10, 15 FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'O-', 6, 18, 30 FROM hospitals WHERE code = 'PGH-MNL'
-UNION ALL SELECT id, 'AB-', 20, 15, 25 FROM hospitals WHERE code = 'PGH-MNL'
-UNION ALL SELECT id, 'A+', 30, 10, 15 FROM hospitals WHERE code = 'PGH-MNL'
-UNION ALL SELECT id, 'O+', 9, 10, 15 FROM hospitals WHERE code = 'PGH-MNL'
-UNION ALL SELECT id, 'O-', 40, 18, 30 FROM hospitals WHERE code = 'MMC-MKT'
-UNION ALL SELECT id, 'AB-', 8, 15, 25 FROM hospitals WHERE code = 'MMC-MKT'
-UNION ALL SELECT id, 'A+', 18, 10, 15 FROM hospitals WHERE code = 'MMC-MKT'
-UNION ALL SELECT id, 'O+', 22, 10, 15 FROM hospitals WHERE code = 'MMC-MKT';
+SELECT id, 'O-', 12, 18, 30 FROM hospitals WHERE code = 'QMC-LC'
+UNION ALL SELECT id, 'AB-', 12, 15, 25 FROM hospitals WHERE code = 'QMC-LC'
+UNION ALL SELECT id, 'A+', 12, 10, 15 FROM hospitals WHERE code = 'QMC-LC'
+UNION ALL SELECT id, 'O+', 12, 10, 15 FROM hospitals WHERE code = 'QMC-LC'
+UNION ALL SELECT id, 'O-', 6, 18, 30 FROM hospitals WHERE code = 'MMG-LC'
+UNION ALL SELECT id, 'AB-', 20, 15, 25 FROM hospitals WHERE code = 'MMG-LC'
+UNION ALL SELECT id, 'A+', 30, 10, 15 FROM hospitals WHERE code = 'MMG-LC'
+UNION ALL SELECT id, 'O+', 9, 10, 15 FROM hospitals WHERE code = 'MMG-LC'
+UNION ALL SELECT id, 'O-', 40, 18, 30 FROM hospitals WHERE code = 'LUDH-LC'
+UNION ALL SELECT id, 'AB-', 8, 15, 25 FROM hospitals WHERE code = 'LUDH-LC'
+UNION ALL SELECT id, 'A+', 18, 10, 15 FROM hospitals WHERE code = 'LUDH-LC'
+UNION ALL SELECT id, 'O+', 22, 10, 15 FROM hospitals WHERE code = 'LUDH-LC';
 
 INSERT INTO donors (donor_code, name, phone, blood_type, last_donation_at) VALUES
   ('D-8821', 'Sarah Jenkins', '+63 9956782915', 'O-', NULL),
@@ -468,32 +472,32 @@ INSERT INTO donors (donor_code, name, phone, blood_type, last_donation_at) VALUE
   ('D-8652', 'Theresita Ambrosio', '+63 9088563463', 'AB+', now() - INTERVAL '35 days');
 
 INSERT INTO blood_requests (hospital_id, request_code, blood_type, priority, ward, units_needed, units_fulfilled, status, created_at, resolved_at)
-SELECT id, 'REQ-9012', 'O-', 'EMERGENCY', 'ICU-4', 10, 4, 'PARTIALLY_FULFILLED', now() - INTERVAL '12 minutes', NULL FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'REQ-8843', 'A+', 'EMERGENCY', 'ER-A', 3, 2, 'PARTIALLY_FULFILLED', now() - INTERVAL '28 minutes', NULL FROM hospitals WHERE code = 'PGH-MNL'
-UNION ALL SELECT id, 'REQ-9104', 'B-', 'URGENT', 'Surgery-B', 5, 1, 'PARTIALLY_FULFILLED', now() - INTERVAL '45 minutes', NULL FROM hospitals WHERE code = 'MMC-MKT'
-UNION ALL SELECT id, 'REQ-8756', 'AB+', 'URGENT', 'General-2', 5, 5, 'FULFILLED', now() - INTERVAL '65 minutes', now() - INTERVAL '12 minutes' FROM hospitals WHERE code = 'SLMC-QC'
-UNION ALL SELECT id, 'REQ-9211', 'O+', 'NORMAL', 'Dialysis', 15, 8, 'PARTIALLY_FULFILLED', now() - INTERVAL '35 minutes', NULL FROM hospitals WHERE code = 'PGH-MNL';
+SELECT id, 'REQ-9012', 'O-', 'EMERGENCY', 'ICU-4', 10, 4, 'PARTIALLY_FULFILLED', now() - INTERVAL '12 minutes', NULL FROM hospitals WHERE code = 'QMC-LC'
+UNION ALL SELECT id, 'REQ-8843', 'A+', 'EMERGENCY', 'ER-A', 3, 2, 'PARTIALLY_FULFILLED', now() - INTERVAL '28 minutes', NULL FROM hospitals WHERE code = 'MMG-LC'
+UNION ALL SELECT id, 'REQ-9104', 'B-', 'URGENT', 'Surgery-B', 5, 1, 'PARTIALLY_FULFILLED', now() - INTERVAL '45 minutes', NULL FROM hospitals WHERE code = 'LUDH-LC'
+UNION ALL SELECT id, 'REQ-8756', 'AB+', 'URGENT', 'General-2', 5, 5, 'FULFILLED', now() - INTERVAL '65 minutes', now() - INTERVAL '12 minutes' FROM hospitals WHERE code = 'QMC-LC'
+UNION ALL SELECT id, 'REQ-9211', 'O+', 'NORMAL', 'Dialysis', 15, 8, 'PARTIALLY_FULFILLED', now() - INTERVAL '35 minutes', NULL FROM hospitals WHERE code = 'MMG-LC';
 
 -- Scheduled relative to "today" (the day the DB is first initialized) so the
 -- Appointment View has something to show immediately on a fresh setup.
 INSERT INTO appointments (donor_id, hospital_id, scheduled_at, status)
 SELECT d.id, h.id, date_trunc('day', now()) + INTERVAL '9 hours 30 minutes', 'confirmed'::appointment_status
-  FROM donors d, hospitals h WHERE d.donor_code = 'D-8821' AND h.code = 'SLMC-QC'
+  FROM donors d, hospitals h WHERE d.donor_code = 'D-8821' AND h.code = 'QMC-LC'
 UNION ALL
 SELECT d.id, h.id, date_trunc('day', now()) + INTERVAL '10 hours 15 minutes', 'pending'::appointment_status
-  FROM donors d, hospitals h WHERE d.donor_code = 'D-9012' AND h.code = 'PGH-MNL'
+  FROM donors d, hospitals h WHERE d.donor_code = 'D-9012' AND h.code = 'MMG-LC'
 UNION ALL
 SELECT d.id, h.id, date_trunc('day', now()) + INTERVAL '11 hours', 'pending'::appointment_status
-  FROM donors d, hospitals h WHERE d.donor_code = 'D-3321' AND h.code = 'MMC-MKT';
+  FROM donors d, hospitals h WHERE d.donor_code = 'D-3321' AND h.code = 'LUDH-LC';
 
 INSERT INTO system_health_snapshots (min_heap_latency_ms, db_sync_status, overall_status) VALUES
   (12, 'Real-time', 'STABLE');
 
 INSERT INTO donor_arrivals (donor_id, hospital_id, arrived_at)
-SELECT d.id, h.id, now() - INTERVAL '2 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-8821' AND h.code = 'SLMC-QC'
+SELECT d.id, h.id, now() - INTERVAL '2 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-8821' AND h.code = 'QMC-LC'
 UNION ALL
-SELECT d.id, h.id, now() - INTERVAL '8 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-9012' AND h.code = 'PGH-MNL'
+SELECT d.id, h.id, now() - INTERVAL '8 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-9012' AND h.code = 'MMG-LC'
 UNION ALL
-SELECT d.id, h.id, now() - INTERVAL '14 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-7742' AND h.code = 'SLMC-QC'
+SELECT d.id, h.id, now() - INTERVAL '14 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-7742' AND h.code = 'QMC-LC'
 UNION ALL
-SELECT d.id, h.id, now() - INTERVAL '21 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-3321' AND h.code = 'MMC-MKT';
+SELECT d.id, h.id, now() - INTERVAL '21 minutes' FROM donors d, hospitals h WHERE d.donor_code = 'D-3321' AND h.code = 'LUDH-LC';
