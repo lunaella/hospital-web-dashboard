@@ -13,19 +13,9 @@
 // hospital's own internal code) and can be edited freely in the form.
 export const HOSPITAL_DIRECTORY = {
   "Lucena City": [
-    // The coordinating chapter itself — donor-facing blood request
-    // broadcasts and the mobile app's "Schedule New Appointment" flow are
-    // scoped to exactly this hospital row (see COORDINATING_HOSPITAL_NAME in
-    // server/src/controllers/donorPortal.controller.js), so its name here
-    // must match that constant exactly. This used to be filed under a
-    // "Quezon City" key with a "Quezon City, Philippines" placeholder
-    // address — wrong on both counts: this chapter covers Quezon PROVINCE,
-    // headquartered in Lucena City, not Metro Manila's Quezon City.
-    {
-      name: "Philippine Red Cross - Quezon Chapter",
-      code: "PRC-QC",
-      address: "Doña Victoria St., Brgy. X, Capitol Compound, Lucena City",
-    },
+    // The Red Cross chapter itself is NOT listed here: it's the super admin
+    // overseeing these hospitals, not a hospital row. Donor-facing requests
+    // come from the hospitals below, nearest first.
     {
       name: "Lucena MMG General Hospital",
       code: "MMG-LC",

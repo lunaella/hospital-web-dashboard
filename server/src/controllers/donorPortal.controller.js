@@ -26,15 +26,6 @@ const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js
 // that a donor can redo it again, just not more than once per window.
 const SIGNATURE_COOLDOWN_DAYS = 180;
 
-// PRC coordinates all donor-facing blood requests on behalf of the partner
-// hospitals — the app's Priority Request Feed and "Schedule New Appointment"
-// flow should only ever surface broadcasts from this one hospital row, even
-// though other hospitals still exist in the `hospitals` table for other
-// purposes (admin-side records, walk-in appointments booked directly by
-// staff). Must match the `name` of the hospital row created in Settings >
-// Hospital Network exactly.
-const COORDINATING_HOSPITAL_NAME = "Philippine Red Cross - Quezon Chapter";
-
 // Same 90-day DOH cooling-rule math as the donor_eligibility view (schema.sql)
 // and exportDonors (donors.controller.js) — duplicated as a WHERE id = $1
 // query rather than joining the view, since the view isn't donor-scoped and
@@ -682,17 +673,16 @@ export const listOpenRequestsForDonor = asyncHandler(async (req, res) => {
      FROM blood_requests r
      JOIN hospitals h ON h.id = r.hospital_id
      WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED') AND r.blood_type = $1
-       AND h.name = $${hasLocation ? 4 : 2}
-       ${hasRadius ? `AND (${distanceExpr}) <= $5` : ""}
+       ${hasRadius ? `AND (${distanceExpr}) <= $4` : ""}
      ORDER BY
        CASE r.priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END,
        (${distanceExpr}) ASC NULLS LAST,
        r.created_at DESC`,
     hasLocation
       ? hasRadius
-        ? [req.donor.bloodType, lat, lng, COORDINATING_HOSPITAL_NAME, radiusKm]
-        : [req.donor.bloodType, lat, lng, COORDINATING_HOSPITAL_NAME]
-      : [req.donor.bloodType, COORDINATING_HOSPITAL_NAME]
+        ? [req.donor.bloodType, lat, lng, radiusKm]
+        : [req.donor.bloodType, lat, lng]
+      : [req.donor.bloodType]
   );
   res.json(rows);
 });
@@ -919,10 +909,10 @@ export const unregisterDevice = asyncHandler(async (req, res) => {
   res.status(204).send();
 });
 
-// Haversine distance (km) between a live (lat, lng) and the coordinating
-// hospital — same formula as listOpenRequestsForDonor's distanceExpr, kept
-// separate here because that query sorts a whole feed while this is a
-// single point check against one specific hospital.
+// Haversine distance (km) between a live (lat, lng) and a hospital — same
+// formula as listOpenRequestsForDonor's distanceExpr, kept separate here
+// because that query sorts a whole feed while this is a point check for the
+// nearest request.
 const NEARBY_DISTANCE_EXPR = `6371 * acos(least(1, greatest(-1,
    cos(radians($1)) * cos(radians(h.latitude)) * cos(radians(h.longitude) - radians($2))
    + sin(radians($1)) * sin(radians(h.latitude))
@@ -935,9 +925,13 @@ const DEFAULT_NEARBY_RADIUS_KM = 20;
 
 // Shared by checkNearbyRequest (read-only) and updateMyLocation (the
 // reminder-push trigger) below: is there a still-open request, matching
-// this donor's blood type, at the one coordinating hospital, within
-// radiusKm of (lat, lng)? Returns the request row (with distanceKm) or null.
-async function findNearbyOpenRequest({ bloodType, lat, lng, radiusKm }) {
+// this donor's blood type, at ANY hospital, within radiusKm of (lat, lng)?
+// Returns the nearest such request row (with distanceKm) or null. When
+// `skipNotifiedForDonorId` is given, requests that donor was already
+// reminded about (donor_request_notifications) are skipped, so a second
+// nearby request still gets its own reminder instead of being shadowed by
+// an already-notified, closer one.
+async function findNearbyOpenRequest({ bloodType, lat, lng, radiusKm, skipNotifiedForDonorId = null }) {
   const { rows } = await pool.query(
     `SELECT
        r.id,
@@ -952,11 +946,13 @@ async function findNearbyOpenRequest({ bloodType, lat, lng, radiusKm }) {
      JOIN hospitals h ON h.id = r.hospital_id
      WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED')
        AND r.blood_type = $3
-       AND h.name = $4
-       AND (${NEARBY_DISTANCE_EXPR}) <= $5
+       AND (${NEARBY_DISTANCE_EXPR}) <= $4
+       AND ($5::uuid IS NULL OR NOT EXISTS (
+         SELECT 1 FROM donor_request_notifications n WHERE n.donor_id = $5::uuid AND n.request_id = r.id
+       ))
      ORDER BY (${NEARBY_DISTANCE_EXPR}) ASC
      LIMIT 1`,
-    [lat, lng, bloodType, COORDINATING_HOSPITAL_NAME, radiusKm]
+    [lat, lng, bloodType, radiusKm, skipNotifiedForDonorId]
   );
   return rows[0] ?? null;
 }
@@ -987,11 +983,12 @@ export const checkNearbyRequest = asyncHandler(async (req, res) => {
 // already within range of a still-open request matching this donor's blood
 // type that they haven't been reminded about yet, a push nudge goes out
 // immediately. Donors already got the original blast when the request first
-// opened — notifyDonorsForRequest notifies every matching eligible donor
-// nationally, not just ones tied to this hospital, since donors are
-// hospital-agnostic by design (see hospitals' schema.sql comment) — so this
-// is a reminder for whoever missed, dismissed, or wasn't eligible for that
-// first push, not a replacement for it.
+// opened — notifyDonorsForRequest notifies every matching eligible donor,
+// not just ones tied to a hospital, since donors are hospital-agnostic by
+// design (see hospitals' schema.sql comment) — so this is a reminder for
+// whoever missed, dismissed, or wasn't eligible for that first push, not a
+// replacement for it. Works across every hospital: the nearest one with an
+// open matching request wins.
 export const updateMyLocation = asyncHandler(async (req, res) => {
   const lat = Number(req.body.lat);
   const lng = Number(req.body.lng);
@@ -1007,7 +1004,13 @@ export const updateMyLocation = asyncHandler(async (req, res) => {
     req.donor.id,
   ]);
 
-  const match = await findNearbyOpenRequest({ bloodType: req.donor.bloodType, lat, lng, radiusKm });
+  const match = await findNearbyOpenRequest({
+    bloodType: req.donor.bloodType,
+    lat,
+    lng,
+    radiusKm,
+    skipNotifiedForDonorId: req.donor.id,
+  });
   if (!match) {
     return res.json({ ok: true, reminded: false });
   }
