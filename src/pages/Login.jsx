@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { api, setToken } from "../lib/apiClient";
 import { useAuth } from "../context/AuthContext";
@@ -161,13 +161,12 @@ export default function Login() {
             </span>
           </button>
 
-          {/* No self-service reset: admin accounts are staff-managed, not
-              public signups, and (per the hospital-shared-email design —
-              see migration 020) an email-link reset would actually be
-              unsafe here, since several people already share one inbox. */}
-          <p className="font-poppins text-[12px] text-[rgba(255,255,255,0.7)] text-center">
-            Forgot your password? Ask your hospital's team manager or the super admin to reset it for you.
-          </p>
+          <Link
+            to="/forgot-password"
+            className="font-poppins text-[12px] text-[rgba(255,255,255,0.8)] hover:text-white underline text-center"
+          >
+            Forgot your password?
+          </Link>
         </form>
       </div>
     </div>

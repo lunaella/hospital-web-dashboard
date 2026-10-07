@@ -7,6 +7,7 @@ import SectionGuard from "./components/SectionGuard";
 import RequireAuth from "./components/RequireAuth";
 import Login from "./pages/Login";
 import LoginFailed from "./pages/LoginFailed";
+import ForgotPassword from "./pages/ForgotPassword";
 import Dashboard from "./pages/Dashboard";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route path="/" element={<Login />} />
         <Route path="/login" element={<Login />} />
         <Route path="/login-failed" element={<LoginFailed />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route
           path="/dashboard"
           element={

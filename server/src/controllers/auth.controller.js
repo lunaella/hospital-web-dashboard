@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { pool } from "../db/pool.js";
 import { ensureRedisConnected } from "../db/redis.js";
 import { signSessionToken } from "../utils/jwt.js";
@@ -6,6 +7,9 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { resolveRegion } from "../utils/geoip.js";
 import { SECTIONS, emptyPermissions } from "../utils/permissionSections.js";
 import { getAllowedHospitalIds } from "../utils/hospitalScope.js";
+import { sendEmail } from "../utils/email.js";
+import { hashPassword } from "../utils/password.js";
+import { wrapBrandedEmail, buildAdminResetEmailBody } from "../utils/emailTemplate.js";
 
 const EXPIRES_IN_SECONDS = 8 * 60 * 60; // keep in sync with env.jwtExpiresIn ("8h" default)
 
@@ -214,4 +218,122 @@ export const me = asyncHandler(async (req, res) => {
     assignedHospitalIds,
     hospitalRestricted: assignedHospitalIds.length > 0,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Self-service "Forgot password" (email reset code).
+//
+// Codes are keyed by *username*, not email: several admins can share one
+// hospital inbox (migration 020), so the email address alone can't say
+// whose password is being reset. The email names the username for the same
+// reason. Both endpoints respond identically whether or not the username
+// exists, so the form can't be used to discover valid usernames.
+const RESET_CODE_TTL_SECONDS = 10 * 60;
+const RESET_REQUEST_LIMIT = 3;
+const RESET_REQUEST_WINDOW_SECONDS = 15 * 60;
+const MAX_RESET_CODE_ATTEMPTS = 5;
+const MIN_ADMIN_PASSWORD_LENGTH = 8; // same rule as team.controller.js resetPassword
+
+function resetCodeKey(username) {
+  return `admin_reset_code:${String(username).toLowerCase()}`;
+}
+function resetRequestsKey(username) {
+  return `admin_reset_requests:${String(username).toLowerCase()}`;
+}
+
+// POST /api/auth/forgot-password { username }
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const username = req.body.username?.trim();
+  if (!username) return res.status(400).json({ error: "Username is required." });
+
+  const redis = await ensureRedisConnected();
+  const requestsKey = resetRequestsKey(username);
+  const requests = Number((await redis.get(requestsKey)) ?? 0);
+  if (requests >= RESET_REQUEST_LIMIT) {
+    const waitMinutes = Math.max(1, Math.ceil((await redis.ttl(requestsKey)) / 60));
+    return res.status(429).json({
+      error: `Too many reset requests. Try again in ${waitMinutes} minute${waitMinutes === 1 ? "" : "s"}.`,
+    });
+  }
+  const newCount = await redis.incr(requestsKey);
+  if (newCount === 1) await redis.expire(requestsKey, RESET_REQUEST_WINDOW_SECONDS);
+
+  const { rows } = await pool.query("SELECT id, username, email FROM admins WHERE username = $1", [username]);
+  const admin = rows[0];
+
+  if (admin?.email) {
+    const code = String(crypto.randomInt(100000, 1000000));
+    await redis.set(
+      resetCodeKey(admin.username),
+      JSON.stringify({ code, adminId: admin.id, attempts: 0 }),
+      "EX",
+      RESET_CODE_TTL_SECONDS
+    );
+    const result = await sendEmail({
+      to: admin.email,
+      subject: "Your ResQ password reset code",
+      html: wrapBrandedEmail(buildAdminResetEmailBody(admin.username, code, RESET_CODE_TTL_SECONDS / 60)),
+    });
+    // Logged, not returned: a delivery error would otherwise reveal that
+    // the username exists.
+    if (!result.ok) console.error(`[forgot-password] email to admin ${admin.id} failed: ${result.error}`);
+  }
+
+  res.json({
+    message: "If that username has an email on file, a reset code has been sent to it.",
+    expiresIn: RESET_CODE_TTL_SECONDS,
+  });
+});
+
+// POST /api/auth/reset-password { username, code, newPassword }
+export const resetPassword = asyncHandler(async (req, res) => {
+  const username = req.body.username?.trim();
+  const code = String(req.body.code ?? "").trim();
+  const { newPassword } = req.body;
+  if (!username || !code || !newPassword) {
+    return res.status(400).json({ error: "Username, code, and new password are required." });
+  }
+  if (typeof newPassword !== "string" || newPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: `New password must be at least ${MIN_ADMIN_PASSWORD_LENGTH} characters.` });
+  }
+
+  const redis = await ensureRedisConnected();
+  const key = resetCodeKey(username);
+  const stored = JSON.parse((await redis.get(key)) ?? "null");
+  if (!stored) return res.status(400).json({ error: "Invalid or expired code. Request a new one." });
+
+  if (stored.code !== code) {
+    // Burn the code after too many wrong guesses so a 6-digit code can't be
+    // brute-forced within its lifetime.
+    stored.attempts += 1;
+    if (stored.attempts >= MAX_RESET_CODE_ATTEMPTS) {
+      await redis.del(key);
+    } else {
+      await redis.set(key, JSON.stringify(stored), "KEEPTTL");
+    }
+    return res.status(400).json({ error: "Invalid or expired code. Request a new one." });
+  }
+  await redis.del(key); // one-time use
+
+  await pool.query("UPDATE admins SET password_hash = $1, updated_at = now() WHERE id = $2", [
+    await hashPassword(newPassword),
+    stored.adminId,
+  ]);
+
+  // Sign the account out everywhere: whoever knew the old password
+  // shouldn't keep a live session after it's been reset.
+  const { rows: activeSessions } = await pool.query(
+    "SELECT session_jti FROM admin_sessions WHERE admin_id = $1 AND is_active = true",
+    [stored.adminId]
+  );
+  for (const { session_jti: jti } of activeSessions) {
+    if (jti) await redis.del(`session:${jti}`);
+  }
+  await pool.query(
+    "UPDATE admin_sessions SET is_active = false, revoked_at = now() WHERE admin_id = $1 AND is_active = true",
+    [stored.adminId]
+  );
+  await redis.del(loginAttemptsKey(req.ip, username));
+
+  res.json({ message: "Password updated. You can now log in with your new password." });
 });

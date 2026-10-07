@@ -74,6 +74,29 @@ export function buildOtpEmailBody(code, expiryMinutes) {
     </p>`;
 }
 
+// Admin "Forgot password" code. Names the username explicitly because
+// hospital teams often share one inbox (migration 020) — whoever reads it
+// needs to know whose account the code is for.
+export function buildAdminResetEmailBody(username, code, expiryMinutes) {
+  return `
+    <p style="font-size:15px;line-height:1.5;color:${TEXT_DARK};margin:0 0 20px;">Hi there,</p>
+    <p style="font-size:15px;line-height:1.5;color:${TEXT_DARK};margin:0 0 24px;">
+      Someone asked to reset the password for the ResQ Admin Portal account
+      <strong>${escapeHtml(username)}</strong>. Use this code to choose a new password:
+    </p>
+    <p style="font-size:42px;font-weight:bold;letter-spacing:8px;color:${BRAND_RED};margin:0 0 24px;text-align:center;">
+      ${code}
+    </p>
+    <p style="font-size:13px;line-height:1.5;color:${TEXT_MUTED};margin:0;">
+      This code expires in ${expiryMinutes} minute${expiryMinutes === 1 ? "" : "s"}. If you didn't request this,
+      you can safely ignore this email — the password stays the same until the code is used.
+    </p>`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
 export function buildWelcomeEmailBody(donorName, bloodType) {
   return `
     <p style="font-size:15px;line-height:1.5;color:${TEXT_DARK};margin:0 0 20px;">Hi ${donorName},</p>
