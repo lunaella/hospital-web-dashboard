@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import PageHeader from "../components/PageHeader";
 import QrScannerModal from "../components/QrScannerModal";
-import { api } from "../lib/apiClient";
+import { api, apiFetch } from "../lib/apiClient";
 import { connectRealtime } from "../lib/realtime";
 import { useHospital } from "../context/HospitalContext";
 import Avatar from "../components/Avatar";
@@ -12,6 +12,9 @@ import { maskPhone } from "../utils/pii";
 import DonorProfileModal from "../components/DonorProfileModal";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
+// Internal donor ids are UUIDs; donor codes look like "D-1234".
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function mapDonor(d) {
   return {
@@ -336,8 +339,25 @@ export default function DonorManagement() {
   async function performCheckin(code) {
     let donor;
     try {
-      const data = await api.get(`/api/donors?q=${encodeURIComponent(code)}&pageSize=5`);
-      donor = data.donors.map(mapDonor).find((d) => d.id === code) ?? data.donors.map(mapDonor)[0];
+      // apiFetch, not api.get: api.get appends the hospital switcher's
+      // ?hospitalId=, which listDonors treats as "has already had an
+      // appointment/donation at this hospital" — so a donor scanning in at
+      // a hospital for the first time was never found ("No donor found").
+      // Donors are a shared pool; the lookup has to search all of them.
+      if (UUID_RE.test(code)) {
+        // Passes from older app builds carried the donor's internal id
+        // instead of their donor_code — still resolve those directly.
+        try {
+          donor = mapDonor(await apiFetch(`/api/donors/${code}`, { method: "GET" }));
+        } catch (err) {
+          if (!/not found/i.test(err.message)) throw err;
+        }
+      } else {
+        const data = await apiFetch(`/api/donors?q=${encodeURIComponent(code)}&pageSize=5`, { method: "GET" });
+        // Exact donor_code only — the search is a substring match, so its
+        // first result for "D-12" could just as well be D-120 or D-1234.
+        donor = data.donors.map(mapDonor).find((d) => d.id?.toLowerCase() === code.toLowerCase());
+      }
     } catch (err) {
       setCheckinBanner({ type: "error", message: `Couldn't look up ${code}: ${err.message}` });
       return;
