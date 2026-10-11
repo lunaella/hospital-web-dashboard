@@ -607,9 +607,14 @@ export const startDiditVerification = asyncHandler(async (req, res) => {
 
   const session = await diditRes.json();
 
+  // Didit hands back the same session (same session_id and url) when a
+  // donor reopens verification before finishing, so the row may already
+  // exist — keep it as-is (with whatever status the webhook has set)
+  // instead of failing on the unique index.
   await pool.query(
     `INSERT INTO donor_verifications (donor_id, id_type, source, didit_session_id, status)
-     VALUES ($1, 'didit', 'didit', $2, 'pending')`,
+     VALUES ($1, 'didit', 'didit', $2, 'pending')
+     ON CONFLICT (didit_session_id) WHERE didit_session_id IS NOT NULL DO NOTHING`,
     [req.donor.id, session.session_id]
   );
 
