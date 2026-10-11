@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { pool } from "../db/pool.js";
 import { ensureRedisConnected } from "../db/redis.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -7,7 +8,12 @@ import { issueOtp, verifyOtp, OTP_TTL_SECONDS } from "../utils/otp.js";
 import { signDonorToken, signDonorPendingToken } from "../utils/jwt.js";
 import { normalizePhoneForStorage, phoneDigits, isValidPhDigits } from "../utils/phone.js";
 import { hashPassword, verifyPassword, isValidPassword, MIN_PASSWORD_LENGTH } from "../utils/password.js";
-import { wrapBrandedEmail, buildOtpEmailBody, buildWelcomeEmailBody } from "../utils/emailTemplate.js";
+import {
+  wrapBrandedEmail,
+  buildOtpEmailBody,
+  buildWelcomeEmailBody,
+  buildDonorResetEmailBody,
+} from "../utils/emailTemplate.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -374,4 +380,158 @@ export const donorLogout = asyncHandler(async (req, res) => {
   const redis = await ensureRedisConnected();
   await redis.del(`donor_session:${req.donor.jti}`);
   res.status(204).send();
+});
+
+// ---------------------------------------------------------------------------
+// Self-service "Forgot password" for the donor app (forgot_password_view.dart).
+//
+// Same shape as the admin flow in auth.controller.js — 10-minute single-use
+// code, burned after 5 wrong guesses, 3 requests per 15 minutes — but keyed
+// by donor id and delivered over whichever channel the donor typed: an
+// email identifier gets an email, a phone identifier gets an SMS to the
+// registered number. Kept separate from the request-otp code store on
+// purpose: that code also logs a donor in via verify-otp, and has no
+// wrong-guess limit.
+//
+// Unknown accounts get the same "Account does not exist" 404 the password
+// login above already returns, so this reveals nothing login doesn't.
+const RESET_CODE_TTL_SECONDS = 10 * 60;
+const RESET_REQUEST_LIMIT = 3;
+const RESET_REQUEST_WINDOW_SECONDS = 15 * 60;
+const MAX_RESET_CODE_ATTEMPTS = 5;
+
+function donorResetCodeKey(donorId) {
+  return `donor_reset_code:${donorId}`;
+}
+function donorResetRequestsKey(donorId) {
+  return `donor_reset_requests:${donorId}`;
+}
+
+function maskPhone(phone) {
+  return phone.length <= 4 ? phone : "•".repeat(phone.length - 4) + phone.slice(-4);
+}
+function maskEmail(email) {
+  const [user, domain] = email.split("@");
+  return `${user[0]}${"•".repeat(Math.max(user.length - 1, 2))}@${domain}`;
+}
+
+// Same email-vs-phone rule and duplicate-email handling as donorPasswordLogin.
+async function findDonorForReset(rawIdentifier) {
+  const isEmail = rawIdentifier.includes("@");
+  const lookupValue = isEmail ? rawIdentifier.toLowerCase() : normalizePhoneForStorage(rawIdentifier);
+  const { rows } = await pool.query(
+    `SELECT id, phone, email FROM donors WHERE ${isEmail ? "lower(email) = $1" : "phone = $1"}`,
+    [lookupValue]
+  );
+  return { donor: rows.length === 1 ? rows[0] : undefined, isEmail, lookupValue };
+}
+
+// POST /api/donor-auth/forgot-password { identifier }
+export const donorForgotPassword = asyncHandler(async (req, res) => {
+  const rawIdentifier = req.body.identifier?.trim();
+  if (!rawIdentifier) return res.status(400).json({ error: "Please enter your email or phone number." });
+
+  const { donor, isEmail } = await findDonorForReset(rawIdentifier);
+  if (!donor) return res.status(404).json({ error: "Account does not exist. Please register first." });
+  if (!isEmail && !donor.phone) {
+    return res.status(400).json({ error: "This account has no phone number on file. Try your email instead." });
+  }
+
+  const redis = await ensureRedisConnected();
+  const requestsKey = donorResetRequestsKey(donor.id);
+  const requests = Number((await redis.get(requestsKey)) ?? 0);
+  if (requests >= RESET_REQUEST_LIMIT) {
+    const waitMinutes = Math.max(1, Math.ceil((await redis.ttl(requestsKey)) / 60));
+    return res.status(429).json({
+      error: `Too many reset requests. Try again in ${waitMinutes} minute${waitMinutes === 1 ? "" : "s"}.`,
+    });
+  }
+  const newCount = await redis.incr(requestsKey);
+  if (newCount === 1) await redis.expire(requestsKey, RESET_REQUEST_WINDOW_SECONDS);
+
+  const code = String(crypto.randomInt(100000, 1000000));
+  await redis.set(
+    donorResetCodeKey(donor.id),
+    JSON.stringify({ code, attempts: 0 }),
+    "EX",
+    RESET_CODE_TTL_SECONDS
+  );
+
+  const expiryMinutes = RESET_CODE_TTL_SECONDS / 60;
+  const deliveryResult = isEmail
+    ? await sendEmail({
+        to: donor.email,
+        subject: "Your ResQ password reset code",
+        html: wrapBrandedEmail(buildDonorResetEmailBody(code, expiryMinutes)),
+      })
+    : await sendSms(donor.phone, `Your ResQ password reset code is ${code}. It expires in ${expiryMinutes} minutes.`);
+
+  if (!deliveryResult.ok) {
+    await redis.del(donorResetCodeKey(donor.id));
+    return res.status(502).json({ error: deliveryResult.error || "Could not send reset code." });
+  }
+
+  res.json({
+    ok: true,
+    channel: isEmail ? "email" : "sms",
+    destination: isEmail ? maskEmail(donor.email) : maskPhone(donor.phone),
+    expiresIn: RESET_CODE_TTL_SECONDS,
+  });
+});
+
+// POST /api/donor-auth/reset-password { identifier, code, newPassword }
+export const donorResetPassword = asyncHandler(async (req, res) => {
+  const rawIdentifier = req.body.identifier?.trim();
+  const code = String(req.body.code ?? "").trim();
+  const { newPassword } = req.body;
+  if (!rawIdentifier || !code) return res.status(400).json({ error: "Verification code is required." });
+  if (!isValidPassword(newPassword)) {
+    return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
+  }
+
+  const invalidCode = () => res.status(400).json({ error: "Invalid or expired verification code." });
+
+  const { donor, lookupValue } = await findDonorForReset(rawIdentifier);
+  if (!donor) return invalidCode();
+
+  const redis = await ensureRedisConnected();
+  const key = donorResetCodeKey(donor.id);
+  const stored = JSON.parse((await redis.get(key)) ?? "null");
+  if (!stored) return invalidCode();
+
+  if (stored.code !== code) {
+    stored.attempts += 1;
+    if (stored.attempts >= MAX_RESET_CODE_ATTEMPTS) {
+      await redis.del(key);
+    } else {
+      await redis.set(key, JSON.stringify(stored), "KEEPTTL");
+    }
+    return invalidCode();
+  }
+  await redis.del(key); // one-time use
+
+  await pool.query("UPDATE donors SET password_hash = $1 WHERE id = $2", [
+    await hashPassword(newPassword),
+    donor.id,
+  ]);
+
+  // Sign the donor out everywhere, so a token saved on a lost phone stops
+  // working. Donor sessions are only indexed by jti (donor_session:<jti> ->
+  // donorId), so find this donor's by value.
+  const donorId = String(donor.id);
+  let cursor = "0";
+  do {
+    const [next, keys] = await redis.scan(cursor, "MATCH", "donor_session:*", "COUNT", 500);
+    cursor = next;
+    if (keys.length) {
+      const owners = await redis.mget(keys);
+      const mine = keys.filter((_, i) => owners[i] === donorId);
+      if (mine.length) await redis.del(...mine);
+    }
+  } while (cursor !== "0");
+
+  // Clear the login lockout so the new password works right away.
+  await redis.del(donorLoginAttemptsKey(req.ip, lookupValue));
+
+  res.json({ ok: true });
 });

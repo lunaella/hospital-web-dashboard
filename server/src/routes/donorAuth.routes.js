@@ -5,6 +5,8 @@ import {
   donorPasswordLogin,
   completeProfile,
   donorLogout,
+  donorForgotPassword,
+  donorResetPassword,
 } from "../controllers/donorAuth.controller.js";
 import { requireDonorPendingAuth, requireDonorAuth } from "../middleware/donorAuth.js";
 
@@ -16,10 +18,15 @@ import { requireDonorPendingAuth, requireDonorAuth } from "../middleware/donorAu
 //      POST /login           { identifier, password } -> token, no SMS round trip
 //                             (identifier = email or phone; matches the real
 //                             app's login screen, which lets the donor pick either)
+//   Forgot password:
+//      POST /forgot-password { identifier }                    -> code sent (email or SMS)
+//      POST /reset-password  { identifier, code, newPassword } -> password set, all sessions revoked
 export const donorAuthRouter = Router();
 
 donorAuthRouter.post("/request-otp", requestOtp);
 donorAuthRouter.post("/verify-otp", verifyOtpAndLogin);
 donorAuthRouter.post("/login", donorPasswordLogin);
+donorAuthRouter.post("/forgot-password", donorForgotPassword);
+donorAuthRouter.post("/reset-password", donorResetPassword);
 donorAuthRouter.post("/complete-profile", requireDonorPendingAuth, completeProfile);
 donorAuthRouter.post("/logout", requireDonorAuth, donorLogout);
