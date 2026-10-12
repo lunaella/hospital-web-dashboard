@@ -38,7 +38,14 @@ export function attachRealtime(httpServer) {
       return;
     }
 
-    const token = url.searchParams.get("token");
+    // Native clients (the Flutter donor app) can send headers, so they use
+    // Authorization and keep the token out of the URL (and out of any
+    // proxy/access logs that record it). The browser dashboard falls back
+    // to ?token=.
+    const authHeader = req.headers.authorization || "";
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7)
+      : url.searchParams.get("token");
     if (!token) {
       socket.destroy();
       return;
