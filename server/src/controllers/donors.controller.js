@@ -3,7 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { hospitalIdParam } from "../utils/hospitalScope.js";
 import { bookAppointment, AppointmentBookingError } from "../services/appointments.service.js";
 import { verifySessionToken } from "../utils/jwt.js";
-import { broadcast } from "../realtime/hub.js";
+import { broadcast, broadcastToDonors, sendToDonor } from "../realtime/hub.js";
 import { ratingFor } from "./requests.controller.js";
 import { classifyDonorRow } from "../utils/eligibilityClassifier.js";
 import { MinHeap } from "../utils/minHeap.js";
@@ -143,6 +143,10 @@ export const setDonorEligibility = asyncHandler(async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
   res.json(rows[0]);
+
+  // Either direction updates the donor's open app right away (HomeView
+  // applies `eligible` directly).
+  sendToDonor(rows[0].id, { type: "eligibility_changed", eligible });
 
   // Only worth telling a donor about the "good news" direction — an admin
   // force-locking someone isn't something to push-notify them about.
@@ -316,6 +320,9 @@ export const createAppointment = asyncHandler(async (req, res) => {
   try {
     const appointment = await bookAppointment({ donorId, hospitalId, scheduledAt });
     res.status(201).json(appointment);
+    // Live-updates the donor's app (see realtime/hub.js) when staff book
+    // on their behalf.
+    sendToDonor(appointment.donorId, { type: "appointment_status_changed" });
   } catch (err) {
     if (err instanceof AppointmentBookingError) {
       return res.status(err.status).json({ error: err.message });
@@ -341,6 +348,7 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   );
   if (!rows[0]) return res.status(404).json({ error: "Appointment not found." });
   res.json(rows[0]);
+  sendToDonor(rows[0].donorId, { type: "appointment_status_changed" });
 });
 
 // Finds the donor's own next active (pending/confirmed) appointment, if
@@ -509,6 +517,10 @@ export const completeAppointment = asyncHandler(async (req, res) => {
       appointment: { id: appt.id, status: "completed" },
       fulfilledRequest,
     });
+    sendToDonor(appt.donorId, { type: "donation_completed" });
+    // A matched request's units/status changed, so every donor's open
+    // requests list may be stale.
+    if (fulfilledRequest) broadcastToDonors({ type: "blood_request_updated" });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
@@ -565,4 +577,5 @@ export const checkInByQr = asyncHandler(async (req, res) => {
     bloodType: appt.bloodType,
     scheduledAt: appt.scheduledAt,
   });
+  sendToDonor(payload.donorId, { type: "appointment_status_changed" });
 });

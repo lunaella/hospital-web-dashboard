@@ -2,6 +2,7 @@ import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { notifyDonorsForRequest } from "../services/notifications.service.js";
 import { hospitalIdParam } from "../utils/hospitalScope.js";
+import { broadcastToDonors } from "../realtime/hub.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const PRIORITIES = ["EMERGENCY", "URGENT", "NORMAL"];
@@ -81,6 +82,11 @@ export const createRequest = asyncHandler(async (req, res) => {
       const created = rows[0];
       res.status(201).json(created);
 
+      // Live-updates every connected donor app's open requests list now,
+      // and again once notifyDonorsForRequest has written the in-app
+      // notification rows (it waits on SMS/email/push, which can be slow).
+      broadcastToDonors({ type: "blood_request_created" });
+
       // Fire-and-forget: notifying donors (real SMS/email calls) must never
       // hold up the broadcast-creation response or fail the request itself.
       // Every attempt still gets logged in the notifications table.
@@ -91,7 +97,9 @@ export const createRequest = asyncHandler(async (req, res) => {
         bloodType: created.bloodType,
         priority: created.priority,
         ward: created.ward,
-      }).catch((err) => console.error(`notifyDonorsForRequest failed for ${created.id}:`, err));
+      })
+        .catch((err) => console.error(`notifyDonorsForRequest failed for ${created.id}:`, err))
+        .finally(() => broadcastToDonors({ type: "blood_request_created" }));
       return;
     } catch (err) {
       if (err.code === "23505") continue; // unique_violation on request_code — regenerate and retry
@@ -177,6 +185,7 @@ export const fulfillRequest = asyncHandler(async (req, res) => {
 
     await client.query("COMMIT");
     res.json(updated[0]);
+    broadcastToDonors({ type: "blood_request_updated" });
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

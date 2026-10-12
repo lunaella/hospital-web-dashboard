@@ -1,11 +1,14 @@
 import { WebSocketServer } from "ws";
 import { verifySessionToken } from "../utils/jwt.js";
 import { ensureRedisConnected } from "../db/redis.js";
-import { registerClient } from "./hub.js";
+import { pool } from "../db/pool.js";
+import { registerClient, registerDonorClient } from "./hub.js";
 
-// Admin-only real-time feed at /ws — pushes appointment book/cancel events
-// (see donorPortal.controller.js) so the Appointment View and notification
-// bell update without a manual refresh or waiting on the next poll.
+// Real-time feed at /ws. Admin connections get appointment book/cancel
+// events (see donorPortal.controller.js) so the Appointment View and
+// notification bell update without a manual refresh or waiting on the next
+// poll. Donor app connections get only their own appointment/eligibility
+// changes plus new-broadcast signals (see hub.js's sendToDonor).
 //
 // Auth mirrors requireAuth (middleware/auth.js): same JWT + Redis
 // session:{jti} check, just done once at connect time instead of per
@@ -59,9 +62,31 @@ export function attachRealtime(httpServer) {
       return;
     }
 
-    // Same donor-token rejection requireAuth does — this channel is
-    // admin-only.
-    if (payload.role === "donor" || payload.role === "donor_pending") {
+    // Donor app: same checks as requireDonorAuth (middleware/donorAuth.js),
+    // then registered on the donor side of the hub, which only ever gets
+    // that donor's own events — never the admin feed.
+    if (payload.role === "donor") {
+      try {
+        const redis = await ensureRedisConnected();
+        const sessionExists = await redis.get(`donor_session:${payload.jti}`);
+        const { rows } = sessionExists
+          ? await pool.query("SELECT id FROM donors WHERE id = $1", [payload.sub])
+          : { rows: [] };
+        if (!rows[0]) {
+          socket.destroy();
+          return;
+        }
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          registerDonorClient(ws, rows[0].id);
+        });
+      } catch {
+        socket.destroy();
+      }
+      return;
+    }
+
+    // A phone-verified-but-unregistered token has no donor record yet.
+    if (payload.role === "donor_pending") {
       socket.destroy();
       return;
     }
