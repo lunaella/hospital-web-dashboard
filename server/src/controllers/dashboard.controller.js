@@ -47,7 +47,7 @@ export const getStats = asyncHandler(async (req, res) => {
     pool.query(
       `SELECT coalesce(avg(units_fulfilled::numeric / NULLIF(units_needed, 0)) * 100, 0)::numeric(5,1) AS pct
        FROM blood_requests
-       WHERE created_at >= now() - INTERVAL '24 hours' ${hospitalClause}`,
+       WHERE created_at >= now() - INTERVAL '24 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED') ${hospitalClause}`,
       params
     ),
   ]);

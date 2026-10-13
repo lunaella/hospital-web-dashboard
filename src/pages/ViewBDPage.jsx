@@ -2,6 +2,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Fragment, useEffect, useState } from "react";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
+import { useAuth } from "../context/AuthContext";
+import { connectRealtime } from "../lib/realtime";
 import { IconAlert, IconClock, IconSearch } from "../components/icons";
 import PageHeader from "../components/PageHeader";
 import BroadcastDetailsModal from "../components/BroadcastDetailsModal";
@@ -24,6 +26,7 @@ export default function ViewBDPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { hospitalId } = useHospital();
+  const { isSuperAdmin } = useAuth();
   // Reports' Fulfillment Log "View Broadcast Details" action lands here with
   // a specific request code to jump straight to, instead of just dropping
   // the admin on the unfiltered full list.
@@ -36,6 +39,11 @@ export default function ViewBDPage() {
   const [expandedId, setExpandedId] = useState(null);
   const [notifications, setNotifications] = useState({}); // code -> { loading, error, summary, attempts }
   const [selectedBroadcast, setSelectedBroadcast] = useState(null);
+  // Super admin review of hospitals' PENDING_APPROVAL broadcasts.
+  const [reviewingId, setReviewingId] = useState(null);
+  const [rejectingId, setRejectingId] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   function mapBroadcast(r) {
     return {
@@ -48,6 +56,7 @@ export default function ViewBDPage() {
       units: `${r.unitsFulfilled}/${r.unitsNeeded} Units`,
       percent: r.pct,
       status: r.status,
+      rejectionReason: r.rejectionReason,
       time: formatElapsed(r.seconds_open),
     };
   }
@@ -69,7 +78,41 @@ export default function ViewBDPage() {
     return () => {
       cancelled = true;
     };
-  }, [hospitalId]);
+  }, [hospitalId, reloadKey]);
+
+  // A hospital submitting a broadcast, or the super admin approving/
+  // rejecting one, refreshes this list live for everyone who has it open.
+  useEffect(() => {
+    return connectRealtime((event) => {
+      if (event.type === "broadcast_pending_approval" || event.type === "broadcast_reviewed") {
+        setReloadKey((k) => k + 1);
+      }
+    });
+  }, []);
+
+  async function handleReview(code, action) {
+    setReviewingId(code);
+    setFulfillError(null);
+    try {
+      const updated = await api.post(
+        `/api/requests/${code}/${action}`,
+        action === "reject" ? { reason: rejectReason } : {}
+      );
+      setBroadcasts((prev) =>
+        prev.map((b) =>
+          b.id === code
+            ? { ...b, status: updated.status, rejectionReason: updated.rejectionReason ?? null, time: action === "approve" ? formatElapsed(0) : b.time }
+            : b
+        )
+      );
+      setRejectingId(null);
+      setRejectReason("");
+    } catch (err) {
+      setFulfillError(err.message);
+    } finally {
+      setReviewingId(null);
+    }
+  }
 
   // Adds units toward a broadcast's quota. The server auto-resolves the
   // request (status -> FULFILLED, rating computed) once the quota is met.
@@ -124,6 +167,8 @@ export default function ViewBDPage() {
     }
   }
 
+  const pendingCount = broadcasts.filter((b) => b.status === "PENDING_APPROVAL").length;
+
   const filtered = broadcasts.filter(
     (b) =>
       b.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -167,6 +212,13 @@ export default function ViewBDPage() {
           )}
           {fulfillError && (
             <p className="mb-4 text-[13px] font-semibold text-[#d70b07]">{fulfillError}</p>
+          )}
+          {pendingCount > 0 && (
+            <div className="mb-4 px-4 py-3 rounded-[8px] bg-[#fff7e6] border border-[#f0d9a8] text-[13px] font-semibold text-[#8a5a00]">
+              {isSuperAdmin
+                ? `${pendingCount} broadcast${pendingCount === 1 ? "" : "s"} awaiting your approval. Donors won't be notified until you approve.`
+                : `${pendingCount} broadcast${pendingCount === 1 ? "" : "s"} awaiting super admin approval. Donors will be notified once approved.`}
+            </div>
           )}
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -244,7 +296,43 @@ export default function ViewBDPage() {
                 </span>
 
                 <div className="flex items-center justify-end gap-1.5">
-                  {b.status === "FULFILLED" || b.status === "CANCELLED" ? (
+                  {b.status === "PENDING_APPROVAL" ? (
+                    isSuperAdmin ? (
+                      <>
+                        <button
+                          type="button"
+                          disabled={reviewingId === b.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReview(b.id, "approve");
+                          }}
+                          className="text-[11px] font-semibold text-white bg-[#1e7d32] rounded-full px-3 py-1.5 hover:bg-[#17652a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Approve and notify eligible donors"
+                        >
+                          {reviewingId === b.id && rejectingId !== b.id ? "..." : "Approve"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={reviewingId === b.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRejectingId(rejectingId === b.id ? null : b.id);
+                            setRejectReason("");
+                          }}
+                          className="text-[11px] font-semibold text-[#9B1B20] border border-[#9B1B20] rounded-full px-3 py-1.5 hover:bg-[#fbeeec] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Reject this broadcast"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-[#8a5a00]">Awaiting approval</span>
+                    )
+                  ) : b.status === "REJECTED" ? (
+                    <span className="text-[11px] font-semibold text-[#b94842]" title={b.rejectionReason || ""}>
+                      Rejected
+                    </span>
+                  ) : b.status === "FULFILLED" || b.status === "CANCELLED" ? (
                     <span className="text-[11px] font-semibold text-[#8a8a8a] capitalize">
                       {b.status.toLowerCase()}
                     </span>
@@ -275,6 +363,33 @@ export default function ViewBDPage() {
                   )}
                 </div>
               </div>
+
+              {rejectingId === b.id && (
+                <div className="px-6 py-3 bg-[#fdf6f6] flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Reason for rejecting (optional, shown to the hospital)"
+                    className="flex-1 text-[12px] border border-[#d9d9d9] rounded-[4px] px-3 py-1.5 outline-none bg-white"
+                  />
+                  <button
+                    type="button"
+                    disabled={reviewingId === b.id}
+                    onClick={() => handleReview(b.id, "reject")}
+                    className="text-[11px] font-semibold text-white bg-[#9B1B20] rounded-full px-4 py-1.5 hover:bg-[#8B1218] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {reviewingId === b.id ? "..." : "Confirm Reject"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRejectingId(null)}
+                    className="text-[11px] font-semibold text-[#808080] px-2 py-1.5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
 
               {expandedId === b.id && (
                 <div className="px-6 py-4 bg-[#fafafa]">

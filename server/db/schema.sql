@@ -14,7 +14,8 @@ CREATE TYPE blood_type AS ENUM ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'
 
 CREATE TYPE request_priority AS ENUM ('EMERGENCY', 'URGENT', 'NORMAL');
 
-CREATE TYPE request_status AS ENUM ('OPEN', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED');
+-- PENDING_APPROVAL / REJECTED: see migration 023 (super admin approval).
+CREATE TYPE request_status AS ENUM ('OPEN', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED', 'PENDING_APPROVAL', 'REJECTED');
 
 CREATE TYPE stock_status AS ENUM ('CRITICAL', 'LOW', 'STABLE');
 
@@ -182,8 +183,15 @@ CREATE TABLE blood_requests (
   units_fulfilled   INT NOT NULL DEFAULT 0,
   status            request_status NOT NULL DEFAULT 'OPEN',
   system_rating     fulfillment_rating,   -- set once resolved
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  resolved_at       TIMESTAMPTZ
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(), -- when it went live (reset on approval)
+  resolved_at       TIMESTAMPTZ,
+  -- Super admin approval (migration 023): non-super-admin broadcasts start
+  -- as PENDING_APPROVAL and only reach donors once approved.
+  submitted_by      UUID REFERENCES admins(id) ON DELETE SET NULL,
+  submitted_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reviewed_by       UUID REFERENCES admins(id) ON DELETE SET NULL,
+  reviewed_at       TIMESTAMPTZ,
+  rejection_reason  TEXT
 );
 
 CREATE INDEX idx_blood_requests_status ON blood_requests(status);

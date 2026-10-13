@@ -22,6 +22,13 @@ const statusChipClass = {
   FULFILLED: "bg-[#eafaf0] text-[#1e7d32]",
   CANCELLED: "bg-[#f1f1f1] text-[#8a8a8a]",
   OPEN: "bg-[#fdecea] text-[#c26460]",
+  PENDING_APPROVAL: "bg-[#fff7e6] text-[#8a5a00]",
+  REJECTED: "bg-[#fdecea] text-[#b94842]",
+};
+
+const STATUS_LABEL = {
+  PENDING_APPROVAL: "Awaiting approval",
+  PARTIALLY_FULFILLED: "Partially fulfilled",
 };
 
 function DetailRow({ label, value }) {
@@ -61,7 +68,7 @@ export default function BroadcastDetailsModal({ broadcast, onClose }) {
           <span
             className={`inline-flex items-center gap-1.5 text-[12px] font-semibold px-3 py-1 rounded-full ${statusChipClass[b.status] ?? "bg-[#f1f1f1] text-[#8a8a8a]"}`}
           >
-            {b.status ? b.status.charAt(0) + b.status.slice(1).toLowerCase() : "—"}
+            {b.status ? STATUS_LABEL[b.status] ?? b.status.charAt(0) + b.status.slice(1).toLowerCase() : "—"}
           </span>
           <span className={`text-[12px] font-semibold ${priorityTextClass[b.priority] ?? "text-black"}`}>
             {b.priority} PRIORITY
@@ -84,6 +91,9 @@ export default function BroadcastDetailsModal({ broadcast, onClose }) {
           <DetailRow label="Ward / Unit" value={b.ward} />
           <DetailRow label="Quota" value={b.units} />
           <DetailRow label="Time Elapsed" value={b.time} />
+          {b.status === "REJECTED" && b.rejectionReason && (
+            <DetailRow label="Rejection Reason" value={b.rejectionReason} />
+          )}
         </div>
       </div>
     </div>,

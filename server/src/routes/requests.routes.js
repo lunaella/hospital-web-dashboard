@@ -1,7 +1,14 @@
 import { Router } from "express";
-import { listRequests, createRequest, fulfillRequest, getRequestNotifications } from "../controllers/requests.controller.js";
+import {
+  listRequests,
+  createRequest,
+  approveRequest,
+  rejectRequest,
+  fulfillRequest,
+  getRequestNotifications,
+} from "../controllers/requests.controller.js";
 import { requireAuth } from "../middleware/auth.js";
-import { requireSection, requireHospitalScope } from "../middleware/permissions.js";
+import { requireSection, requireHospitalScope, requireSuperAdmin } from "../middleware/permissions.js";
 import { pool } from "../db/pool.js";
 
 // fulfillRequest and getRequestNotifications identify their target by its
@@ -18,6 +25,10 @@ requestsRouter.use(requireAuth, requireSection("broadcasts", "view"));
 
 requestsRouter.get("/", requireHospitalScope(), listRequests);
 requestsRouter.post("/", requireSection("broadcasts", "edit"), requireHospitalScope(), createRequest);
+// Hospitals' broadcasts wait as PENDING_APPROVAL until the super admin
+// reviews them (see createRequest).
+requestsRouter.post("/:code/approve", requireSuperAdmin, approveRequest);
+requestsRouter.post("/:code/reject", requireSuperAdmin, rejectRequest);
 requestsRouter.patch(
   "/:code/fulfill",
   requireSection("broadcasts", "edit"),

@@ -22,6 +22,8 @@ const STATUS_LABEL = {
   PARTIALLY_FULFILLED: "Partially Fulfilled",
   FULFILLED: "Fulfilled",
   CANCELLED: "Cancelled",
+  PENDING_APPROVAL: "Awaiting Approval",
+  REJECTED: "Rejected",
 };
 
 // Still used for the small "N active" label inside the dropdown — a
@@ -83,6 +85,8 @@ export default function NotificationBell() {
   const [appointmentEvents, setAppointmentEvents] = useState([]);
   const [loadError, setLoadError] = useState(null);
   const [lastSeenAt, setLastSeenAt] = useState(readLastSeen);
+  // Bumped by broadcast approval events below to re-fetch immediately.
+  const [reloadKey, setReloadKey] = useState(0);
   const containerRef = useRef(null);
   // Snapshot of lastSeenAt taken the moment the dropdown opens, before it's
   // bumped to "now" — used only to mark which rows in *this* viewing were
@@ -127,7 +131,7 @@ export default function NotificationBell() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [reloadKey]);
 
   // Real-time: a donor booking/cancelling through the app pushes here
   // immediately (server/src/realtime) instead of waiting up to POLL_MS for
@@ -136,6 +140,12 @@ export default function NotificationBell() {
   // this dropdown shows for an appointment row.
   useEffect(() => {
     const disconnect = connectRealtime((event) => {
+      // A hospital submitting a broadcast for approval, or the super admin
+      // approving/rejecting one — re-fetch so it shows up right away.
+      if (event.type === "broadcast_pending_approval" || event.type === "broadcast_reviewed") {
+        setReloadKey((k) => k + 1);
+        return;
+      }
       if (event.type !== "appointment_booked" && event.type !== "appointment_cancelled") return;
       const eventType = event.type === "appointment_cancelled" ? "cancelled" : "booked";
       setAppointmentEvents((prev) => [

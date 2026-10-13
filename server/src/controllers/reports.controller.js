@@ -29,7 +29,7 @@ export const getResponseTimeSeries = asyncHandler(async (req, res) => {
 export const getFulfillmentLog = asyncHandler(async (req, res) => {
   const hospitalId = hospitalIdParam(req);
   const limit = Math.min(Number(req.query.limit) || 20, 100);
-  const hospitalClause = hospitalId ? "WHERE hospital_id = $2" : "";
+  const hospitalClause = hospitalId ? "AND hospital_id = $2" : "";
   const params = hospitalId ? [limit, hospitalId] : [limit];
 
   const { rows } = await pool.query(
@@ -44,7 +44,7 @@ export const getFulfillmentLog = asyncHandler(async (req, res) => {
        END AS time,
        system_rating AS rating
      FROM blood_requests
-     ${hospitalClause}
+     WHERE status NOT IN ('PENDING_APPROVAL', 'REJECTED') ${hospitalClause}
      ORDER BY created_at DESC
      LIMIT $1`,
     params
@@ -100,7 +100,7 @@ export const getCompletedRequests = asyncHandler(async (req, res) => {
 // fulfilled emergencies still count against the rate.
 export const getFulfillmentBreakdown = asyncHandler(async (req, res) => {
   const hospitalId = hospitalIdParam(req);
-  const hospitalClause = hospitalId ? "WHERE hospital_id = $1" : "";
+  const hospitalClause = hospitalId ? "AND hospital_id = $1" : "";
   const params = hospitalId ? [hospitalId] : [];
 
   const { rows } = await pool.query(
@@ -108,7 +108,7 @@ export const getFulfillmentBreakdown = asyncHandler(async (req, res) => {
       priority,
       round(avg(units_fulfilled::numeric / NULLIF(units_needed, 0)) * 100)::int AS pct
     FROM blood_requests
-    ${hospitalClause}
+    WHERE status NOT IN ('PENDING_APPROVAL', 'REJECTED') ${hospitalClause}
     GROUP BY priority`,
     params
   );
@@ -206,13 +206,13 @@ export const getDemandForecast = asyncHandler(async (req, res) => {
       recent AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '48 hours' AND hospital_id = $1
+        WHERE created_at >= now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED') AND hospital_id = $1
         GROUP BY blood_type
       ),
       previous AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND hospital_id = $1
+        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED') AND hospital_id = $1
         GROUP BY blood_type
       )
       SELECT
@@ -234,13 +234,13 @@ export const getDemandForecast = asyncHandler(async (req, res) => {
       recent AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '48 hours'
+        WHERE created_at >= now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED')
         GROUP BY blood_type
       ),
       previous AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours'
+        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED')
         GROUP BY blood_type
       ),
       stock AS (

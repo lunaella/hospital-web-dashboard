@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
+import { useAuth } from "../context/AuthContext";
 import { IconDroplet } from "../components/icons";
 
 // Rebuilt from the "Create New Broadcast" reference screenshot the user provided
@@ -46,6 +47,9 @@ export default function NewBDPage() {
   const navigate = useNavigate();
   const { hospitalId, hospitals } = useHospital();
   const selectedHospitalName = hospitals.find((h) => h.id === hospitalId)?.name;
+  // Only the super admin's broadcasts go straight out to donors; everyone
+  // else's waits for super admin approval (see createRequest on the server).
+  const { isSuperAdmin } = useAuth();
 
   const [urgency, setUrgency] = useState("Emergency");
   const [bloodType, setBloodType] = useState("O-");
@@ -121,6 +125,11 @@ export default function NewBDPage() {
           ) : (
             <p className="font-poppins font-semibold text-[12px] text-[#808080]">
               Broadcasting for <span className="text-black">{selectedHospitalName || "the selected hospital"}</span>
+            </p>
+          )}
+          {!isSuperAdmin && (
+            <p className="mt-1 font-poppins font-semibold text-[12px] text-[#8a5a00]">
+              This broadcast will be sent to the super admin for approval. Donors are notified only after it's approved.
             </p>
           )}
         </div>
@@ -245,7 +254,13 @@ export default function NewBDPage() {
             disabled={isSubmitting}
             className="h-[45px] px-6 rounded-[16px] bg-[#9B1B20] text-[14px] font-poppins font-bold text-white cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
           >
-            {isSubmitting ? "Broadcasting..." : "Confirm & Broadcast Request"}
+            {isSuperAdmin
+              ? isSubmitting
+                ? "Broadcasting..."
+                : "Confirm & Broadcast Request"
+              : isSubmitting
+                ? "Submitting..."
+                : "Submit for Approval"}
           </button>
         </div>
       </form>
