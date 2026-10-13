@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
 import { useAuth } from "../context/AuthContext";
+import CallRedCrossButton from "../components/CallRedCrossButton";
 import { IconDroplet } from "../components/icons";
 
 // Rebuilt from the "Create New Broadcast" reference screenshot the user provided
@@ -135,6 +136,11 @@ export default function NewBDPage() {
           {!isSuperAdmin && (
             <p className="mt-1 font-poppins font-semibold text-[12px] text-[#8a5a00]">
               This broadcast will be sent to the super admin for approval. Donors are notified only after it's approved.
+              {urgency === "Emergency" && (
+                <>
+                  {" "}For an emergency, you can also <CallRedCrossButton variant="link" />.
+                </>
+              )}
             </p>
           )}
         </div>

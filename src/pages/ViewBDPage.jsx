@@ -7,6 +7,7 @@ import { connectRealtime } from "../lib/realtime";
 import { IconAlert, IconClock, IconSearch } from "../components/icons";
 import PageHeader from "../components/PageHeader";
 import BroadcastDetailsModal from "../components/BroadcastDetailsModal";
+import CallRedCrossButton from "../components/CallRedCrossButton";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -218,10 +219,13 @@ export default function ViewBDPage() {
             <p className="mb-4 text-[13px] font-semibold text-[#d70b07]">{fulfillError}</p>
           )}
           {pendingCount > 0 && (
-            <div className="mb-4 px-4 py-3 rounded-[8px] bg-[#fff7e6] border border-[#f0d9a8] text-[13px] font-semibold text-[#8a5a00]">
-              {isSuperAdmin
-                ? `${pendingCount} broadcast${pendingCount === 1 ? "" : "s"} awaiting your approval. Donors won't be notified until you approve.`
-                : `${pendingCount} broadcast${pendingCount === 1 ? "" : "s"} awaiting super admin approval. Donors will be notified once approved.`}
+            <div className="mb-4 px-4 py-3 rounded-[8px] bg-[#fff7e6] border border-[#f0d9a8] text-[13px] font-semibold text-[#8a5a00] flex items-center justify-between gap-4">
+              <span>
+                {isSuperAdmin
+                  ? `${pendingCount} broadcast${pendingCount === 1 ? "" : "s"} awaiting your approval. Donors won't be notified until you approve.`
+                  : `${pendingCount} broadcast${pendingCount === 1 ? "" : "s"} awaiting super admin approval. Donors will be notified once approved. Urgent? Call the Red Cross to follow up.`}
+              </span>
+              {!isSuperAdmin && <CallRedCrossButton />}
             </div>
           )}
           <div className="flex items-center justify-between mb-4">
@@ -350,7 +354,10 @@ export default function ViewBDPage() {
                         </button>
                       </>
                     ) : (
-                      <span className="text-[11px] font-semibold text-[#8a5a00]">Awaiting approval</span>
+                      <>
+                        <span className="text-[11px] font-semibold text-[#8a5a00]">Awaiting approval</span>
+                        <CallRedCrossButton variant="icon" />
+                      </>
                     )
                   ) : b.status === "REJECTED" ? (
                     <span className="text-[11px] font-semibold text-[#b94842]" title={b.rejectionReason || ""}>

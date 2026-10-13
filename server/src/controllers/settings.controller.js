@@ -54,3 +54,31 @@ export const getActiveSession = asyncHandler(async (req, res) => {
   );
   res.json(rows[0] ?? null);
 });
+
+// The Red Cross hotline every hospital admin sees as "Call Red Cross"
+// (CallRedCrossButton.jsx), set by the super admin in Settings. Readable by
+// any signed-in admin; only a super admin can change it (see routes).
+const RED_CROSS_PHONE_KEY = "red_cross_phone";
+
+export const getRedCrossContact = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = $1", [RED_CROSS_PHONE_KEY]);
+  res.json({ phone: rows[0]?.value ?? null });
+});
+
+export const updateRedCrossContact = asyncHandler(async (req, res) => {
+  const raw = req.body?.phone;
+  if (raw !== null && raw !== undefined && typeof raw !== "string") {
+    return res.status(400).json({ error: "phone must be a string." });
+  }
+  const phone = raw?.trim() || null;
+  if (phone && (phone.length > 30 || !/\d/.test(phone))) {
+    return res.status(400).json({ error: "Enter a valid phone number." });
+  }
+  await pool.query(
+    `INSERT INTO app_settings (key, value, updated_by, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [RED_CROSS_PHONE_KEY, phone, req.admin.id]
+  );
+  res.json({ phone });
+});

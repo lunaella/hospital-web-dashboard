@@ -4,6 +4,7 @@ import PageHeader from "../components/PageHeader";
 import TeamAccessCard from "../components/TeamAccessCard";
 import { api, apiUploadFile } from "../lib/apiClient";
 import { useHospital } from "../context/HospitalContext";
+import { loadRedCrossPhone, setRedCrossPhone } from "../lib/redCrossContact";
 import { DIRECTORY_CITIES, hospitalsForCity } from "../data/hospitalDirectory";
 import {
   IconIdCard,
@@ -119,6 +120,30 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [profile, setProfile] = useState(null);
+  // Red Cross hotline shown to hospital admins as "Call Red Cross".
+  const [redCrossPhone, setRedCrossPhoneInput] = useState("");
+  const [redCrossSaving, setRedCrossSaving] = useState(false);
+  const [redCrossMessage, setRedCrossMessage] = useState(null); // { ok, text }
+
+  useEffect(() => {
+    loadRedCrossPhone().then((phone) => setRedCrossPhoneInput(phone ?? ""));
+  }, []);
+
+  async function saveRedCrossPhone(e) {
+    e.preventDefault();
+    setRedCrossSaving(true);
+    setRedCrossMessage(null);
+    try {
+      const { phone } = await api.patch("/api/settings/red-cross-contact", { phone: redCrossPhone });
+      setRedCrossPhone(phone);
+      setRedCrossPhoneInput(phone ?? "");
+      setRedCrossMessage({ ok: true, text: phone ? "Saved. Hospitals now see Call Red Cross." : "Cleared. Hospitals won't see a Call Red Cross button." });
+    } catch (err) {
+      setRedCrossMessage({ ok: false, text: err.message });
+    } finally {
+      setRedCrossSaving(false);
+    }
+  }
   const [session, setSession] = useState(null);
 
   const { hospitalId, hospitals, refreshHospitals, setHospitalId } = useHospital();
@@ -707,6 +732,41 @@ export default function Settings() {
             one at all. */}
         {profile && profile.isSuperAdmin && (
         <>
+        <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Red Cross Contact</h2>
+        <p className="mt-1.5 font-poppins font-semibold text-[15px] text-[#808080] max-w-[616px]">
+          The number hospitals reach you on. Every hospital admin sees a Call Red Cross button with it,
+          including next to a broadcast that's waiting on your approval.
+        </p>
+        <form
+          onSubmit={saveRedCrossPhone}
+          className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full px-8 py-6 flex items-end gap-6"
+        >
+          <div className="w-[360px]">
+            <Field label="RED CROSS HOTLINE">
+              <input
+                value={redCrossPhone}
+                onChange={(e) => setRedCrossPhoneInput(e.target.value)}
+                className={inputClass()}
+                inputMode="tel"
+                type="tel"
+                placeholder="e.g. (042) 373-0000 or 0917 000 0000"
+              />
+            </Field>
+          </div>
+          <button
+            type="submit"
+            disabled={redCrossSaving}
+            className="shrink-0 bg-[#9B1B20] rounded-[16px] h-[49px] px-8 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
+          >
+            <span className="font-poppins font-bold text-[15px] text-white">{redCrossSaving ? "Saving..." : "Save"}</span>
+          </button>
+          {redCrossMessage && (
+            <p className={`pb-3 font-poppins font-semibold text-[13px] ${redCrossMessage.ok ? "text-[#1e7d32]" : "text-[#d70b07]"}`}>
+              {redCrossMessage.text}
+            </p>
+          )}
+        </form>
+
         <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Hospital Network</h2>
         <p className="mt-1.5 font-poppins font-semibold text-[15px] text-[#808080] max-w-[616px]">
           Add or edit the hospitals this dashboard oversees. Appointments and inventory are scoped to

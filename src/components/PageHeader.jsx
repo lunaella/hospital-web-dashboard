@@ -1,5 +1,7 @@
 import HospitalSwitcher from "./HospitalSwitcher";
 import NotificationBell from "./NotificationBell";
+import CallRedCrossButton from "./CallRedCrossButton";
+import { useAuth } from "../context/AuthContext";
 
 // Shared top header bar used by every main page (Dashboard, Donor Management,
 // Reports, Settings) so the title placement, divider, and notification bell
@@ -14,11 +16,15 @@ import NotificationBell from "./NotificationBell";
 // fixed position that can drift into whatever a page happens to put in
 // its own `right` slot (it collided with the search box before).
 export default function PageHeader({ title, right }) {
+  // Hospital admins get a one-tap line to the Red Cross (the super admin)
+  // on every page; the super admin is the Red Cross, so they don't.
+  const { profile, isSuperAdmin } = useAuth();
   return (
     <div className="absolute left-[273px] top-0 w-[1167px] h-[93px] bg-white border-b border-[#ececec] flex items-center justify-between pl-10 pr-16">
       <h1 className="font-poppins font-medium text-[17px] text-black">{title}</h1>
       <div className="flex items-center gap-6">
         {right}
+        {profile && !isSuperAdmin && <CallRedCrossButton />}
         <HospitalSwitcher />
         <div className="h-[50px] w-px bg-[#d9d9d9]" />
         <NotificationBell />

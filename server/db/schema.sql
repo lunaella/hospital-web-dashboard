@@ -124,6 +124,15 @@ CREATE TABLE admin_hospital_assignments (
 -- One row per active/past login session. Mirrors the "Active Terminal
 -- Session" card (engine, system, network IP, region) and backs JWT
 -- invalidation on logout.
+-- App-wide settings edited by the super admin (migration 025). Keys:
+--   red_cross_phone — shown to hospital admins as "Call Red Cross".
+CREATE TABLE app_settings (
+  key         VARCHAR(50) PRIMARY KEY,
+  value       TEXT,
+  updated_by  UUID REFERENCES admins(id) ON DELETE SET NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE admin_sessions (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   admin_id          UUID NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
