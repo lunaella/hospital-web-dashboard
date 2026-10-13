@@ -3,6 +3,7 @@ import { sendSms } from "../utils/sms.js";
 import { sendEmail } from "../utils/email.js";
 import { sendPush } from "../utils/push.js";
 import { MinHeap } from "../utils/minHeap.js";
+import { canDonateNow } from "../utils/eligibilityClassifier.js";
 import { wrapBrandedEmail, buildBroadcastAlertEmailBody } from "../utils/emailTemplate.js";
 
 // Donors with no arrival history have no measured response time yet. They
@@ -53,7 +54,7 @@ function buildReferralPushTitle(request) {
 
 function buildReferralPushBody(request) {
   return (
-    `You're on a short recovery hold, but ${request.hospitalName} needs ${request.bloodType} donors ` +
+    `You can't donate right now, but ${request.hospitalName} needs ${request.bloodType} donors ` +
     `(Ward: ${request.ward}). If you know someone who's ${request.bloodType} and eligible, please let them know. ` +
     `Request #${request.requestCode}.`
   );
@@ -123,17 +124,27 @@ export async function notifyDonorsForRequest(request) {
   const { rows: hospitalRows } = await pool.query("SELECT name FROM hospitals WHERE id = $1", [request.hospitalId]);
   request.hospitalName = hospitalRows[0]?.name ?? FALLBACK_HOSPITAL_NAME;
 
-  const { rows: donors } = await pool.query(
+  // Every donor with this blood type, split into who can donate right now
+  // and who's deferred by the same check the donor's own app uses
+  // (canDonateNow) — not just the 90-day rule in the donor_eligibility
+  // view, which missed screening deferrals (weight, a recent tattoo,
+  // alcohol, ...) and a self-reported recent donation.
+  const { rows: matchingDonors } = await pool.query(
     `SELECT d.id, d.donor_code, d.name, d.phone, d.email, d.last_donation_at AS "lastDonationAt",
+            d.age, d.weight_kg AS "weightKg", d.gender, d.health_screening AS "healthScreening",
             d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
             COALESCE(array_agg(dd.fcm_token) FILTER (WHERE dd.fcm_token IS NOT NULL), '{}') AS "pushTokens"
      FROM donors d
-     JOIN donor_eligibility de ON de.id = d.id
      LEFT JOIN donor_devices dd ON dd.donor_id = d.id
-     WHERE d.blood_type = $1 AND de.is_eligible = true
+     WHERE d.blood_type = $1
      GROUP BY d.id`,
     [request.bloodType]
   );
+  const donors = matchingDonors.filter((d) => canDonateNow(d));
+  // Deferred donors can't donate themselves, so they never get a "please
+  // come donate" SMS/email (or an "eligible" slot to book), but they might
+  // know someone who can. In-app + push only, by design.
+  const deferredDonors = matchingDonors.filter((d) => !canDonateNow(d));
 
   const { rows: responseStats } = donors.length
     ? await pool.query(
@@ -148,21 +159,6 @@ export async function notifyDonorsForRequest(request) {
   const avgResponseByDonorId = new Map(responseStats.map((r) => [r.id, Number(r.avg_minutes)]));
 
   const rankedDonors = rankDonorsByResponseTime(donors, avgResponseByDonorId);
-
-  // Donors who match the blood type but are currently deferred — can't
-  // donate themselves, so they never get a "please come donate" SMS/email
-  // (or an "eligible" slot to book), but they might know someone who can.
-  // In-app + push only, by design — no SMS/email for this group.
-  const { rows: deferredDonors } = await pool.query(
-    `SELECT d.id, d.donor_code, d.name,
-            COALESCE(array_agg(dd.fcm_token) FILTER (WHERE dd.fcm_token IS NOT NULL), '{}') AS "pushTokens"
-     FROM donors d
-     JOIN donor_eligibility de ON de.id = d.id
-     LEFT JOIN donor_devices dd ON dd.donor_id = d.id
-     WHERE d.blood_type = $1 AND de.is_eligible = false
-     GROUP BY d.id`,
-    [request.bloodType]
-  );
 
   // notify_sms/notify_email are the donor's own Settings > Notification
   // Preferences toggle (see migration 008) — a donor who's still a match

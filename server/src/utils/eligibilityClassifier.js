@@ -193,3 +193,16 @@ export function classifyDonorRow(donor) {
     daysRemaining: result.daysRemaining > 0 ? result.daysRemaining : null,
   };
 }
+
+// Whether a donor should be asked to come donate right now — used to pick
+// who gets "please donate" vs referral pushes. Same answer as the donor's
+// own app: the full decision tree when a screening is on file, and only
+// the 90-day rule on last_donation_at when it isn't (e.g. an admin-created
+// walk-in donor), which is also what the app falls back to.
+// Needs age, weightKg, gender, healthScreening and lastDonationAt.
+export function canDonateNow(donor) {
+  const { status } = classifyDonorRow(donor);
+  if (status !== "UNKNOWN") return status === "ELIGIBLE";
+  if (!donor.lastDonationAt) return true;
+  return daysBetween(new Date(donor.lastDonationAt), new Date()) >= MIN_DONATION_INTERVAL_DAYS;
+}

@@ -11,6 +11,7 @@ import { imageSize } from "image-size";
 import { env } from "../config/env.js";
 import { buildPhotoUrl, buildSignatureUrl } from "../utils/mediaUrl.js";
 import { sendPushToDonor } from "../utils/push.js";
+import { canDonateNow } from "../utils/eligibilityClassifier.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
@@ -1030,11 +1031,29 @@ export const updateMyLocation = asyncHandler(async (req, res) => {
   );
 
   if (rowCount > 0) {
-    await sendPushToDonor(req.donor.id, {
-      title: "Open request nearby",
-      body: `${match.hospitalName} still needs ${match.bloodType} donors, about ${match.distanceKm} km away (Ward: ${match.ward}).`,
-      data: { type: "blood_request_nearby", requestId: match.id },
-    }).catch(() => {}); // best-effort — a failed push shouldn't fail the location update itself
+    // A donor who can't donate right now gets the "refer a friend" version
+    // instead — same eligible/deferred split notifyDonorsForRequest uses
+    // for the original blast.
+    const { rows: screeningRows } = await pool.query(
+      `SELECT age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
+              last_donation_at AS "lastDonationAt"
+       FROM donors WHERE id = $1`,
+      [req.donor.id]
+    );
+    const push = screeningRows[0] && canDonateNow(screeningRows[0])
+      ? {
+          title: "Open request nearby",
+          body: `${match.hospitalName} still needs ${match.bloodType} donors, about ${match.distanceKm} km away (Ward: ${match.ward}).`,
+          data: { type: "blood_request_nearby", requestId: match.id },
+        }
+      : {
+          title: `Know someone who's ${match.bloodType}?`,
+          body:
+            `You can't donate right now, but ${match.hospitalName}, about ${match.distanceKm} km away, still needs ` +
+            `${match.bloodType} donors (Ward: ${match.ward}). If you know someone who's eligible, please let them know.`,
+          data: { type: "blood_request_nearby_referral", requestId: match.id },
+        };
+    await sendPushToDonor(req.donor.id, push).catch(() => {}); // best-effort — a failed push shouldn't fail the location update itself
   }
 
   res.json({ ok: true, reminded: rowCount > 0 });
