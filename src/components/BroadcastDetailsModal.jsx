@@ -87,6 +87,22 @@ export default function BroadcastDetailsModal({ broadcast, onClose }) {
 
         <div className="bg-[#fafafa] rounded-[12px] px-4">
           <DetailRow label="Request ID" value={b.id} />
+          {b.hospitalName && <DetailRow label="Hospital" value={b.hospitalName} />}
+          <DetailRow
+            label="Hospital Contact"
+            value={
+              b.hospitalPhone ? (
+                <a href={`tel:${b.hospitalPhone.replace(/[^\d+]/g, "")}`} className="text-[#9B1B20] underline">
+                  Call · {b.hospitalPhone}
+                </a>
+              ) : (
+                <span className="text-[#aaa4a0]">No number on file</span>
+              )
+            }
+          />
+          {b.intakeChannel === "phone" && (
+            <DetailRow label="Received" value={b.callerName ? `By phone · ${b.callerName}` : "By phone"} />
+          )}
           <DetailRow label="Blood Type" value={b.bloodType} />
           <DetailRow label="Ward / Unit" value={b.ward} />
           <DetailRow label="Quota" value={b.units} />

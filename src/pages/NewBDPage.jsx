@@ -55,6 +55,10 @@ export default function NewBDPage() {
   const [bloodType, setBloodType] = useState("O-");
   const [ward, setWard] = useState("");
   const [units, setUnits] = useState(2);
+  // Super admin logging a request a hospital phoned in, so it still gets
+  // recorded in the system (intake_channel 'phone').
+  const [receivedByPhone, setReceivedByPhone] = useState(false);
+  const [callerName, setCallerName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -82,6 +86,7 @@ export default function NewBDPage() {
         bloodType,
         ward,
         unitsNeeded: units,
+        ...(isSuperAdmin && receivedByPhone ? { receivedByPhone: true, callerName } : {}),
       });
       navigate("/view-broadcasts");
     } catch (err) {
@@ -237,6 +242,30 @@ export default function NewBDPage() {
             </div>
           </div>
         </div>
+
+        {isSuperAdmin && (
+          <div className="mb-6 -mt-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={receivedByPhone}
+                onChange={(e) => setReceivedByPhone(e.target.checked)}
+                className="w-[15px] h-[15px] accent-[#9B1B20]"
+              />
+              <span className="font-poppins font-semibold text-[13px] text-black">This request was phoned in by the hospital</span>
+            </label>
+            {receivedByPhone && (
+              <input
+                type="text"
+                value={callerName}
+                onChange={(e) => setCallerName(e.target.value)}
+                maxLength={100}
+                placeholder="Who called? e.g. Nurse Reyes, ICU (optional)"
+                className="mt-2 w-full h-[38px] rounded-[10px] border border-[#d9d9d9] px-4 font-poppins text-[13px] text-black outline-none"
+              />
+            )}
+          </div>
+        )}
 
         {error && <p className="mb-4 font-poppins text-[13px] text-[#d70b07]">{error}</p>}
 

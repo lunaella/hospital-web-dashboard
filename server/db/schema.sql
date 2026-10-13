@@ -63,6 +63,8 @@ CREATE TABLE hospitals (
   address               TEXT,
   latitude              NUMERIC(9,6),
   longitude             NUMERIC(9,6),
+  -- Shown as "Call hospital" on its Pending Approval broadcasts (migration 024).
+  contact_phone         VARCHAR(30),
   -- How many donors can be booked into the exact same scheduled_at at this
   -- hospital (multiple donation stations/chairs run in parallel, so this is
   -- deliberately not 1). Enforced in createAppointment; see
@@ -191,7 +193,11 @@ CREATE TABLE blood_requests (
   submitted_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   reviewed_by       UUID REFERENCES admins(id) ON DELETE SET NULL,
   reviewed_at       TIMESTAMPTZ,
-  rejection_reason  TEXT
+  rejection_reason  TEXT,
+  -- 'phone' = a request the hospital phoned in, logged by the super admin
+  -- on its behalf (migration 024); 'portal' = submitted by the hospital.
+  intake_channel    VARCHAR(10) NOT NULL DEFAULT 'portal' CHECK (intake_channel IN ('portal', 'phone')),
+  caller_name       VARCHAR(100)
 );
 
 CREATE INDEX idx_blood_requests_status ON blood_requests(status);

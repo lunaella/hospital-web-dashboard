@@ -15,8 +15,8 @@ export const listHospitals = asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     allowedIds.length > 0
-      ? `SELECT id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity" FROM hospitals WHERE id = ANY($1) ORDER BY name`
-      : `SELECT id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity" FROM hospitals ORDER BY name`,
+      ? `SELECT id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity", contact_phone AS "contactPhone" FROM hospitals WHERE id = ANY($1) ORDER BY name`
+      : `SELECT id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity", contact_phone AS "contactPhone" FROM hospitals ORDER BY name`,
     allowedIds.length > 0 ? [allowedIds] : []
   );
   res.json(rows);
@@ -42,7 +42,7 @@ function parseCapacity(value) {
 // via seed data until now — this is the first way to add one from the app
 // itself instead of a SQL script.
 export const createHospital = asyncHandler(async (req, res) => {
-  const { name, code, city, address, latitude, longitude, appointmentCapacity } = req.body;
+  const { name, code, city, address, latitude, longitude, appointmentCapacity, contactPhone } = req.body;
 
   if (!name?.trim()) {
     return res.status(400).json({ error: "name is required." });
@@ -53,9 +53,9 @@ export const createHospital = asyncHandler(async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO hospitals (code, name, city, address, latitude, longitude, appointment_capacity)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity"`,
+      `INSERT INTO hospitals (code, name, city, address, latitude, longitude, appointment_capacity, contact_phone)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity", contact_phone AS "contactPhone"`,
       [
         code.trim(),
         name.trim(),
@@ -64,6 +64,7 @@ export const createHospital = asyncHandler(async (req, res) => {
         parseCoord(latitude),
         parseCoord(longitude),
         parseCapacity(appointmentCapacity),
+        contactPhone?.trim() || null,
       ]
     );
     res.status(201).json(rows[0]);
@@ -80,7 +81,7 @@ export const createHospital = asyncHandler(async (req, res) => {
 // slug an admin might reasonably want to fix a typo in, not a system-
 // generated id.
 export const updateHospital = asyncHandler(async (req, res) => {
-  const { name, code, city, address, latitude, longitude, appointmentCapacity } = req.body;
+  const { name, code, city, address, latitude, longitude, appointmentCapacity, contactPhone } = req.body;
 
   if (!name?.trim()) {
     return res.status(400).json({ error: "name is required." });
@@ -92,9 +93,10 @@ export const updateHospital = asyncHandler(async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE hospitals
-       SET code = $1, name = $2, city = $3, address = $4, latitude = $5, longitude = $6, appointment_capacity = $7
+       SET code = $1, name = $2, city = $3, address = $4, latitude = $5, longitude = $6, appointment_capacity = $7,
+           contact_phone = $9
        WHERE id = $8
-       RETURNING id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity"`,
+       RETURNING id, code, name, city, address, latitude, longitude, appointment_capacity AS "appointmentCapacity", contact_phone AS "contactPhone"`,
       [
         code.trim(),
         name.trim(),
@@ -104,6 +106,7 @@ export const updateHospital = asyncHandler(async (req, res) => {
         parseCoord(longitude),
         parseCapacity(appointmentCapacity),
         req.params.id,
+        contactPhone?.trim() || null,
       ]
     );
     if (!rows[0]) return res.status(404).json({ error: "Hospital not found." });

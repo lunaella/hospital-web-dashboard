@@ -19,29 +19,34 @@ export const listRequests = asyncHandler(async (req, res) => {
 
   if (hospitalId) {
     params.push(hospitalId);
-    conditions.push(`hospital_id = $${params.length}`);
+    conditions.push(`r.hospital_id = $${params.length}`);
   }
   if (search) {
     params.push(`%${search}%`);
-    conditions.push(`(request_code ILIKE $${params.length} OR ward ILIKE $${params.length} OR blood_type::text ILIKE $${params.length})`);
+    conditions.push(`(r.request_code ILIKE $${params.length} OR r.ward ILIKE $${params.length} OR r.blood_type::text ILIKE $${params.length})`);
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const { rows } = await pool.query(
     `SELECT
-       request_code AS id,
-       blood_type AS "bloodType",
-       priority,
-       ward,
-       units_needed AS "unitsNeeded",
-       units_fulfilled AS "unitsFulfilled",
-       round(units_fulfilled::numeric / NULLIF(units_needed, 0) * 100)::int AS pct,
-       status,
-       rejection_reason AS "rejectionReason",
-       extract(epoch FROM (now() - created_at))::int AS seconds_open
-     FROM blood_requests
+       r.request_code AS id,
+       r.blood_type AS "bloodType",
+       r.priority,
+       r.ward,
+       r.units_needed AS "unitsNeeded",
+       r.units_fulfilled AS "unitsFulfilled",
+       round(r.units_fulfilled::numeric / NULLIF(r.units_needed, 0) * 100)::int AS pct,
+       r.status,
+       r.rejection_reason AS "rejectionReason",
+       r.intake_channel AS "intakeChannel",
+       r.caller_name AS "callerName",
+       h.name AS "hospitalName",
+       h.contact_phone AS "hospitalPhone",
+       extract(epoch FROM (now() - r.created_at))::int AS seconds_open
+     FROM blood_requests r
+     JOIN hospitals h ON h.id = r.hospital_id
      ${where}
-     ORDER BY created_at DESC`,
+     ORDER BY r.created_at DESC`,
     params
   );
   res.json(rows);
@@ -74,13 +79,43 @@ function dispatchToDonors(request) {
     .finally(() => broadcastToDonors({ type: "blood_request_created" }));
 }
 
+// Super admin's Pending Approvals bar (shown on every page, see
+// PendingApprovalAlerts.jsx): every hospital's waiting broadcasts at once,
+// regardless of which hospital the switcher is on, most urgent and then
+// longest-waiting first, with the hospital's number for a confirming call.
+export const listPendingRequests = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT
+       r.request_code AS id,
+       r.blood_type AS "bloodType",
+       r.priority,
+       r.ward,
+       r.units_needed AS "unitsNeeded",
+       h.id AS "hospitalId",
+       h.name AS "hospitalName",
+       h.contact_phone AS "hospitalPhone",
+       extract(epoch FROM (now() - r.submitted_at))::int AS "secondsWaiting"
+     FROM blood_requests r
+     JOIN hospitals h ON h.id = r.hospital_id
+     WHERE r.status = 'PENDING_APPROVAL'
+     ORDER BY
+       CASE r.priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END,
+       r.submitted_at ASC`
+  );
+  res.json(rows);
+});
+
 // "+ New Broadcast" — creates a new blood request. request_code is
 // generated server-side (matches the REQ-XXXX pattern used throughout).
 // Only a super admin's broadcast goes out to donors immediately; anyone
 // else's (a hospital's) waits as PENDING_APPROVAL until a super admin
 // approves or rejects it (approveRequest / rejectRequest below).
+//
+// A super admin can also log a request a hospital phoned in
+// (receivedByPhone + optional callerName) — it goes live like any other
+// super admin broadcast, but is recorded as intake_channel 'phone'.
 export const createRequest = asyncHandler(async (req, res) => {
-  const { priority, bloodType, ward, unitsNeeded, hospitalId } = req.body;
+  const { priority, bloodType, ward, unitsNeeded, hospitalId, receivedByPhone, callerName } = req.body;
 
   if (!hospitalId) {
     return res.status(400).json({ error: "hospitalId is required." });
@@ -101,15 +136,18 @@ export const createRequest = asyncHandler(async (req, res) => {
   }
 
   const status = req.admin.isSuperAdmin ? "OPEN" : "PENDING_APPROVAL";
+  const phonedIn = req.admin.isSuperAdmin && receivedByPhone === true;
+  const caller = phonedIn && typeof callerName === "string" ? callerName.trim().slice(0, 100) || null : null;
 
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = `REQ-${Math.floor(1000 + Math.random() * 9000)}`;
     try {
       const { rows } = await pool.query(
-        `INSERT INTO blood_requests (hospital_id, request_code, blood_type, priority, ward, units_needed, units_fulfilled, status, submitted_by)
-         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8)
+        `INSERT INTO blood_requests
+           (hospital_id, request_code, blood_type, priority, ward, units_needed, units_fulfilled, status, submitted_by, intake_channel, caller_name)
+         VALUES ($1, $2, $3, $4, $5, $6, 0, $7, $8, $9, $10)
          RETURNING ${RETURNING_REQUEST}`,
-        [hospitalId, code, bloodType, priorityUpper, ward.trim(), units, status, req.admin.id]
+        [hospitalId, code, bloodType, priorityUpper, ward.trim(), units, status, req.admin.id, phonedIn ? "phone" : "portal", caller]
       );
       const created = rows[0];
       res.status(201).json(created);
@@ -117,9 +155,18 @@ export const createRequest = asyncHandler(async (req, res) => {
       if (status === "OPEN") {
         dispatchToDonors(created);
       } else {
-        // Lets a super admin's open All Broadcasts page / bell pick up the
-        // new pending request without waiting for their next poll.
-        broadcast({ type: "broadcast_pending_approval", hospitalId: created.hospitalId, requestCode: created.id });
+        // Rings the super admin's open dashboard (sound + desktop
+        // notification, see PendingApprovalAlerts.jsx) and refreshes their
+        // All Broadcasts page / bell without waiting for the next poll.
+        broadcast({
+          type: "broadcast_pending_approval",
+          hospitalId: created.hospitalId,
+          requestCode: created.id,
+          priority: created.priority,
+          bloodType: created.bloodType,
+          unitsNeeded: created.unitsNeeded,
+          ward: created.ward,
+        });
       }
       return;
     } catch (err) {

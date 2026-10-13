@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import WebNav from "./WebNav";
+import PendingApprovalAlerts from "./PendingApprovalAlerts";
+import { useAuth } from "../context/AuthContext";
 
 const DESIGN_WIDTH = 1440;
 const SIDEBAR_WIDTH = 296;
@@ -47,6 +49,7 @@ const SIDEBAR_WIDTH = 296;
 // won out as the simpler, more universally correct behavior.
 export default function AppShell({ children }) {
   const location = useLocation();
+  const { isSuperAdmin } = useAuth();
   const [zoom, setZoom] = useState(() => (typeof window !== "undefined" ? window.innerWidth / DESIGN_WIDTH : 1));
   const [viewportHeight, setViewportHeight] = useState(() => (typeof window !== "undefined" ? window.innerHeight : 0));
   const contentRef = useRef(null);
@@ -103,6 +106,9 @@ export default function AppShell({ children }) {
       </div>
       <div style={{ width: DESIGN_WIDTH * zoom, height: contentHeight * zoom, overflow: "hidden" }}>
         <div ref={contentRef} style={{ width: DESIGN_WIDTH, transform: `scale(${zoom})`, transformOrigin: "top left" }}>
+          {/* In the page flow (not fixed) so it pushes the page down
+              instead of covering its header. */}
+          {isSuperAdmin && <PendingApprovalAlerts />}
           {children}
         </div>
       </div>

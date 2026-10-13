@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   listRequests,
+  listPendingRequests,
   createRequest,
   approveRequest,
   rejectRequest,
@@ -24,6 +25,7 @@ export const requestsRouter = Router();
 requestsRouter.use(requireAuth, requireSection("broadcasts", "view"));
 
 requestsRouter.get("/", requireHospitalScope(), listRequests);
+requestsRouter.get("/pending", requireSuperAdmin, listPendingRequests);
 requestsRouter.post("/", requireSection("broadcasts", "edit"), requireHospitalScope(), createRequest);
 // Hospitals' broadcasts wait as PENDING_APPROVAL until the super admin
 // reviews them (see createRequest).

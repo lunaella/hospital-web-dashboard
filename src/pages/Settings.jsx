@@ -87,7 +87,16 @@ function Field({ label, hint, children }) {
   );
 }
 
-const EMPTY_HOSPITAL_FORM = { name: "", code: "", city: "", address: "", latitude: "", longitude: "", appointmentCapacity: "5" };
+const EMPTY_HOSPITAL_FORM = {
+  name: "",
+  code: "",
+  city: "",
+  address: "",
+  latitude: "",
+  longitude: "",
+  appointmentCapacity: "5",
+  contactPhone: "",
+};
 // Sentinel <option> values that drop the City/Hospital Name selects into a
 // free-text input, so a genuinely new hospital (or one in a city not yet in
 // hospitalDirectory.js) can actually be added — the directory is a
@@ -294,6 +303,7 @@ export default function Settings() {
       latitude: hospital.latitude ?? "",
       longitude: hospital.longitude ?? "",
       appointmentCapacity: hospital.appointmentCapacity ?? "5",
+      contactPhone: hospital.contactPhone ?? "",
     });
     setHospitalFormError(null);
     setShowHospitalForm(true);
@@ -870,6 +880,19 @@ export default function Settings() {
                       inputMode="numeric"
                       type="number"
                       min="1"
+                    />
+                  </Field>
+                  <Field
+                    label="CONTACT NUMBER"
+                    hint="Shown as a Call hospital button on this hospital's broadcasts awaiting approval"
+                  >
+                    <input
+                      value={hospitalForm.contactPhone}
+                      onChange={(e) => updateHospitalField("contactPhone", e.target.value)}
+                      className={inputClass()}
+                      inputMode="tel"
+                      type="tel"
+                      placeholder="e.g. (042) 710-1234"
                     />
                   </Field>
                 </div>
