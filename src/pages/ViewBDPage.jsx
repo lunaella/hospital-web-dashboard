@@ -27,7 +27,10 @@ export default function ViewBDPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { hospitalId } = useHospital();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, permissions } = useAuth();
+  const canEditBroadcasts = isSuperAdmin || permissions?.broadcasts === "edit";
+  // Opens BroadcastDetailsModal straight on its cancel confirmation.
+  const [cancelPromptFor, setCancelPromptFor] = useState(null);
   // Reports' Fulfillment Log "View Broadcast Details" action lands here with
   // a specific request code to jump straight to, instead of just dropping
   // the admin on the unfiltered full list.
@@ -58,6 +61,7 @@ export default function ViewBDPage() {
       percent: r.pct,
       status: r.status,
       rejectionReason: r.rejectionReason,
+      cancelReason: r.cancelReason,
       intakeChannel: r.intakeChannel,
       callerName: r.callerName,
       hospitalName: r.hospitalName,
@@ -89,7 +93,11 @@ export default function ViewBDPage() {
   // rejecting one, refreshes this list live for everyone who has it open.
   useEffect(() => {
     return connectRealtime((event) => {
-      if (event.type === "broadcast_pending_approval" || event.type === "broadcast_reviewed") {
+      if (
+        event.type === "broadcast_pending_approval" ||
+        event.type === "broadcast_reviewed" ||
+        event.type === "broadcast_cancelled"
+      ) {
         setReloadKey((k) => k + 1);
       }
     });
@@ -357,13 +365,27 @@ export default function ViewBDPage() {
                       <>
                         <span className="text-[11px] font-semibold text-[#8a5a00]">Awaiting approval</span>
                         <CallRedCrossButton variant="icon" />
+                        {canEditBroadcasts && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCancelPromptFor(b.id);
+                              setSelectedBroadcast(b);
+                            }}
+                            className="text-[11px] font-semibold text-[#808080] underline hover:text-[#9B1B20] cursor-pointer"
+                            title="Withdraw this request before it's approved"
+                          >
+                            Withdraw
+                          </button>
+                        )}
                       </>
                     )
                   ) : b.status === "REJECTED" ? (
                     <span className="text-[11px] font-semibold text-[#b94842]" title={b.rejectionReason || ""}>
                       Rejected
                     </span>
-                  ) : b.status === "FULFILLED" || b.status === "CANCELLED" ? (
+                  ) : b.status === "FULFILLED" || b.status === "CANCELLED" || b.status === "WITHDRAWN" ? (
                     <span className="text-[11px] font-semibold text-[#8a8a8a] capitalize">
                       {b.status.toLowerCase()}
                     </span>
@@ -477,7 +499,22 @@ export default function ViewBDPage() {
         </div>
       </div>
 
-      <BroadcastDetailsModal broadcast={selectedBroadcast} onClose={() => setSelectedBroadcast(null)} />
+      <BroadcastDetailsModal
+        broadcast={selectedBroadcast}
+        canCancel={canEditBroadcasts}
+        startCancelling={cancelPromptFor === selectedBroadcast?.id}
+        onCancelled={(updated) => {
+          setBroadcasts((prev) =>
+            prev.map((b) => (b.id === updated.id ? { ...b, status: updated.status, cancelReason: updated.cancelReason } : b))
+          );
+          setSelectedBroadcast(null);
+          setCancelPromptFor(null);
+        }}
+        onClose={() => {
+          setSelectedBroadcast(null);
+          setCancelPromptFor(null);
+        }}
+      />
     </div>
   );
 }

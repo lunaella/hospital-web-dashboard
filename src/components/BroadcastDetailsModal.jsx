@@ -10,7 +10,9 @@
 // page renders inside AppShell's `transform: scale(...)` zoom wrapper,
 // which breaks `position: fixed` centering/sizing for anything rendered
 // inline instead of portaled out of it.
+import { useState } from "react";
 import { createPortal } from "react-dom";
+import { api } from "../lib/apiClient";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -22,12 +24,14 @@ const statusChipClass = {
   FULFILLED: "bg-[#eafaf0] text-[#1e7d32]",
   CANCELLED: "bg-[#f1f1f1] text-[#8a8a8a]",
   OPEN: "bg-[#fdecea] text-[#c26460]",
+  WITHDRAWN: "bg-[#f1f1f1] text-[#8a8a8a]",
   PENDING_APPROVAL: "bg-[#fff7e6] text-[#8a5a00]",
   REJECTED: "bg-[#fdecea] text-[#b94842]",
 };
 
 const STATUS_LABEL = {
   PENDING_APPROVAL: "Awaiting approval",
+  WITHDRAWN: "Withdrawn",
   PARTIALLY_FULFILLED: "Partially fulfilled",
 };
 
@@ -40,9 +44,44 @@ function DetailRow({ label, value }) {
   );
 }
 
-export default function BroadcastDetailsModal({ broadcast, onClose }) {
+// Requests a hospital can still call off: pending ones are withdrawn,
+// live ones cancelled (see cancelRequest on the server).
+const CANCELLABLE = new Set(["PENDING_APPROVAL", "OPEN", "PARTIALLY_FULFILLED"]);
+
+export default function BroadcastDetailsModal({ broadcast, onClose, canCancel = false, startCancelling = false, onCancelled }) {
   if (!broadcast) return null;
-  const b = broadcast;
+  // Keyed so the cancel confirmation state resets per broadcast.
+  return (
+    <DetailsCard
+      key={broadcast.id}
+      b={broadcast}
+      onClose={onClose}
+      canCancel={canCancel}
+      startCancelling={startCancelling}
+      onCancelled={onCancelled}
+    />
+  );
+}
+
+function DetailsCard({ b, onClose, canCancel, startCancelling, onCancelled }) {
+  const isPending = b.status === "PENDING_APPROVAL";
+  const showCancel = canCancel && CANCELLABLE.has(b.status);
+  const [confirming, setConfirming] = useState(startCancelling && showCancel);
+  const [reason, setReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+
+  async function handleCancel() {
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const updated = await api.post(`/api/requests/${b.id}/cancel`, { reason });
+      onCancelled?.(updated);
+    } catch (err) {
+      setCancelError(err.message);
+      setCancelling(false);
+    }
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-[70] font-poppins flex items-center justify-center p-6">
@@ -110,7 +149,55 @@ export default function BroadcastDetailsModal({ broadcast, onClose }) {
           {b.status === "REJECTED" && b.rejectionReason && (
             <DetailRow label="Rejection Reason" value={b.rejectionReason} />
           )}
+          {(b.status === "CANCELLED" || b.status === "WITHDRAWN") && b.cancelReason && (
+            <DetailRow label="Cancel Reason" value={b.cancelReason} />
+          )}
         </div>
+
+        {showCancel &&
+          (confirming ? (
+            <div className="flex flex-col gap-2 rounded-[12px] border border-[#f0d0ce] bg-[#fdf6f6] p-4">
+              <p className="text-[13px] font-semibold text-[#3d1116]">
+                {isPending
+                  ? "Withdraw this request? The Red Cross will stop being alerted and it will never go out to donors."
+                  : "Cancel this request? It will be taken off the donor app, so no more donors will come in for it."}
+              </p>
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={300}
+                placeholder="Reason (optional), e.g. blood sourced elsewhere"
+                className="text-[12px] border border-[#d9d9d9] rounded-[6px] px-3 py-2 outline-none bg-white"
+              />
+              {cancelError && <p className="text-[12px] font-semibold text-[#d70b07]">{cancelError}</p>}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className="text-[12px] font-semibold text-[#808080] px-3 py-1.5 cursor-pointer"
+                >
+                  Keep request
+                </button>
+                <button
+                  type="button"
+                  disabled={cancelling}
+                  onClick={handleCancel}
+                  className="text-[12px] font-semibold text-white bg-[#9B1B20] rounded-full px-4 py-1.5 hover:bg-[#8B1218] disabled:opacity-50 cursor-pointer"
+                >
+                  {cancelling ? "..." : isPending ? "Withdraw request" : "Cancel request"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirming(true)}
+              className="self-end text-[12px] font-semibold text-[#9B1B20] border border-[#9B1B20] rounded-full px-4 py-1.5 hover:bg-[#fbeeec] cursor-pointer"
+            >
+              {isPending ? "Withdraw request" : "Cancel request"}
+            </button>
+          ))}
       </div>
     </div>,
     document.body

@@ -5,6 +5,7 @@ import {
   createRequest,
   approveRequest,
   rejectRequest,
+  cancelRequest,
   fulfillRequest,
   getRequestNotifications,
 } from "../controllers/requests.controller.js";
@@ -31,6 +32,13 @@ requestsRouter.post("/", requireSection("broadcasts", "edit"), requireHospitalSc
 // reviews them (see createRequest).
 requestsRouter.post("/:code/approve", requireSuperAdmin, approveRequest);
 requestsRouter.post("/:code/reject", requireSuperAdmin, rejectRequest);
+// A hospital can call off its own request (scoped like fulfill).
+requestsRouter.post(
+  "/:code/cancel",
+  requireSection("broadcasts", "edit"),
+  requireHospitalScope(requestHospitalId),
+  cancelRequest
+);
 requestsRouter.patch(
   "/:code/fulfill",
   requireSection("broadcasts", "edit"),

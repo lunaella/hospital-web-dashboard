@@ -129,6 +129,48 @@ export default function Settings() {
     loadRedCrossPhone().then((phone) => setRedCrossPhoneInput(phone ?? ""));
   }, []);
 
+  // Mobiles texted when a hospital's broadcast is waiting on approval
+  // (super admin only — GET 403s for anyone else, which just leaves this
+  // section unloaded since it's never rendered for them anyway).
+  const [alertNumbers, setAlertNumbers] = useState("");
+  const [backupNumbers, setBackupNumbers] = useState("");
+  const [alertSchedule, setAlertSchedule] = useState(null); // { escalateAfterMinutes, maxEscalations }
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertMessage, setAlertMessage] = useState(null); // { ok, text }
+
+  useEffect(() => {
+    if (!profile?.isSuperAdmin) return;
+    api
+      .get("/api/settings/approval-alerts")
+      .then((res) => {
+        setAlertNumbers(res.alertNumbers.join("\n"));
+        setBackupNumbers(res.backupNumbers.join("\n"));
+        setAlertSchedule({ escalateAfterMinutes: res.escalateAfterMinutes, maxEscalations: res.maxEscalations });
+      })
+      .catch(() => {});
+  }, [profile?.isSuperAdmin]);
+
+  async function saveAlertNumbers(e) {
+    e.preventDefault();
+    setAlertSaving(true);
+    setAlertMessage(null);
+    try {
+      const res = await api.patch("/api/settings/approval-alerts", { alertNumbers, backupNumbers });
+      setAlertNumbers(res.alertNumbers.join("\n"));
+      setBackupNumbers(res.backupNumbers.join("\n"));
+      setAlertMessage({
+        ok: true,
+        text: res.alertNumbers.length
+          ? `Saved. ${res.alertNumbers.length} number${res.alertNumbers.length === 1 ? "" : "s"} will be texted for each new request.`
+          : "Saved. No numbers will be texted — only super admin emails go out.",
+      });
+    } catch (err) {
+      setAlertMessage({ ok: false, text: err.message });
+    } finally {
+      setAlertSaving(false);
+    }
+  }
+
   async function saveRedCrossPhone(e) {
     e.preventDefault();
     setRedCrossSaving(true);
@@ -765,6 +807,53 @@ export default function Settings() {
               {redCrossMessage.text}
             </p>
           )}
+        </form>
+
+        <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Text Alerts for Pending Approvals</h2>
+        <p className="mt-1.5 font-poppins font-semibold text-[15px] text-[#808080] max-w-[760px]">
+          When a hospital submits a broadcast, these mobile numbers get a text and every super admin gets an email, even if
+          nobody has the dashboard open.
+          {alertSchedule &&
+            ` If it's still waiting after ${alertSchedule.escalateAfterMinutes.EMERGENCY} min (Emergency), ${alertSchedule.escalateAfterMinutes.URGENT} min (Urgent) or ${alertSchedule.escalateAfterMinutes.NORMAL} min (Normal), it texts again and adds the backup numbers, up to ${alertSchedule.maxEscalations} more times. Requests are never approved automatically.`}
+        </p>
+        <form
+          onSubmit={saveAlertNumbers}
+          className="mt-4 bg-white rounded-[10px] shadow-[0px_1px_3px_0px_rgba(0,0,0,0.1)] w-full px-8 py-6 flex flex-col gap-6"
+        >
+          <div className="grid grid-cols-2 gap-x-10">
+            <Field label="ALERT NUMBERS" hint="Texted for every new request. One mobile number per line.">
+              <textarea
+                value={alertNumbers}
+                onChange={(e) => setAlertNumbers(e.target.value)}
+                rows={3}
+                placeholder={"0917 123 4567\n0998 765 4321"}
+                className="border border-[#aaa4a0] rounded-[10px] w-full px-4 py-3 font-poppins text-[15px] text-black outline-none resize-none"
+              />
+            </Field>
+            <Field label="BACKUP NUMBERS" hint="Added only if nobody acts after the first text. One per line.">
+              <textarea
+                value={backupNumbers}
+                onChange={(e) => setBackupNumbers(e.target.value)}
+                rows={3}
+                placeholder="0918 555 0000"
+                className="border border-[#aaa4a0] rounded-[10px] w-full px-4 py-3 font-poppins text-[15px] text-black outline-none resize-none"
+              />
+            </Field>
+          </div>
+          <div className="flex items-center gap-6">
+            <button
+              type="submit"
+              disabled={alertSaving}
+              className="shrink-0 bg-[#9B1B20] rounded-[16px] h-[49px] px-8 flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors disabled:cursor-wait disabled:opacity-70"
+            >
+              <span className="font-poppins font-bold text-[15px] text-white">{alertSaving ? "Saving..." : "Save numbers"}</span>
+            </button>
+            {alertMessage && (
+              <p className={`font-poppins font-semibold text-[13px] ${alertMessage.ok ? "text-[#1e7d32]" : "text-[#d70b07]"}`}>
+                {alertMessage.text}
+              </p>
+            )}
+          </div>
         </form>
 
         <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Hospital Network</h2>

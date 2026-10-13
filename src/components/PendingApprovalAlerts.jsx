@@ -111,7 +111,13 @@ export default function PendingApprovalAlerts() {
     load();
     const interval = setInterval(load, POLL_MS);
     const disconnect = connectRealtime((event) => {
-      if (event.type === "broadcast_pending_approval" || event.type === "broadcast_reviewed") load();
+      if (
+        event.type === "broadcast_pending_approval" ||
+        event.type === "broadcast_reviewed" ||
+        event.type === "broadcast_cancelled"
+      ) {
+        load();
+      }
     });
     return () => {
       clearInterval(interval);

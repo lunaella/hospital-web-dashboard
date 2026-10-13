@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
 import { pool } from "../db/pool.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { getSettings, setSetting, splitNumberList, parseMobileList, SETTING_KEYS } from "../utils/appSettings.js";
+import { ESCALATE_AFTER_MIN, MAX_ESCALATIONS } from "../services/approvalAlerts.service.js";
 
 const HASH_ROUNDS = 12;
 
@@ -58,11 +60,9 @@ export const getActiveSession = asyncHandler(async (req, res) => {
 // The Red Cross hotline every hospital admin sees as "Call Red Cross"
 // (CallRedCrossButton.jsx), set by the super admin in Settings. Readable by
 // any signed-in admin; only a super admin can change it (see routes).
-const RED_CROSS_PHONE_KEY = "red_cross_phone";
-
 export const getRedCrossContact = asyncHandler(async (req, res) => {
-  const { rows } = await pool.query("SELECT value FROM app_settings WHERE key = $1", [RED_CROSS_PHONE_KEY]);
-  res.json({ phone: rows[0]?.value ?? null });
+  const settings = await getSettings([SETTING_KEYS.redCrossPhone]);
+  res.json({ phone: settings[SETTING_KEYS.redCrossPhone] });
 });
 
 export const updateRedCrossContact = asyncHandler(async (req, res) => {
@@ -74,11 +74,30 @@ export const updateRedCrossContact = asyncHandler(async (req, res) => {
   if (phone && (phone.length > 30 || !/\d/.test(phone))) {
     return res.status(400).json({ error: "Enter a valid phone number." });
   }
-  await pool.query(
-    `INSERT INTO app_settings (key, value, updated_by, updated_at)
-     VALUES ($1, $2, $3, now())
-     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by, updated_at = now()`,
-    [RED_CROSS_PHONE_KEY, phone, req.admin.id]
-  );
+  await setSetting(SETTING_KEYS.redCrossPhone, phone, req.admin.id);
   res.json({ phone });
+});
+
+// Who gets texted about broadcasts awaiting approval
+// (services/approvalAlerts.service.js). Super admin only, both ways —
+// these are staff's personal mobiles, unlike the public hotline above.
+export const getApprovalAlertSettings = asyncHandler(async (req, res) => {
+  const settings = await getSettings([SETTING_KEYS.alertNumbers, SETTING_KEYS.backupNumbers]);
+  res.json({
+    alertNumbers: splitNumberList(settings[SETTING_KEYS.alertNumbers]),
+    backupNumbers: splitNumberList(settings[SETTING_KEYS.backupNumbers]),
+    escalateAfterMinutes: ESCALATE_AFTER_MIN,
+    maxEscalations: MAX_ESCALATIONS,
+  });
+});
+
+export const updateApprovalAlertSettings = asyncHandler(async (req, res) => {
+  const alerts = parseMobileList(req.body?.alertNumbers);
+  if (alerts.error) return res.status(400).json({ error: `Alert numbers: ${alerts.error}` });
+  const backups = parseMobileList(req.body?.backupNumbers);
+  if (backups.error) return res.status(400).json({ error: `Backup numbers: ${backups.error}` });
+
+  await setSetting(SETTING_KEYS.alertNumbers, alerts.numbers.join(",") || null, req.admin.id);
+  await setSetting(SETTING_KEYS.backupNumbers, backups.numbers.join(",") || null, req.admin.id);
+  res.json({ alertNumbers: alerts.numbers, backupNumbers: backups.numbers });
 });

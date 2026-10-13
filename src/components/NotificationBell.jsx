@@ -24,6 +24,7 @@ const STATUS_LABEL = {
   CANCELLED: "Cancelled",
   PENDING_APPROVAL: "Awaiting Approval",
   REJECTED: "Rejected",
+  WITHDRAWN: "Withdrawn",
 };
 
 // Still used for the small "N active" label inside the dropdown — a
@@ -142,7 +143,11 @@ export default function NotificationBell() {
     const disconnect = connectRealtime((event) => {
       // A hospital submitting a broadcast for approval, or the super admin
       // approving/rejecting one — re-fetch so it shows up right away.
-      if (event.type === "broadcast_pending_approval" || event.type === "broadcast_reviewed") {
+      if (
+        event.type === "broadcast_pending_approval" ||
+        event.type === "broadcast_reviewed" ||
+        event.type === "broadcast_cancelled"
+      ) {
         setReloadKey((k) => k + 1);
         return;
       }

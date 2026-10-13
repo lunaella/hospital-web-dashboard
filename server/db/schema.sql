@@ -15,7 +15,8 @@ CREATE TYPE blood_type AS ENUM ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'
 CREATE TYPE request_priority AS ENUM ('EMERGENCY', 'URGENT', 'NORMAL');
 
 -- PENDING_APPROVAL / REJECTED: see migration 023 (super admin approval).
-CREATE TYPE request_status AS ENUM ('OPEN', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED', 'PENDING_APPROVAL', 'REJECTED');
+-- WITHDRAWN: cancelled by the hospital before approval (migration 026).
+CREATE TYPE request_status AS ENUM ('OPEN', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED', 'PENDING_APPROVAL', 'REJECTED', 'WITHDRAWN');
 
 CREATE TYPE stock_status AS ENUM ('CRITICAL', 'LOW', 'STABLE');
 
@@ -125,7 +126,9 @@ CREATE TABLE admin_hospital_assignments (
 -- Session" card (engine, system, network IP, region) and backs JWT
 -- invalidation on logout.
 -- App-wide settings edited by the super admin (migration 025). Keys:
---   red_cross_phone — shown to hospital admins as "Call Red Cross".
+--   red_cross_phone          — shown to hospital admins as "Call Red Cross".
+--   red_cross_alert_numbers  — mobiles texted for each new pending broadcast.
+--   red_cross_backup_numbers — mobiles added when an alert escalates.
 CREATE TABLE app_settings (
   key         VARCHAR(50) PRIMARY KEY,
   value       TEXT,
@@ -206,7 +209,14 @@ CREATE TABLE blood_requests (
   -- 'phone' = a request the hospital phoned in, logged by the super admin
   -- on its behalf (migration 024); 'portal' = submitted by the hospital.
   intake_channel    VARCHAR(10) NOT NULL DEFAULT 'portal' CHECK (intake_channel IN ('portal', 'phone')),
-  caller_name       VARCHAR(100)
+  caller_name       VARCHAR(100),
+  -- SMS/email alerts to the Red Cross while PENDING_APPROVAL (migration 026).
+  approval_alert_count   INT NOT NULL DEFAULT 0,
+  last_approval_alert_at TIMESTAMPTZ,
+  -- Hospital cancelling its own request (migration 026).
+  cancelled_by      UUID REFERENCES admins(id) ON DELETE SET NULL,
+  cancelled_at      TIMESTAMPTZ,
+  cancel_reason     TEXT
 );
 
 CREATE INDEX idx_blood_requests_status ON blood_requests(status);
@@ -366,6 +376,23 @@ CREATE TABLE donor_request_notifications (
 );
 
 CREATE INDEX idx_donor_request_notifications_request_id ON donor_request_notifications(request_id);
+
+-- One row per SMS/email sent to the Red Cross about a PENDING_APPROVAL
+-- broadcast (migration 026). attempt 1 = first alert, 2+ = escalations.
+CREATE TABLE approval_alerts (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  request_id     UUID NOT NULL REFERENCES blood_requests(id) ON DELETE CASCADE,
+  attempt        INT NOT NULL,
+  channel        notification_channel NOT NULL,
+  recipient      VARCHAR(255) NOT NULL,
+  status         notification_status NOT NULL,
+  error_message  TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_approval_alerts_request_id ON approval_alerts(request_id);
+CREATE INDEX idx_blood_requests_pending_alerts
+  ON blood_requests(last_approval_alert_at) WHERE status = 'PENDING_APPROVAL';
 
 -- Donor identity verification submissions ("Get Verified" in the mobile
 -- app) — see migration 012 for why these are bytea columns rather than

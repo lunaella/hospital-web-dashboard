@@ -44,7 +44,7 @@ export const getFulfillmentLog = asyncHandler(async (req, res) => {
        END AS time,
        system_rating AS rating
      FROM blood_requests
-     WHERE status NOT IN ('PENDING_APPROVAL', 'REJECTED') ${hospitalClause}
+     WHERE status NOT IN ('PENDING_APPROVAL', 'REJECTED', 'WITHDRAWN') ${hospitalClause}
      ORDER BY created_at DESC
      LIMIT $1`,
     params
@@ -108,7 +108,7 @@ export const getFulfillmentBreakdown = asyncHandler(async (req, res) => {
       priority,
       round(avg(units_fulfilled::numeric / NULLIF(units_needed, 0)) * 100)::int AS pct
     FROM blood_requests
-    WHERE status NOT IN ('PENDING_APPROVAL', 'REJECTED') ${hospitalClause}
+    WHERE status NOT IN ('PENDING_APPROVAL', 'REJECTED', 'WITHDRAWN') ${hospitalClause}
     GROUP BY priority`,
     params
   );
@@ -206,13 +206,13 @@ export const getDemandForecast = asyncHandler(async (req, res) => {
       recent AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED') AND hospital_id = $1
+        WHERE created_at >= now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED', 'WITHDRAWN') AND hospital_id = $1
         GROUP BY blood_type
       ),
       previous AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED') AND hospital_id = $1
+        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED', 'WITHDRAWN') AND hospital_id = $1
         GROUP BY blood_type
       )
       SELECT
@@ -234,13 +234,13 @@ export const getDemandForecast = asyncHandler(async (req, res) => {
       recent AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED')
+        WHERE created_at >= now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED', 'WITHDRAWN')
         GROUP BY blood_type
       ),
       previous AS (
         SELECT blood_type, coalesce(sum(units_needed), 0)::int AS units
         FROM blood_requests
-        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED')
+        WHERE created_at >= now() - INTERVAL '96 hours' AND created_at < now() - INTERVAL '48 hours' AND status NOT IN ('PENDING_APPROVAL', 'REJECTED', 'WITHDRAWN')
         GROUP BY blood_type
       ),
       stock AS (

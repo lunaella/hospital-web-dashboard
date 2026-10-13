@@ -3,6 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { notifyDonorsForRequest } from "../services/notifications.service.js";
 import { hospitalIdParam } from "../utils/hospitalScope.js";
 import { broadcast, broadcastToDonors } from "../realtime/hub.js";
+import { sendDueApprovalAlerts } from "../services/approvalAlerts.service.js";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const PRIORITIES = ["EMERGENCY", "URGENT", "NORMAL"];
@@ -38,6 +39,7 @@ export const listRequests = asyncHandler(async (req, res) => {
        round(r.units_fulfilled::numeric / NULLIF(r.units_needed, 0) * 100)::int AS pct,
        r.status,
        r.rejection_reason AS "rejectionReason",
+       r.cancel_reason AS "cancelReason",
        r.intake_channel AS "intakeChannel",
        r.caller_name AS "callerName",
        h.name AS "hospitalName",
@@ -167,6 +169,9 @@ export const createRequest = asyncHandler(async (req, res) => {
           unitsNeeded: created.unitsNeeded,
           ward: created.ward,
         });
+        // Texts/emails the Red Cross right away (and the escalation job
+        // follows up if nobody acts) — fire-and-forget like donor alerts.
+        sendDueApprovalAlerts().catch((err) => console.error(`Approval alert failed for ${created.id}:`, err));
       }
       return;
     } catch (err) {
@@ -216,6 +221,33 @@ export const rejectRequest = asyncHandler(async (req, res) => {
 
   res.json(rejected);
   broadcast({ type: "broadcast_reviewed", hospitalId: rejected.hospitalId, requestCode: rejected.id, status: rejected.status });
+});
+
+// "Cancel request" — the hospital (or the super admin) calls a request
+// off. One still awaiting approval ends as WITHDRAWN: it never went live,
+// so it's left out of every metric and the Red Cross stops being alerted
+// about it. One already live ends as CANCELLED, which takes it off the
+// donor app; units already fulfilled stay on record.
+export const cancelRequest = asyncHandler(async (req, res) => {
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() || null : null;
+  const { rows } = await pool.query(
+    `UPDATE blood_requests
+     SET status = CASE WHEN status = 'PENDING_APPROVAL' THEN 'WITHDRAWN'::request_status ELSE 'CANCELLED'::request_status END,
+         cancelled_by = $2, cancelled_at = now(), cancel_reason = $3
+     WHERE request_code = $1 AND status IN ('PENDING_APPROVAL', 'OPEN', 'PARTIALLY_FULFILLED')
+     RETURNING ${RETURNING_REQUEST}, cancel_reason AS "cancelReason"`,
+    [req.params.code, req.admin.id, reason]
+  );
+  const cancelled = rows[0];
+  if (!cancelled) {
+    const { rows: existing } = await pool.query("SELECT status FROM blood_requests WHERE request_code = $1", [req.params.code]);
+    if (!existing[0]) return res.status(404).json({ error: "Request not found." });
+    return res.status(409).json({ error: `This request can't be cancelled — it's already ${existing[0].status.toLowerCase().replace("_", " ")}.` });
+  }
+
+  res.json(cancelled);
+  broadcast({ type: "broadcast_cancelled", hospitalId: cancelled.hospitalId, requestCode: cancelled.id, status: cancelled.status });
+  if (cancelled.status === "CANCELLED") broadcastToDonors({ type: "blood_request_updated" });
 });
 
 async function reviewConflict(code, res) {
@@ -275,10 +307,13 @@ export const fulfillRequest = asyncHandler(async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: `Request is already ${request.status.toLowerCase()}.` });
     }
-    if (request.status === "PENDING_APPROVAL" || request.status === "REJECTED") {
+    if (request.status === "PENDING_APPROVAL" || request.status === "REJECTED" || request.status === "WITHDRAWN") {
       await client.query("ROLLBACK");
       return res.status(400).json({
-        error: request.status === "REJECTED" ? "This broadcast was rejected." : "This broadcast is still awaiting super admin approval.",
+        error:
+          request.status === "PENDING_APPROVAL"
+            ? "This broadcast is still awaiting super admin approval."
+            : `This broadcast was ${request.status.toLowerCase()}.`,
       });
     }
 

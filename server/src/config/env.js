@@ -48,4 +48,10 @@ export const env = {
   // environment without this shouldn't refuse to boot, it should just report
   // "push not configured" per send attempt (see config/firebase.js).
   firebaseServiceAccountBase64: process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || null,
+
+  // Public address of the admin dashboard, e.g. "https://resq.vercel.app" —
+  // used for the "Review:" link in the SMS/email alerting the Red Cross to a
+  // broadcast awaiting approval (services/approvalAlerts.service.js).
+  // Optional: without it the alert just leaves the link out.
+  dashboardUrl: (process.env.DASHBOARD_URL || "").replace(/\/+$/, "") || null,
 };
