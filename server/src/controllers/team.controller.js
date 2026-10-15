@@ -96,6 +96,21 @@ function validateHospitalIds(input) {
   return input;
 }
 
+// A team manager who isn't the super admin can only hand out access they
+// have themselves; otherwise they could create (or edit) an account with
+// more access than their own and log into it.
+async function assertWithinCallerPermissions(req, permissions) {
+  if (req.admin.isSuperAdmin) return;
+  const callerPermissions = (await loadPermissionsMap([req.admin.id]))[req.admin.id];
+  for (const [section, level] of Object.entries(permissions)) {
+    if (LEVELS.indexOf(level) > LEVELS.indexOf(callerPermissions[section])) {
+      const err = new Error(`You can't grant more access to ${section} than you have yourself.`);
+      err.status = 403;
+      throw err;
+    }
+  }
+}
+
 function badRequest(message) {
   const err = new Error(message);
   err.status = 400;
@@ -152,6 +167,8 @@ export const createTeamMember = asyncHandler(async (req, res) => {
   if ((canManageTeam || makeSuperAdmin) && !req.admin.isSuperAdmin) {
     return res.status(403).json({ error: "Only the super admin can grant team management or super admin access." });
   }
+
+  await assertWithinCallerPermissions(req, permissions);
 
   // A hospital-scoped team manager can only ever staff their own
   // hospital(s) — whatever hospitalIds the request asked for is replaced
@@ -245,6 +262,29 @@ export const updateTeamMember = asyncHandler(async (req, res) => {
   const targetIsSuperAdmin = target.clearance === "FULL_ROOT_ACCESS_LEVEL_5";
   if (targetIsSuperAdmin && !req.admin.isSuperAdmin) {
     return res.status(403).json({ error: "Only the super admin can modify another super admin's account." });
+  }
+  // Team managers can't raise their own access or reset their own password
+  // here (that bypasses Settings' current-password check), and can't touch
+  // another team manager's account — only the super admin can. The edit form
+  // always resubmits every section, so only levels that actually change are
+  // checked.
+  if (!req.admin.isSuperAdmin) {
+    const currentPermissions = (await loadPermissionsMap([id]))[id];
+    const changedPermissions = Object.fromEntries(
+      Object.entries(permissions).filter(([section, level]) => currentPermissions[section] !== level)
+    );
+    if (id === req.admin.id) {
+      const currentHospitalIds = (await loadHospitalIdsMap([id]))[id] ?? [];
+      const hospitalsChanged =
+        hospitalIds !== undefined &&
+        (hospitalIds.length !== currentHospitalIds.length || hospitalIds.some((h) => !currentHospitalIds.includes(h)));
+      if (Object.keys(changedPermissions).length > 0 || hospitalsChanged || resetPassword !== undefined) {
+        return res.status(403).json({ error: "Ask the super admin to change your own access or password." });
+      }
+    } else if (target.canManageTeam) {
+      return res.status(403).json({ error: "Only the super admin can modify another team manager's account." });
+    }
+    await assertWithinCallerPermissions(req, changedPermissions);
   }
 
   // A hospital-scoped team manager can only touch accounts within their own
@@ -364,9 +404,15 @@ export const deleteTeamMember = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "You can't remove your own account." });
   }
 
-  const { rows: targetRows } = await pool.query("SELECT clearance FROM admins WHERE id = $1", [id]);
+  const { rows: targetRows } = await pool.query(
+    `SELECT clearance, can_manage_team AS "canManageTeam" FROM admins WHERE id = $1`,
+    [id]
+  );
   const target = targetRows[0];
   if (!target) return res.status(404).json({ error: "Admin not found." });
+  if (target.canManageTeam && !req.admin.isSuperAdmin) {
+    return res.status(403).json({ error: "Only the super admin can remove another team manager." });
+  }
 
   const targetIsSuperAdmin = target.clearance === "FULL_ROOT_ACCESS_LEVEL_5";
   if (targetIsSuperAdmin) {

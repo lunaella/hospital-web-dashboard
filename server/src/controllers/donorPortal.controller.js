@@ -42,10 +42,13 @@ const SIGNATURE_COOLDOWN_DAYS = 180;
 // getDonorPhoto/getDonorSignature serve back with, which browsers and
 // Flutter's Image.network both already tolerate being approximate for,
 // since they sniff the actual bytes rather than trusting it blindly.
+// Photos and signatures are served publicly, so the stored type comes from
+// the file's actual bytes, never the type the client claimed. SVG is left
+// out on purpose: it can carry script.
 function imageTypeToMime(type) {
   const known = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
-    heic: "image/heic", heif: "image/heif", avif: "image/avif", bmp: "image/bmp", svg: "image/svg+xml" };
-  return known[type] || "application/octet-stream";
+    heic: "image/heic", heif: "image/heif", avif: "image/avif", bmp: "image/bmp" };
+  return known[type] ?? null;
 }
 
 export const getMyProfile = asyncHandler(async (req, res) => {
@@ -129,7 +132,8 @@ export const uploadMyPhoto = asyncHandler(async (req, res) => {
   } catch {
     return res.status(400).json({ error: "Could not process that image — please try a different photo." });
   }
-  const mimeType = file.mimetype?.startsWith("image/") ? file.mimetype : imageTypeToMime(detectedType);
+  const mimeType = imageTypeToMime(detectedType);
+  if (!mimeType) return res.status(400).json({ error: "Please upload a JPG, PNG or HEIC image." });
 
   const { rows } = await pool.query(
     `UPDATE donors SET photo = $1, photo_mime_type = $2, photo_updated_at = now()
@@ -157,6 +161,8 @@ export const getDonorPhoto = asyncHandler(async (req, res) => {
   // (see buildPhotoUrl), so a new photo gets a new URL rather than
   // invalidating this one.
   res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("Content-Security-Policy", "default-src 'none'; sandbox");
   res.send(donor.photo);
 });
 
@@ -176,7 +182,8 @@ export const uploadMySignature = asyncHandler(async (req, res) => {
   } catch {
     return res.status(400).json({ error: "Could not process that signature — please try drawing it again." });
   }
-  const mimeType = file.mimetype?.startsWith("image/") ? file.mimetype : imageTypeToMime(detectedType);
+  const mimeType = imageTypeToMime(detectedType);
+  if (!mimeType) return res.status(400).json({ error: "Please upload a JPG, PNG or HEIC image." });
 
   // Enforce SIGNATURE_COOLDOWN_DAYS server-side — this is the real gate;
   // the app's own check (via getMyProfile's signatureEditableAt) is just
@@ -220,6 +227,8 @@ export const getDonorSignature = asyncHandler(async (req, res) => {
 
   res.set("Content-Type", donor.mimeType || "image/png");
   res.set("Cache-Control", "public, max-age=31536000, immutable");
+  res.set("X-Content-Type-Options", "nosniff");
+  res.set("Content-Security-Policy", "default-src 'none'; sandbox");
   res.send(donor.signature);
 });
 

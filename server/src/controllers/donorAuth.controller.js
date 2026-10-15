@@ -43,6 +43,14 @@ function donorLoginAttemptsKey(ip, identifier) {
   return `donor_login_attempts:${ip}:${identifier}`;
 }
 
+// Same account-wide cap as the admin login (auth.controller.js), so the
+// per-IP limit can't be dodged by rotating IPs.
+const MAX_ACCOUNT_LOGIN_ATTEMPTS = 20;
+
+function donorAccountLoginAttemptsKey(identifier) {
+  return `donor_login_attempts_account:${identifier}`;
+}
+
 async function startDonorSession(donorId) {
   const redis = await ensureRedisConnected();
   const { token, jti } = signDonorToken(donorId);
@@ -171,9 +179,10 @@ export const donorPasswordLogin = asyncHandler(async (req, res) => {
 
   const redis = await ensureRedisConnected();
   const attemptsKey = donorLoginAttemptsKey(req.ip, lookupValue);
-  const attempts = Number((await redis.get(attemptsKey)) ?? 0);
-  if (attempts >= MAX_LOGIN_ATTEMPTS) {
-    const ttl = await redis.ttl(attemptsKey);
+  const accountAttemptsKey = donorAccountLoginAttemptsKey(lookupValue);
+  const [attempts, accountAttempts] = (await redis.mget(attemptsKey, accountAttemptsKey)).map(Number);
+  if (attempts >= MAX_LOGIN_ATTEMPTS || accountAttempts >= MAX_ACCOUNT_LOGIN_ATTEMPTS) {
+    const ttl = await redis.ttl(attempts >= MAX_LOGIN_ATTEMPTS ? attemptsKey : accountAttemptsKey);
     const waitMinutes = Math.max(1, Math.ceil(ttl / 60));
     return res.status(429).json({
       error: `Too many failed login attempts. Try again in ${waitMinutes} minute${waitMinutes === 1 ? "" : "s"}.`,
@@ -192,8 +201,10 @@ export const donorPasswordLogin = asyncHandler(async (req, res) => {
   const donor = rows.length === 1 ? rows[0] : undefined;
 
   async function recordFailure() {
-    const newCount = await redis.incr(attemptsKey);
-    if (newCount === 1) await redis.expire(attemptsKey, LOCKOUT_WINDOW_SECONDS);
+    for (const key of [attemptsKey, accountAttemptsKey]) {
+      const newCount = await redis.incr(key);
+      if (newCount === 1) await redis.expire(key, LOCKOUT_WINDOW_SECONDS);
+    }
   }
 
   if (!donor) {
@@ -214,7 +225,7 @@ export const donorPasswordLogin = asyncHandler(async (req, res) => {
     return res.status(401).json({ error: "Incorrect password." });
   }
 
-  await redis.del(attemptsKey);
+  await redis.del(attemptsKey, accountAttemptsKey);
   delete donor.passwordHash;
 
   const token = await startDonorSession(donor.id);
@@ -531,7 +542,7 @@ export const donorResetPassword = asyncHandler(async (req, res) => {
   } while (cursor !== "0");
 
   // Clear the login lockout so the new password works right away.
-  await redis.del(donorLoginAttemptsKey(req.ip, lookupValue));
+  await redis.del(donorLoginAttemptsKey(req.ip, lookupValue), donorAccountLoginAttemptsKey(lookupValue));
 
   res.json({ ok: true });
 });

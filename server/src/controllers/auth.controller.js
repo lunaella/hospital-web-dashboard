@@ -24,6 +24,16 @@ function loginAttemptsKey(ip, username) {
   return `login_attempts:${ip}:${String(username).toLowerCase()}`;
 }
 
+// The per-IP limit above can be dodged by spreading guesses across many IPs
+// (or by forging X-Forwarded-For, since "trust proxy" is on), so failures
+// against one username are also capped no matter where they come from. Set
+// high enough that a real user's typos never reach it.
+const MAX_ACCOUNT_LOGIN_ATTEMPTS = 20;
+
+function accountLoginAttemptsKey(username) {
+  return `login_attempts_account:${String(username).toLowerCase()}`;
+}
+
 // Pulls a short "Chrome 122" / "Safari 17" style label out of a raw
 // User-Agent string for display on the Settings session card. Falls back
 // to a truncated raw string for UAs the simple regex doesn't recognize,
@@ -78,9 +88,10 @@ export const login = asyncHandler(async (req, res) => {
 
   const redis = await ensureRedisConnected();
   const attemptsKey = loginAttemptsKey(req.ip, username);
-  const attempts = Number((await redis.get(attemptsKey)) ?? 0);
-  if (attempts >= MAX_LOGIN_ATTEMPTS) {
-    const ttl = await redis.ttl(attemptsKey);
+  const accountAttemptsKey = accountLoginAttemptsKey(username);
+  const [attempts, accountAttempts] = (await redis.mget(attemptsKey, accountAttemptsKey)).map(Number);
+  if (attempts >= MAX_LOGIN_ATTEMPTS || accountAttempts >= MAX_ACCOUNT_LOGIN_ATTEMPTS) {
+    const ttl = await redis.ttl(attempts >= MAX_LOGIN_ATTEMPTS ? attemptsKey : accountAttemptsKey);
     const waitMinutes = Math.max(1, Math.ceil(ttl / 60));
     return res.status(429).json({
       error: `Too many failed login attempts. Try again in ${waitMinutes} minute${waitMinutes === 1 ? "" : "s"}.`,
@@ -97,13 +108,15 @@ export const login = asyncHandler(async (req, res) => {
   if (!admin || !passwordMatches) {
     // First failure in a fresh window starts the countdown; INCR after
     // EXPIRE is already set just keeps counting toward the same deadline.
-    const newCount = await redis.incr(attemptsKey);
-    if (newCount === 1) await redis.expire(attemptsKey, LOCKOUT_WINDOW_SECONDS);
+    for (const key of [attemptsKey, accountAttemptsKey]) {
+      const newCount = await redis.incr(key);
+      if (newCount === 1) await redis.expire(key, LOCKOUT_WINDOW_SECONDS);
+    }
     return res.status(401).json({ error: "Invalid username or password." });
   }
 
   // Successful login clears any prior failed attempts against this account.
-  await redis.del(attemptsKey);
+  await redis.del(attemptsKey, accountAttemptsKey);
 
   // Single-session enforcement — FULL_ROOT_ACCESS_LEVEL_5 only. The one
   // shared super admin account is the highest-stakes login in the system
@@ -333,7 +346,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
     "UPDATE admin_sessions SET is_active = false, revoked_at = now() WHERE admin_id = $1 AND is_active = true",
     [stored.adminId]
   );
-  await redis.del(loginAttemptsKey(req.ip, username));
+  await redis.del(loginAttemptsKey(req.ip, username), accountLoginAttemptsKey(username));
 
   res.json({ message: "Password updated. You can now log in with your new password." });
 });
