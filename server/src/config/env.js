@@ -1,7 +1,7 @@
 import "dotenv/config";
 
 function required(name, fallback) {
-  const value = process.env[name] ?? fallback;
+  const value = process.env[name] || fallback; // an empty value counts as missing
   if (value === undefined) {
     throw new Error(`Missing required environment variable: ${name}`);
   }
@@ -12,7 +12,9 @@ export const env = {
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: required("DATABASE_URL", "postgresql://resq:resq_dev_password@localhost:5432/resq"),
   redisUrl: required("REDIS_URL", "redis://:resq_dev_password@localhost:6379"),
-  jwtSecret: required("JWT_SECRET", "change_me_in_production"),
+  // No fallback: the repo is public, so a default secret would let anyone
+  // sign their own admin/donor tokens. Set JWT_SECRET in .env or on Render.
+  jwtSecret: required("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
   // The donor-facing Android app — a consumer app, so "stay logged in" is
   // the normal expectation, unlike an admin's shared-terminal 8h session.
