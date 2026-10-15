@@ -201,8 +201,31 @@ export function classifyDonorRow(donor) {
 // walk-in donor), which is also what the app falls back to.
 // Needs age, weightKg, gender, healthScreening and lastDonationAt.
 export function canDonateNow(donor) {
-  const { status } = classifyDonorRow(donor);
-  if (status !== "UNKNOWN") return status === "ELIGIBLE";
-  if (!donor.lastDonationAt) return true;
-  return daysBetween(new Date(donor.lastDonationAt), new Date()) >= MIN_DONATION_INTERVAL_DAYS;
+  return donorEligibility(donor).isEligible;
+}
+
+// canDonateNow plus what the admin Donor Management list shows for a
+// donor who can't: daysUntilEligible is the countdown when the deferral is
+// a plain wait (null when it isn't, e.g. an active infection), and
+// lockReason is the decision-tree reason ("deferredInterval" for the
+// 90-day rule — the only one the admin's "Mark Eligible" override can
+// clear, since that just resets last_donation_at).
+export function donorEligibility(donor) {
+  const { status, reason, message, daysRemaining } = classifyDonorRow(donor);
+  if (status === "ELIGIBLE") {
+    return { isEligible: true, daysUntilEligible: null, lockReason: null, lockMessage: null };
+  }
+  if (status !== "UNKNOWN") {
+    return { isEligible: false, daysUntilEligible: daysRemaining, lockReason: reason, lockMessage: message };
+  }
+  const daysSince = donor.lastDonationAt ? daysBetween(new Date(donor.lastDonationAt), new Date()) : null;
+  if (daysSince == null || daysSince >= MIN_DONATION_INTERVAL_DAYS) {
+    return { isEligible: true, daysUntilEligible: null, lockReason: null, lockMessage: null };
+  }
+  return {
+    isEligible: false,
+    daysUntilEligible: MIN_DONATION_INTERVAL_DAYS - daysSince,
+    lockReason: "deferredInterval",
+    lockMessage: REASON_MESSAGES.deferredInterval,
+  };
 }

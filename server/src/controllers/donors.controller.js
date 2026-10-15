@@ -5,12 +5,20 @@ import { bookAppointment, AppointmentBookingError } from "../services/appointmen
 import { verifySessionToken } from "../utils/jwt.js";
 import { broadcast, broadcastToDonors, sendToDonor } from "../realtime/hub.js";
 import { ratingFor } from "./requests.controller.js";
-import { classifyDonorRow } from "../utils/eligibilityClassifier.js";
+import { classifyDonorRow, donorEligibility } from "../utils/eligibilityClassifier.js";
 import { MinHeap } from "../utils/minHeap.js";
 import { sendPushToDonor } from "../utils/push.js";
 import { buildPhotoUrl } from "../utils/mediaUrl.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
+
+// Adds isEligible / daysUntilEligible / lockReason / lockMessage to a donor
+// row and drops the screening columns they were computed from, which the
+// admin list doesn't otherwise show.
+function withEligibility(donor) {
+  const { age, weightKg, gender, healthScreening, ...rest } = donor;
+  return { ...rest, ...donorEligibility(donor) };
+}
 
 export const listDonors = asyncHandler(async (req, res) => {
   const page = Math.max(Number(req.query.page) || 1, 1);
@@ -34,11 +42,6 @@ export const listDonors = asyncHandler(async (req, res) => {
     params.push(`%${search}%`);
     conditions.push(`(name ILIKE $${params.length} OR donor_code ILIKE $${params.length} OR phone ILIKE $${params.length})`);
   }
-  if (eligibility === "eligible") {
-    conditions.push(`(last_donation_at IS NULL OR now() - last_donation_at >= INTERVAL '90 days')`);
-  } else if (eligibility === "locked") {
-    conditions.push(`(last_donation_at IS NOT NULL AND now() - last_donation_at < INTERVAL '90 days')`);
-  }
   // Donors are a shared pool with no hospital_id of their own — scoping to
   // one hospital means "has this hospital ever actually interacted with
   // this donor", i.e. an appointment (any status) or a recorded donation
@@ -52,27 +55,28 @@ export const listDonors = asyncHandler(async (req, res) => {
   }
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const countResult = await pool.query(`SELECT count(*)::int AS total FROM donors ${where}`, params);
-  const total = countResult.rows[0].total;
-
-  params.push(pageSize, offset);
-  const { rows } = await pool.query(
+  // Eligibility is the same full screening check the donor's app and the
+  // broadcast pushes use (donorEligibility), not just the 90-day rule. The
+  // decision tree runs in JS, so the eligible/locked filter and paging
+  // happen after the query instead of in SQL.
+  const { rows: matching } = await pool.query(
     `SELECT
        id, donor_code AS "donorCode", name, phone, blood_type AS "bloodType",
        (photo IS NOT NULL) AS "hasPhoto", photo_updated_at AS "photoUpdatedAt",
        last_donation_at AS "lastDonationAt",
-       CASE
-         WHEN last_donation_at IS NULL THEN true
-         WHEN now() - last_donation_at >= INTERVAL '90 days' THEN true
-         ELSE false
-       END AS "isEligible",
-       GREATEST(0, 90 - EXTRACT(DAY FROM now() - last_donation_at)::int) AS "daysUntilEligible"
+       age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening"
      FROM donors
      ${where}
-     ORDER BY name
-     LIMIT $${params.length - 1} OFFSET $${params.length}`,
+     ORDER BY name`,
     params
   );
+  const classified = matching
+    .map((donor) => withEligibility(donor))
+    .filter((donor) =>
+      eligibility === "eligible" ? donor.isEligible : eligibility === "locked" ? !donor.isEligible : true
+    );
+  const total = classified.length;
+  const rows = classified.slice(offset, offset + pageSize);
 
   // Real donor-uploaded photo (migration 016), not the unused avatar_url
   // column — see donorPortal.controller.js's buildPhotoUrl doc comment for
@@ -178,18 +182,14 @@ export const exportDonors = asyncHandler(async (req, res) => {
   }
   const { rows } = await pool.query(
     `SELECT donor_code AS "donorCode", name, phone, blood_type AS "bloodType",
-            CASE
-              WHEN last_donation_at IS NULL THEN true
-              WHEN now() - last_donation_at >= INTERVAL '90 days' THEN true
-              ELSE false
-            END AS "isEligible",
-            GREATEST(0, 90 - EXTRACT(DAY FROM now() - last_donation_at)::int) AS "daysUntilEligible"
+            last_donation_at AS "lastDonationAt",
+            age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening"
      FROM donors
      ${where}
      ORDER BY name`,
     params
   );
-  res.json(rows);
+  res.json(rows.map((donor) => withEligibility(donor)));
 });
 
 export const getDonor = asyncHandler(async (req, res) => {

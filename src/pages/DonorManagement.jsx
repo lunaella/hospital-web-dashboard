@@ -24,7 +24,12 @@ function mapDonor(d) {
     phone: d.phone,
     bloodType: d.bloodType,
     avatar: d.avatar,
-    status: d.isEligible ? { type: "eligible" } : { type: "locked", days: d.daysUntilEligible },
+    // Locked covers every screening deferral, not just the 90-day rule —
+    // days is null when there's no countdown (e.g. an active infection),
+    // and only a "deferredInterval" lock can be cleared with Mark Eligible.
+    status: d.isEligible
+      ? { type: "eligible" }
+      : { type: "locked", days: d.daysUntilEligible, reason: d.lockReason, message: d.lockMessage },
   };
 }
 
@@ -206,13 +211,15 @@ export default function DonorManagement() {
     setOpenRowMenu(null);
     try {
       await api.patch(`/api/donors/${donor.dbId}/eligibility`, { eligible: donor.status.type !== "eligible" });
-      setDonors((prev) =>
-        prev.map((d) =>
-          d.dbId === donor.dbId
-            ? { ...d, status: d.status.type === "eligible" ? { type: "locked", days: 90 } : { type: "eligible" } }
-            : d
-        )
-      );
+      // Refetched rather than flipped locally: clearing the 90-day lock can
+      // still leave the donor deferred by their screening.
+      const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
+      bloodTypeFilter.forEach((t) => params.append("bloodType", t));
+      if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
+      const data = await api.get(`/api/donors?${params.toString()}`);
+      setDonors(data.donors.map(mapDonor));
+      setTotalDonors(data.total);
+      setTotalPages(data.totalPages);
     } catch (err) {
       setDonorsError(err.message);
     }
@@ -227,7 +234,7 @@ export default function DonorManagement() {
         d.name,
         d.phone,
         d.bloodType,
-        d.isEligible ? "Eligible" : `${d.daysUntilEligible} Days Lock`,
+        d.isEligible ? "Eligible" : d.daysUntilEligible ? `${d.daysUntilEligible} Days Lock` : `Deferred: ${d.lockMessage}`,
       ]);
       const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -738,9 +745,12 @@ export default function DonorManagement() {
                   ELIGIBLE
                 </span>
               ) : (
-                <span className="border-2 border-[#d9d9d9] border-solid rounded-[10px] h-[24px] w-[120px] flex items-center justify-center gap-1 text-[10px] font-semibold tracking-wide text-[#808080]">
+                <span
+                  title={donor.status.message ?? undefined}
+                  className="border-2 border-[#d9d9d9] border-solid rounded-[10px] h-[24px] w-[120px] flex items-center justify-center gap-1 text-[10px] font-semibold tracking-wide text-[#808080]"
+                >
                   <IconLock className="w-[10px] h-[10px] text-[#808080]" />
-                  {donor.status.days} DAYS LOCK
+                  {donor.status.days ? `${donor.status.days} DAYS LOCK` : "DEFERRED"}
                 </span>
               )}
             </div>
@@ -768,13 +778,15 @@ export default function DonorManagement() {
                   >
                     View Profile
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => toggleDonorLock(donor)}
-                    className="w-full text-left px-3 py-2 text-[12px] font-poppins font-medium text-black hover:bg-[#fbf3f3] cursor-pointer"
-                  >
-                    {donor.status.type === "eligible" ? "Lock for 90 Days" : "Mark Eligible"}
-                  </button>
+                  {(donor.status.type === "eligible" || donor.status.reason === "deferredInterval") && (
+                    <button
+                      type="button"
+                      onClick={() => toggleDonorLock(donor)}
+                      className="w-full text-left px-3 py-2 text-[12px] font-poppins font-medium text-black hover:bg-[#fbf3f3] cursor-pointer"
+                    >
+                      {donor.status.type === "eligible" ? "Lock for 90 Days" : "Mark Eligible"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setOpenRowMenu(null)}
