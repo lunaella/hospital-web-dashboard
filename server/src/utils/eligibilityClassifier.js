@@ -8,8 +8,14 @@
 // for whenever a hospital staffer scanning a donor's QR pass needs an
 // instant, official read instead of trusting a client-cached status.
 
+import { assessMajorMedicalHistory, assessTravelOrNeedleStick } from "./medKeywordRules.js";
+
 const MIN_DONATION_INTERVAL_DAYS = 90;
 const TATTOO_DEFERRAL_WINDOW_DAYS = 365;
+const RECENT_PROCEDURE_DEF_DAYS = 28;
+const TRANSFUSION_SURGERY_DEF_DAYS = 365;
+const TRAVEL_NEEDLE_DEF_DAYS = 365;
+const MALARIA_ENDEMIC_TRAVEL_DEF_DAYS = 180;
 
 function daysBetween(from, to) {
   return Math.floor((to.getTime() - from.getTime()) / 86400000);
@@ -22,9 +28,15 @@ function daysBetween(from, to) {
 // This buckets the raw reason into the three-way status the QR scan
 // displays to staff: ELIGIBLE, DEFERRED (has a clearance date), or
 // CLINICAL_REVIEW (doesn't).
-const CLINICAL_REVIEW_REASONS = new Set(["deferredMedical", "deferredClinicalRisk"]);
+const CLINICAL_REVIEW_REASONS = new Set(["deferredMedical", "deferredClinicalRisk", "deferredMajorMedical"]);
 
 const REASON_MESSAGES = {
+  deferredNotWell: "Reported not feeling well today.",
+  deferredFasting: "Reported no full meal and fluids in the last 4–6 hours.",
+  deferredRecentProcedure: "Reported a medication or minor procedure within the last 4 weeks.",
+  deferredMajorMedical: "Reported a major medical history that needs clinical judgment before donating.",
+  deferredTransfusionSurgery: "Reported a blood transfusion or surgery within the last 12 months.",
+  deferredTravelNeedle: "Reported malaria-endemic travel or a needle-stick exposure within its deferral window.",
   deferredWeight: "Below the 50kg minimum weight threshold.",
   deferredAge: "Outside the 18-65 eligible age range.",
   deferredInterval: "Within the mandatory 90-day interval since their last recorded donation.",
@@ -36,9 +48,19 @@ const REASON_MESSAGES = {
   deferredClinicalRisk: "Reported a high-risk exposure — needs clinical judgment, not a fixed wait.",
 };
 
-// Mirrors DecisionTreeClassifier.classify(): same seven nodes, evaluated in
-// the same order, first match wins. Returns { reason: null } for eligible.
+// Mirrors DecisionTreeClassifier.classify(): same nodes, evaluated in the
+// same order, first match wins. Returns { reason: null } for eligible.
 function runDecisionTree(npt) {
+  // Immediate Wellness Check
+  if (!npt.feelsWellToday) {
+    return { reason: "deferredNotWell", daysRemaining: 0 };
+  }
+
+  // Meal / Fluid Intake Check (last 4-6 hrs)
+  if (!npt.hasEatenRecently) {
+    return { reason: "deferredFasting", daysRemaining: 0 };
+  }
+
   // Node 1: Weight Threshold Check (DOH Standard >= 50kg)
   if (npt.weight < 50.0) {
     return { reason: "deferredWeight", daysRemaining: 0 };
@@ -62,6 +84,37 @@ function runDecisionTree(npt) {
     return { reason: "deferredMedical", daysRemaining: 0 };
   }
 
+  // Recent Minor Medications/Procedures Check (4-week window, judged
+  // against the most recent selected item; any item without a date defers).
+  if (npt.recentMedProcedures.length > 0) {
+    let mostRecent = null;
+    let anyMissingDate = false;
+    for (const option of npt.recentMedProcedures) {
+      const raw = npt.medProcedureDetails?.[option]?.date;
+      const date = raw ? new Date(raw) : null;
+      if (!date || Number.isNaN(date.getTime())) {
+        anyMissingDate = true;
+        continue;
+      }
+      if (!mostRecent || date > mostRecent) mostRecent = date;
+    }
+    if (anyMissingDate || !mostRecent) {
+      return { reason: "deferredRecentProcedure", daysRemaining: 0 };
+    }
+    const daysSince = daysBetween(mostRecent, new Date());
+    if (daysSince < RECENT_PROCEDURE_DEF_DAYS) {
+      return { reason: "deferredRecentProcedure", daysRemaining: RECENT_PROCEDURE_DEF_DAYS - daysSince };
+    }
+  }
+
+  // Major Medical History Check — judged on the free-text description
+  // (medKeywordRules.js), so controlled asthma/diabetes doesn't defer.
+  if (npt.hasMajorMedicalHistory) {
+    if (assessMajorMedicalHistory(npt.majorMedicalHistoryDesc).verdict === "deferred") {
+      return { reason: "deferredMajorMedical", daysRemaining: 0 };
+    }
+  }
+
   // Node 5: Tattoo / Piercing Window Check (12 months from the procedure date)
   if (npt.hasTattsOrPierce) {
     if (npt.tattooDate) {
@@ -73,6 +126,38 @@ function runDecisionTree(npt) {
     } else {
       // No date on file to verify the window has elapsed — defer.
       return { reason: "deferredTattsPierce", daysRemaining: 0 };
+    }
+  }
+
+  // Transfusion or Surgery Check (12 months from the event date)
+  if (npt.hasTransfusionOrSurgery) {
+    if (npt.transfusionOrSurgeryDate) {
+      const daysSince = daysBetween(npt.transfusionOrSurgeryDate, new Date());
+      if (daysSince < TRANSFUSION_SURGERY_DEF_DAYS) {
+        return { reason: "deferredTransfusionSurgery", daysRemaining: TRANSFUSION_SURGERY_DEF_DAYS - daysSince };
+      }
+    } else {
+      return { reason: "deferredTransfusionSurgery", daysRemaining: 0 };
+    }
+  }
+
+  // Travel or Needle Stick Check — judged on the description: non-endemic
+  // travel doesn't defer, malaria-endemic travel has a 6-month window, and
+  // needle-stick or tattoo/piercing exposure has 12 months.
+  if (npt.hasTravelOrNeedleStick) {
+    const assessment = assessTravelOrNeedleStick(npt.travelOrNeedleDesc);
+    if (assessment.verdict === "deferred") {
+      const windowDays = assessment.labels.includes("Malaria-Endemic Travel")
+        ? MALARIA_ENDEMIC_TRAVEL_DEF_DAYS
+        : TRAVEL_NEEDLE_DEF_DAYS;
+      if (npt.travelOrNeedleDate) {
+        const daysSince = daysBetween(npt.travelOrNeedleDate, new Date());
+        if (daysSince < windowDays) {
+          return { reason: "deferredTravelNeedle", daysRemaining: windowDays - daysSince };
+        }
+      } else {
+        return { reason: "deferredTravelNeedle", daysRemaining: 0 };
+      }
     }
   }
 
@@ -163,6 +248,20 @@ export function classifyDonorRow(donor) {
     tattooDate: screening.tattooDate ? new Date(screening.tattooDate) : null,
     hasAlcoholPast24hr: hasAlcohol,
     hasActiveInfectOrMeds: hasActiveInfect,
+    // Same defaults as eligibility_service.dart's screensFromProfile, so an
+    // older screening saved before these questions existed still classifies.
+    feelsWellToday: typeof screening.feelsWellToday === "boolean" ? screening.feelsWellToday : true,
+    hasEatenRecently: typeof screening.hasEatenRecently === "boolean" ? screening.hasEatenRecently : true,
+    recentMedProcedures: Array.isArray(screening.recentMedProcedures) ? screening.recentMedProcedures.map(String) : [],
+    medProcedureDetails:
+      screening.medProcedureDetails && typeof screening.medProcedureDetails === "object" ? screening.medProcedureDetails : {},
+    hasMajorMedicalHistory: screening.hasMajorMedicalHistory === true,
+    majorMedicalHistoryDesc: screening.majorMedicalHistoryDesc ?? null,
+    hasTransfusionOrSurgery: screening.hasTransfusionOrSurgery === true,
+    transfusionOrSurgeryDate: screening.transfusionOrSurgeryDate ? new Date(screening.transfusionOrSurgeryDate) : null,
+    hasTravelOrNeedleStick: screening.hasTravelOrNeedleStick === true,
+    travelOrNeedleDate: screening.travelOrNeedleDate ? new Date(screening.travelOrNeedleDate) : null,
+    travelOrNeedleDesc: screening.travelOrNeedleDesc ?? null,
     isPregOrNursing: typeof screening.isPregOrNursing === "boolean" ? screening.isPregOrNursing : null,
     lastMensPeriodDate: screening.lastMensPeriodDate ? new Date(screening.lastMensPeriodDate) : null,
     hasHighRiskExpo: typeof screening.hasHighRiskExpo === "boolean" ? screening.hasHighRiskExpo : null,
