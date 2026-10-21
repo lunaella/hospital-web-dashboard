@@ -155,6 +155,8 @@ export const createRequest = asyncHandler(async (req, res) => {
       res.status(201).json(created);
 
       if (status === "OPEN") {
+        // Refreshes every open dashboard's Live Match Monitoring now.
+        broadcast({ type: "broadcast_created", hospitalId: created.hospitalId, requestCode: created.id, priority: created.priority });
         dispatchToDonors(created);
       } else {
         // Rings the super admin's open dashboard (sound + desktop
@@ -331,13 +333,14 @@ export const fulfillRequest = asyncHandler(async (req, res) => {
            resolved_at = COALESCE($3, resolved_at),
            system_rating = COALESCE($4, system_rating)
        WHERE id = $5
-       RETURNING request_code AS id, units_needed AS "unitsNeeded", units_fulfilled AS "unitsFulfilled",
+       RETURNING request_code AS id, hospital_id AS "hospitalId", units_needed AS "unitsNeeded", units_fulfilled AS "unitsFulfilled",
                  status, system_rating AS rating`,
       [newFulfilled, isNowFulfilled ? "FULFILLED" : "PARTIALLY_FULFILLED", resolvedAt, rating, request.id]
     );
 
     await client.query("COMMIT");
     res.json(updated[0]);
+    broadcast({ type: "broadcast_updated", hospitalId: updated[0].hospitalId, requestCode: updated[0].id, status: updated[0].status });
     broadcastToDonors({ type: "blood_request_updated" });
   } catch (err) {
     await client.query("ROLLBACK");

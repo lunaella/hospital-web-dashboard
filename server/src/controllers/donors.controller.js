@@ -131,22 +131,64 @@ export const createDonor = asyncHandler(async (req, res) => {
 
 // Manual override for the DOH 90-day cooling rule (e.g. an admin correcting
 // a data-entry mistake, or force-locking a donor). Since eligibility is
-// derived from last_donation_at rather than stored as a flag, "locking"
-// means setting last_donation_at to now, and "marking eligible" means
-// clearing it.
+// derived from the last donation date rather than stored as a flag,
+// "locking" means setting last_donation_at to now, and "marking eligible"
+// means clearing the date the 90-day rule counts from. That date is the
+// hospital-recorded last_donation_at, or, when there is none, the donor's
+// own answer at registration (health_screening.lastDonationDate) — so both
+// are cleared. Clearing only last_donation_at left every donor deferred by
+// their self-reported date still deferred, while the push below told them
+// they could donate.
 export const setDonorEligibility = asyncHandler(async (req, res) => {
   const { eligible } = req.body;
   if (typeof eligible !== "boolean") {
     return res.status(400).json({ error: "eligible must be a boolean." });
   }
 
-  const { rows } = await pool.query(
-    `UPDATE donors SET last_donation_at = $1, updated_at = now() WHERE id = $2
-     RETURNING id, donor_code AS "donorCode", last_donation_at AS "lastDonationAt"`,
-    [eligible ? null : new Date(), req.params.id]
+  const { rows: current } = await pool.query(
+    `SELECT age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
+            last_donation_at AS "lastDonationAt"
+     FROM donors WHERE id = $1`,
+    [req.params.id]
   );
-  if (!rows[0]) return res.status(404).json({ error: "Donor not found." });
-  res.json(rows[0]);
+  if (!current[0]) return res.status(404).json({ error: "Donor not found." });
+
+  if (eligible) {
+    // Only the 90-day rule can be overridden here. If another deferral
+    // would remain (a recent tattoo, travel, an active infection...),
+    // change nothing and say why, rather than "marking eligible" a donor
+    // who would still be deferred everywhere else.
+    const screening = current[0].healthScreening;
+    const cleared = {
+      ...current[0],
+      lastDonationAt: null,
+      healthScreening: screening && typeof screening === "object" ? { ...screening, lastDonationDate: null } : screening,
+    };
+    const after = donorEligibility(cleared);
+    if (!after.isEligible) {
+      return res.status(409).json({
+        error: `This donor is still deferred for another reason: ${after.lockMessage ?? "see their screening"}`,
+        lockReason: after.lockReason,
+      });
+    }
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE donors
+     SET last_donation_at = $1,
+         health_screening = CASE
+           WHEN $3 AND jsonb_typeof(health_screening) = 'object' AND health_screening ? 'lastDonationDate'
+             THEN jsonb_set(health_screening, '{lastDonationDate}', 'null'::jsonb)
+           ELSE health_screening
+         END,
+         updated_at = now()
+     WHERE id = $2
+     RETURNING id, donor_code AS "donorCode", last_donation_at AS "lastDonationAt",
+               age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening"`,
+    [eligible ? null : new Date(), req.params.id, eligible]
+  );
+  const { age, weightKg, gender, healthScreening, ...updated } = rows[0];
+  res.json({ ...updated, ...donorEligibility(rows[0]) });
 
   // Either direction updates the donor's open app right away (HomeView
   // applies `eligible` directly).
@@ -159,7 +201,7 @@ export const setDonorEligibility = asyncHandler(async (req, res) => {
   if (eligible) {
     sendPushToDonor(rows[0].id, {
       title: "You're eligible to donate again!",
-      body: "Your 90-day waiting period is over. Book an appointment whenever you're ready.",
+      body: "The hospital has cleared you to donate. Book an appointment whenever you're ready.",
       data: { type: "account_notice", reason: "eligible_again" },
     }).catch((err) => {
       console.error("Eligibility push failed:", err.message);
@@ -343,12 +385,13 @@ export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   }
   const { rows } = await pool.query(
     `UPDATE appointments SET status = $1, updated_at = now() WHERE id = $2
-     RETURNING id, donor_id AS "donorId", scheduled_at AS "scheduledAt", status`,
+     RETURNING id, donor_id AS "donorId", hospital_id AS "hospitalId", scheduled_at AS "scheduledAt", status`,
     [status, req.params.id]
   );
   if (!rows[0]) return res.status(404).json({ error: "Appointment not found." });
   res.json(rows[0]);
   sendToDonor(rows[0].donorId, { type: "appointment_status_changed" });
+  broadcast({ type: "appointment_updated", hospitalId: rows[0].hospitalId, appointment: { id: rows[0].id, status: rows[0].status } });
 });
 
 // Finds the donor's own next active (pending/confirmed) appointment, if
@@ -554,7 +597,7 @@ export const checkInByQr = asyncHandler(async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT a.id, a.status, a.scheduled_at AS "scheduledAt",
+    `SELECT a.id, a.status, a.hospital_id AS "hospitalId", a.scheduled_at AS "scheduledAt",
             d.name AS "donorName", d.donor_code AS "donorCode", d.blood_type AS "bloodType"
      FROM appointments a
      JOIN donors d ON d.id = a.donor_id
@@ -578,4 +621,5 @@ export const checkInByQr = asyncHandler(async (req, res) => {
     scheduledAt: appt.scheduledAt,
   });
   sendToDonor(payload.donorId, { type: "appointment_status_changed" });
+  broadcast({ type: "appointment_updated", hospitalId: appt.hospitalId, appointment: { id: appt.id, status: "confirmed" } });
 });

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import PageHeader from "../components/PageHeader";
 import { fuzzyMatchAny } from "../utils/fuzzySearch";
 import { api } from "../lib/apiClient";
+import { connectRealtime } from "../lib/realtime";
 import { useHospital } from "../context/HospitalContext";
 import Avatar from "../components/Avatar";
 import {
@@ -22,6 +23,25 @@ import {
 // come from the API. Trend badges only render for metrics the backend
 // actually computes a day-over-day comparison for; fabricating a percentage
 // for the others would be worse than just not showing one.
+// The page reloads its data whenever the server pushes one of these
+// (server/src/realtime), and every POLL_MS as a fallback in case the
+// WebSocket is down — so Live Match Monitoring, stock and arrivals stay
+// current without the admin reloading the page.
+const LIVE_EVENT_TYPES = new Set([
+  "broadcast_created",
+  "broadcast_updated",
+  "broadcast_reviewed",
+  "broadcast_cancelled",
+  "appointment_booked",
+  "appointment_cancelled",
+  "appointment_updated",
+  "appointment_completed",
+]);
+const POLL_MS = 30000;
+// A burst of events (e.g. many donations recorded at once) becomes one
+// reload instead of one per event.
+const RELOAD_DEBOUNCE_MS = 400;
+
 const STAT_CARD_META = {
   codeRed: { icon: IconMegaphone, accent: true, label: "CODE RED BROADCASTS", sub: "Active emergency requests" },
   unitsNeeded: { icon: IconDroplet, label: "Units Needed", sub: "Total volume across all active broadcast" },
@@ -107,6 +127,25 @@ export default function Dashboard() {
   const [stockCriticality, setStockCriticality] = useState([]);
   const [recentArrivals, setRecentArrivals] = useState([]);
   const [loadError, setLoadError] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let timer = null;
+    // Started first, so the fallback runs even if the live connection fails.
+    const interval = setInterval(() => setReloadKey((k) => k + 1), POLL_MS);
+    const disconnect = connectRealtime((event) => {
+      if (!LIVE_EVENT_TYPES.has(event.type)) return;
+      // Another hospital's change doesn't affect a single-hospital view.
+      if (hospitalId !== "all" && event.hospitalId && event.hospitalId !== hospitalId) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => setReloadKey((k) => k + 1), RELOAD_DEBOUNCE_MS);
+    });
+    return () => {
+      disconnect();
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [hospitalId]);
 
   useEffect(() => {
     // A hospital-restricted admin (a hospital's own team member account,
@@ -170,7 +209,7 @@ export default function Dashboard() {
     return () => {
       cancelled = true;
     };
-  }, [hospitalId, hospitalRestricted, hospitalsLoading]);
+  }, [hospitalId, hospitalRestricted, hospitalsLoading, reloadKey]);
 
   const statCards = stats
     ? [
