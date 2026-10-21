@@ -1,6 +1,6 @@
 import { pool } from "../db/pool.js";
-import { sendSms } from "../utils/sms.js";
-import { sendEmail } from "../utils/email.js";
+import { sendBulkSms } from "../utils/sms.js";
+import { sendEmailBatch } from "../utils/email.js";
 import { sendPush } from "../utils/push.js";
 import { MinHeap } from "../utils/minHeap.js";
 import { canDonateNow } from "../utils/eligibilityClassifier.js";
@@ -99,7 +99,7 @@ function compareDonorRank(a, b) {
 // only ever needs "who's next" one at a time — extractMin pulls the current
 // fastest-responder in O(log n) — which matters if this is later changed to
 // stream out notifications in priority batches instead of all at once.
-function rankDonorsByResponseTime(donors, avgResponseByDonorId) {
+export function rankDonorsByResponseTime(donors, avgResponseByDonorId) {
   const heap = new MinHeap(compareDonorRank);
   for (const donor of donors) {
     const avgResponseMinutes = avgResponseByDonorId.get(donor.id) ?? FALLBACK_RESPONSE_MINUTES;
@@ -164,32 +164,33 @@ export async function notifyDonorsForRequest(request) {
   // Preferences toggle (see migration 008) — a donor who's still a match
   // (right blood type, still eligible) but has opted a channel off simply
   // gets no attempt logged for it, same as if they had no email on file.
-  const attempts = rankedDonors.flatMap(({ donor }) => {
+  //
+  // SMS and email go out in batches rather than one call per donor: every
+  // donor gets the same text, so Semaphore takes up to 1,000 numbers per
+  // call, and Resend up to 100 emails per call. Both senders pace their
+  // calls under the provider's rate limit and retry throttled or failed
+  // calls (utils/sendQueue.js). The batches keep the min-heap order, so the
+  // fastest responders are still the first ones sent.
+  const smsDonors = rankedDonors.map((r) => r.donor).filter((donor) => donor.notifySms);
+  const smsJob = sendBulkSms(
+    smsDonors.map((donor) => donor.phone),
+    buildSmsBody(request)
+  ).then((results) =>
+    results.map((result, i) => ({ donor: smsDonors[i], channel: "sms", recipient: smsDonors[i].phone, result }))
+  );
+  const emailDonors = rankedDonors.map((r) => r.donor).filter((donor) => donor.email && donor.notifyEmail);
+  const emailJob = sendEmailBatch(
+    emailDonors.map((donor) => ({
+      to: donor.email,
+      subject: `Urgent Blood Donation Request — ${request.bloodType} Needed`,
+      html: buildEmailHtml(donor.name, request),
+    }))
+  ).then((results) =>
+    results.map((result, i) => ({ donor: emailDonors[i], channel: "email", recipient: emailDonors[i].email, result }))
+  );
+
+  const pushAttempts = rankedDonors.flatMap(({ donor }) => {
     const jobs = [];
-    if (donor.notifySms) {
-      jobs.push(
-        sendSms(donor.phone, buildSmsBody(request)).then((result) => ({
-          donor,
-          channel: "sms",
-          recipient: donor.phone,
-          result,
-        }))
-      );
-    }
-    if (donor.email && donor.notifyEmail) {
-      jobs.push(
-        sendEmail({
-          to: donor.email,
-          subject: `Urgent Blood Donation Request — ${request.bloodType} Needed`,
-          html: buildEmailHtml(donor.name, request),
-        }).then((result) => ({
-          donor,
-          channel: "email",
-          recipient: donor.email,
-          result,
-        }))
-      );
-    }
     // No notify-push toggle to check (see registerDevice's comment) —
     // having a device registered at all is the opt-in.
     if (donor.pushTokens?.length) {
@@ -244,7 +245,8 @@ export async function notifyDonorsForRequest(request) {
     return jobs;
   });
 
-  const settled = await Promise.allSettled([...attempts, ...referralAttempts]);
+  const [smsAttempts, emailAttempts] = await Promise.all([smsJob, emailJob]);
+  const settled = await Promise.allSettled([...smsAttempts, ...emailAttempts, ...pushAttempts, ...referralAttempts]);
 
   const summary = {
     totalDonors: donors.length,
@@ -259,7 +261,7 @@ export async function notifyDonorsForRequest(request) {
   };
 
   for (const outcome of settled) {
-    if (outcome.status !== "fulfilled") continue; // sendSms/sendEmail never throw, but stay defensive
+    if (outcome.status !== "fulfilled") continue; // the senders never throw, but stay defensive
     const { donor, channel, recipient, audience, result } = outcome.value;
 
     await pool.query(
