@@ -94,7 +94,7 @@ const cases = [
   ["P30", "tattoo 30 days ago", male({ screening: { hasTattsOrPierce: true, tattooDate: daysAgo(30) } }), "DEFERRED", "deferredTattsPierce", 335],
   ["P31", "piercing with no date", donor({ screening: { hasTattsOrPierce: true, tattooDate: null } }), "DEFERRED", "deferredTattsPierce"],
   ["P32", "transfusion 100 days ago", male({ screening: { hasTransfusionOrSurgery: true, transfusionOrSurgeryDate: daysAgo(100) } }), "DEFERRED", "deferredTransfusionSurgery", 265],
-  ["P33", "malaria-endemic travel 60 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Visited relatives in a rural area of Palawan", travelOrNeedleDate: daysAgo(60) } }), "DEFERRED", "deferredTravelNeedle", 120],
+  ["P33", "malaria-endemic travel 60 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Visited relatives in a rural area of Palawan", travelOrNeedleDate: daysAgo(60) } }), "DEFERRED", "deferredTravelNeedle", 30],
   ["P34", "needle-stick 90 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Accidental needle stick injury while working at a clinic", travelOrNeedleDate: daysAgo(90) } }), "DEFERRED", "deferredTravelNeedle", 275],
   ["P35", "alcohol in the past 24 hours", male({ screening: { hasAlcoholPast24hr: true } }), "DEFERRED", "deferredAlcohol"],
   ["P36", "pregnant", donor({ screening: { isPregOrNursing: true } }), "DEFERRED", "deferredMaternal"],
@@ -182,4 +182,29 @@ test("an incomplete screening is UNKNOWN, not eligible by mistake", () => {
   const row = donor();
   delete row.healthScreening.hasAlcoholPast24hr;
   assert.equal(classifyDonorRow(row).status, "UNKNOWN");
+});
+
+// Malaria: 3 months after a visit, 3 years after living there or after
+// finishing treatment, each counted from the date the donor gave.
+const malaria = (desc, days) =>
+  classifyDonorRow(donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: desc, travelOrNeedleDate: daysAgo(days) } }));
+
+test("malaria visit defers 3 months", () => {
+  assert.equal(malaria("Trip to Palawan", 89).status, "DEFERRED");
+  assert.equal(malaria("Trip to Palawan", 89).daysRemaining, 1);
+  assert.equal(malaria("Trip to Palawan", 90).status, "ELIGIBLE");
+});
+
+test("living in a malaria area defers 3 years after leaving", () => {
+  const r = malaria("Lived in rural Palawan for 5 years", 400);
+  assert.equal(r.status, "DEFERRED");
+  assert.equal(r.daysRemaining, 695);
+  assert.equal(malaria("Lived in rural Palawan for 5 years", 1095).status, "ELIGIBLE");
+});
+
+test("past malaria defers 3 years after treatment", () => {
+  const r = malaria("Had malaria, treated in 2024", 400);
+  assert.equal(r.status, "DEFERRED");
+  assert.equal(r.daysRemaining, 695);
+  assert.equal(malaria("Had malaria, treated in 2024", 1095).status, "ELIGIBLE");
 });

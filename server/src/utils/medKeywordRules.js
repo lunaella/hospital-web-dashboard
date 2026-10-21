@@ -81,6 +81,30 @@ const TRAVEL_CONDITIONS = [
   },
 ];
 
+// Same lists as the app's malariaExposureOf: had the disease (date = end
+// of treatment), lived there (date = when they left), otherwise a visit.
+const MALARIA_TREATED_KEYWORDS = [
+  "had malaria",
+  "treated",
+  "treatment",
+  "recovered",
+  "diagnosed",
+  "infected",
+  "got malaria",
+  "nagka-malaria",
+  "nagkamalaria",
+];
+const MALARIA_LIVED_KEYWORDS = ["lived", "live in", "living", "resident", "reside", "grew up", "moved from", "nakatira", "tumira"];
+
+// "visited" | "lived" | "treated" — only meaningful when the description
+// matched "Malaria-Endemic Travel".
+export function malariaExposureOf(description) {
+  const lower = String(description ?? "").toLowerCase();
+  if (lower.includes("malaria") && MALARIA_TREATED_KEYWORDS.some((kw) => lower.includes(kw))) return "treated";
+  if (MALARIA_LIVED_KEYWORDS.some((kw) => lower.includes(kw))) return "lived";
+  return "visited";
+}
+
 // Returns { verdict: "eligible" | "deferred", labels: [matched condition labels] }.
 function assess(description, rules, { noMentionVerdict, defaultWhenNoTriggerMatches = "deferred" }) {
   if (description == null || String(description).trim() === "") {

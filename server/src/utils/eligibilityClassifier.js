@@ -8,14 +8,16 @@
 // for whenever a hospital staffer scanning a donor's QR pass needs an
 // instant, official read instead of trusting a client-cached status.
 
-import { assessMajorMedicalHistory, assessTravelOrNeedleStick } from "./medKeywordRules.js";
+import { assessMajorMedicalHistory, assessTravelOrNeedleStick, malariaExposureOf } from "./medKeywordRules.js";
 
 const MIN_DONATION_INTERVAL_DAYS = 90;
 const TATTOO_DEFERRAL_WINDOW_DAYS = 365;
 const RECENT_PROCEDURE_DEF_DAYS = 28;
 const TRANSFUSION_SURGERY_DEF_DAYS = 365;
 const TRAVEL_NEEDLE_DEF_DAYS = 365;
-const MALARIA_ENDEMIC_TRAVEL_DEF_DAYS = 180;
+// Malaria: 3 months after a visit, 3 years after leaving a place they
+// lived in, 3 years after finishing treatment.
+const MALARIA_WINDOW_DAYS = { visited: 90, lived: 1095, treated: 1095 };
 
 function daysBetween(from, to) {
   return Math.floor((to.getTime() - from.getTime()) / 86400000);
@@ -36,7 +38,8 @@ const REASON_MESSAGES = {
   deferredRecentProcedure: "Reported a medication or minor procedure within the last 4 weeks.",
   deferredMajorMedical: "Reported a major medical history that needs clinical judgment before donating.",
   deferredTransfusionSurgery: "Reported a blood transfusion or surgery within the last 12 months.",
-  deferredTravelNeedle: "Reported malaria-endemic travel or a needle-stick exposure within its deferral window.",
+  deferredTravelNeedle:
+    "Reported malaria exposure (3 months after a visit, 3 years after living there or finishing treatment) or a needle-stick exposure (12 months) within its deferral window.",
   deferredWeight: "Below the 50kg minimum weight threshold.",
   deferredAge: "Outside the 18-65 eligible age range.",
   deferredInterval: "Within the mandatory 90-day interval since their last recorded donation.",
@@ -142,13 +145,14 @@ function runDecisionTree(npt) {
   }
 
   // Travel or Needle Stick Check — judged on the description: non-endemic
-  // travel doesn't defer, malaria-endemic travel has a 6-month window, and
-  // needle-stick or tattoo/piercing exposure has 12 months.
+  // travel doesn't defer, malaria defers 3 months after a visit or 3 years
+  // after living there or finishing treatment, and needle-stick or
+  // tattoo/piercing exposure has 12 months.
   if (npt.hasTravelOrNeedleStick) {
     const assessment = assessTravelOrNeedleStick(npt.travelOrNeedleDesc);
     if (assessment.verdict === "deferred") {
       const windowDays = assessment.labels.includes("Malaria-Endemic Travel")
-        ? MALARIA_ENDEMIC_TRAVEL_DEF_DAYS
+        ? MALARIA_WINDOW_DAYS[malariaExposureOf(npt.travelOrNeedleDesc)]
         : TRAVEL_NEEDLE_DEF_DAYS;
       if (npt.travelOrNeedleDate) {
         const daysSince = daysBetween(npt.travelOrNeedleDate, new Date());

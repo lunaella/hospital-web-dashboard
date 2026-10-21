@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assessMajorMedicalHistory, assessTravelOrNeedleStick } from "../src/utils/medKeywordRules.js";
+import { assessMajorMedicalHistory, assessTravelOrNeedleStick, malariaExposureOf } from "../src/utils/medKeywordRules.js";
 
 const medical = [
   ["Asthma, well controlled, no recent attacks", "eligible"],
@@ -55,4 +55,12 @@ test("travel reports which condition matched", () => {
 test("matching ignores case", () => {
   assert.equal(assessMajorMedicalHistory("ASTHMA, WELL CONTROLLED").verdict, "eligible");
   assert.equal(assessTravelOrNeedleStick("PALAWAN").verdict, "deferred");
+});
+
+test("malaria exposure kind", () => {
+  assert.equal(malariaExposureOf("Trip to Palawan, stayed in El Nido"), "visited");
+  assert.equal(malariaExposureOf("Visited relatives in a rural area of Palawan"), "visited");
+  assert.equal(malariaExposureOf("Lived in Mindoro until 2024"), "lived");
+  assert.equal(malariaExposureOf("Nakatira sa Palawan dati"), "lived");
+  assert.equal(malariaExposureOf("Had malaria, finished treatment last year"), "treated");
 });
