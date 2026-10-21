@@ -12,12 +12,29 @@ import { buildPhotoUrl } from "../utils/mediaUrl.js";
 
 const PAGE_SIZE_DEFAULT = 5; // matches the frontend's current PAGE_SIZE
 
+// What a donor's eligibility would be if Mark Eligible cleared both the
+// hospital-recorded and the self-reported donation date (see
+// setDonorEligibility) — still deferred if another rule applies.
+function eligibilityWithDatesCleared(donor) {
+  const screening = donor.healthScreening;
+  return donorEligibility({
+    ...donor,
+    lastDonationAt: null,
+    healthScreening: screening && typeof screening === "object" ? { ...screening, lastDonationDate: null } : screening,
+  });
+}
+
 // Adds isEligible / daysUntilEligible / lockReason / lockMessage to a donor
 // row and drops the screening columns they were computed from, which the
-// admin list doesn't otherwise show.
+// admin list doesn't otherwise show. canMarkEligible says whether the
+// admin's Mark Eligible would actually make this donor eligible, so the
+// list only offers it when it would.
 function withEligibility(donor) {
   const { age, weightKg, gender, healthScreening, ...rest } = donor;
-  return { ...rest, ...donorEligibility(donor) };
+  const eligibility = donorEligibility(donor);
+  const canMarkEligible =
+    !eligibility.isEligible && eligibility.lockReason === "deferredInterval" && eligibilityWithDatesCleared(donor).isEligible;
+  return { ...rest, ...eligibility, canMarkEligible };
 }
 
 export const listDonors = asyncHandler(async (req, res) => {
@@ -158,13 +175,7 @@ export const setDonorEligibility = asyncHandler(async (req, res) => {
     // would remain (a recent tattoo, travel, an active infection...),
     // change nothing and say why, rather than "marking eligible" a donor
     // who would still be deferred everywhere else.
-    const screening = current[0].healthScreening;
-    const cleared = {
-      ...current[0],
-      lastDonationAt: null,
-      healthScreening: screening && typeof screening === "object" ? { ...screening, lastDonationDate: null } : screening,
-    };
-    const after = donorEligibility(cleared);
+    const after = eligibilityWithDatesCleared(current[0]);
     if (!after.isEligible) {
       return res.status(409).json({
         error: `This donor is still deferred for another reason: ${after.lockMessage ?? "see their screening"}`,
@@ -187,8 +198,7 @@ export const setDonorEligibility = asyncHandler(async (req, res) => {
                age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening"`,
     [eligible ? null : new Date(), req.params.id, eligible]
   );
-  const { age, weightKg, gender, healthScreening, ...updated } = rows[0];
-  res.json({ ...updated, ...donorEligibility(rows[0]) });
+  res.json(withEligibility(rows[0]));
 
   // Either direction updates the donor's open app right away (HomeView
   // applies `eligible` directly).

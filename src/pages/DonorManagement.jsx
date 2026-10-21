@@ -25,11 +25,12 @@ function mapDonor(d) {
     bloodType: d.bloodType,
     avatar: d.avatar,
     // Locked covers every screening deferral, not just the 90-day rule —
-    // days is null when there's no countdown (e.g. an active infection),
-    // and only a "deferredInterval" lock can be cleared with Mark Eligible.
+    // days is null when there's no countdown (e.g. an active infection).
+    // Mark Eligible is only offered when the server says clearing the
+    // donation dates would really make the donor eligible.
     status: d.isEligible
       ? { type: "eligible" }
-      : { type: "locked", days: d.daysUntilEligible, reason: d.lockReason, message: d.lockMessage },
+      : { type: "locked", days: d.daysUntilEligible, reason: d.lockReason, message: d.lockMessage, canMarkEligible: d.canMarkEligible },
   };
 }
 
@@ -209,8 +210,13 @@ export default function DonorManagement() {
 
   async function toggleDonorLock(donor) {
     setOpenRowMenu(null);
+    const markingEligible = donor.status.type !== "eligible";
     try {
-      await api.patch(`/api/donors/${donor.dbId}/eligibility`, { eligible: donor.status.type !== "eligible" });
+      await api.patch(`/api/donors/${donor.dbId}/eligibility`, { eligible: markingEligible });
+      setCheckinBanner({
+        type: "success",
+        message: markingEligible ? `${donor.name} is now eligible to donate.` : `${donor.name} is locked for 90 days.`,
+      });
       // Refetched rather than flipped locally: clearing the 90-day lock can
       // still leave the donor deferred by their screening.
       const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
@@ -221,7 +227,11 @@ export default function DonorManagement() {
       setTotalDonors(data.total);
       setTotalPages(data.totalPages);
     } catch (err) {
-      setDonorsError(err.message);
+      // A banner, not donorsError: that slot is for the list failing to
+      // load, and filling it pushed an error row into the table. The usual
+      // case here is the server refusing Mark Eligible because the donor
+      // is still deferred for another reason, which it explains.
+      setCheckinBanner({ type: "warning", message: `${donor.name}: ${err.message}` });
     }
   }
 
@@ -247,7 +257,7 @@ export default function DonorManagement() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
-      setDonorsError(err.message);
+      setCheckinBanner({ type: "error", message: `Couldn't export the donor list: ${err.message}` });
     }
   }
 
@@ -778,7 +788,7 @@ export default function DonorManagement() {
                   >
                     View Profile
                   </button>
-                  {(donor.status.type === "eligible" || donor.status.reason === "deferredInterval") && (
+                  {(donor.status.type === "eligible" || donor.status.canMarkEligible) && (
                     <button
                       type="button"
                       onClick={() => toggleDonorLock(donor)}
