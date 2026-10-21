@@ -24,9 +24,12 @@ const MAX_DELAY = 800;
 
 let s;
 let callTimes;
+// Every accepted text (number and message), for checking what was sent.
+let messages;
 function reset() {
   s = { mode: MODE, limitPerMinute: MODE === "limited" ? LIMIT : null, failFirst: FAIL_FIRST, calls: 0, callsAccepted: 0, calls429: 0, maxNumbersInOneCall: 0, recipientsAccepted: 0, inFlight: 0, maxInFlight: 0, firstAt: null, lastAt: null, uniqueNumbers: new Set() };
   callTimes = [];
+  messages = [];
 }
 reset();
 
@@ -35,6 +38,10 @@ http
     if (req.url === "/__reset" && req.method === "POST") {
       reset();
       return res.end("{}");
+    }
+    if (req.url === "/__messages") {
+      res.setHeader("Content-Type", "application/json");
+      return res.end(JSON.stringify(messages));
     }
     if (req.url === "/__stats") {
       const { uniqueNumbers, ...rest } = s;
@@ -50,7 +57,8 @@ http
       s.lastAt = now;
       s.inFlight += 1;
       s.maxInFlight = Math.max(s.maxInFlight, s.inFlight);
-      const numbers = (new URLSearchParams(body).get("number") || "").split(",").filter(Boolean);
+      const form = new URLSearchParams(body);
+      const numbers = (form.get("number") || "").split(",").filter(Boolean);
       s.maxNumbersInOneCall = Math.max(s.maxNumbersInOneCall, numbers.length);
 
       // Decided on arrival, so a burst can't slip past the limit.
@@ -70,7 +78,10 @@ http
         }
         s.callsAccepted += 1;
         s.recipientsAccepted += numbers.length;
-        for (const n of numbers) s.uniqueNumbers.add(n);
+        for (const n of numbers) {
+          s.uniqueNumbers.add(n);
+          messages.push({ number: n, message: form.get("message") });
+        }
         const type = numbers.length > 1 ? "bulk" : "single";
         res.end(JSON.stringify(numbers.map((recipient, i) => ({ message_id: s.recipientsAccepted - numbers.length + i + 1, recipient, type, status: "Pending" }))));
       }, MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY));

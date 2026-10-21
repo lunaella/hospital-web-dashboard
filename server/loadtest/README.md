@@ -123,3 +123,16 @@ that ResQ retries them.
 - `minHeapBenchmark.js`: times the min-heap from 100 to 1,000,000 items.
 - `responseTimeSim.js`: checks that ResQ records each request's response
   time, rating and credited request correctly (local copy only).
+- `scheduledJobsAndCheckin.js`: 24-hour appointment reminders, Red Cross
+  approval escalation (5 / 15 / 60 minutes) and QR check-in. Uses its own
+  database so a running server's scheduled jobs can't interfere; setup steps
+  are at the top of the file. Not named `*.test.js` on purpose, so `npm test`
+  and CI don't pick it up:
+
+  ```bash
+  LOADTEST_DATABASE_URL=postgresql://resq:resq_dev_password@localhost:5432/resq_jobs_loadtest \
+    node --test --experimental-test-module-mocks loadtest/scheduledJobsAndCheckin.js
+  ```
+
+  The reminder and escalation checks run the jobs in-process; the QR check-in
+  checks need the local server from the file's header running on port 4102.
