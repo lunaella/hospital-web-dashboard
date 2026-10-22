@@ -11,7 +11,7 @@ import { imageSize } from "image-size";
 import { env } from "../config/env.js";
 import { buildPhotoUrl, buildSignatureUrl } from "../utils/mediaUrl.js";
 import { sendPushToDonor } from "../utils/push.js";
-import { canDonateNow } from "../utils/eligibilityClassifier.js";
+import { canDonateNow, classifyDonorRow, malariaWaitFromScreening } from "../utils/eligibilityClassifier.js";
 
 const CHECKIN_TOKEN_TTL_SECONDS = 10 * 60; // keep in sync with jwt.js's CHECKIN_TOKEN_TTL
 const GENDERS = ["male", "female"]; // keep in sync with donorAuth.controller.js and schema.sql's donor_gender enum
@@ -106,6 +106,71 @@ export const getMyProfile = asyncHandler(async (req, res) => {
   delete donor.hasSignature;
   delete donor.signatureUpdatedAt;
   res.json(donor);
+});
+
+// health_screening keys written outside the screening wizard.
+const MALARIA_CHECK_KEYS = [
+  "malariaCheckedAt",
+  "malariaSymptomsEndDate",
+  "malariaSymptomsOngoing",
+  "malariaNudgeFor",
+  "malariaCheckReminderFor",
+];
+
+// POST /api/donor/me/malaria-check — the app's symptom check for a donor
+// with a malaria exposure on file: { hadSymptoms, symptomsOngoing,
+// symptomsEndDate }. Fever, chills or flu-like illness after the exposure
+// restarts the wait (3 years after the symptoms end, or deferred until
+// they do); "no symptoms" answered after the wait is over is what makes the
+// donor eligible again (malariaWait, eligibilityClassifier.js).
+export const submitMalariaCheck = asyncHandler(async (req, res) => {
+  const { hadSymptoms, symptomsOngoing = false, symptomsEndDate = null } = req.body ?? {};
+  if (typeof hadSymptoms !== "boolean" || typeof symptomsOngoing !== "boolean") {
+    return res.status(400).json({ error: "hadSymptoms and symptomsOngoing must be true or false." });
+  }
+  let endDate = null;
+  if (hadSymptoms && !symptomsOngoing) {
+    endDate = symptomsEndDate ? new Date(symptomsEndDate) : null;
+    if (!endDate || Number.isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: "Enter the date your symptoms ended." });
+    }
+    if (endDate > new Date()) {
+      return res.status(400).json({ error: "The date your symptoms ended can't be in the future." });
+    }
+  }
+
+  const { rows } = await pool.query(
+    `SELECT age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
+            last_donation_at AS "lastDonationAt"
+     FROM donors WHERE id = $1`,
+    [req.donor.id],
+  );
+  const donor = rows[0];
+  if (!donor) return res.status(404).json({ error: "Donor not found." });
+  if (!malariaWaitFromScreening(donor.healthScreening)) {
+    return res.status(400).json({ error: "There's no malaria exposure on your screening." });
+  }
+
+  const update = {
+    malariaCheckedAt: new Date().toISOString(),
+    malariaSymptomsOngoing: hadSymptoms && symptomsOngoing,
+  };
+  // Keep the latest symptom end date ever reported, so a later "no new
+  // symptoms" answer can't shorten a wait that symptoms already restarted.
+  const previousEnd = donor.healthScreening.malariaSymptomsEndDate
+    ? new Date(donor.healthScreening.malariaSymptomsEndDate)
+    : null;
+  if (endDate && (!previousEnd || endDate > previousEnd)) {
+    update.malariaSymptomsEndDate = endDate.toISOString();
+  }
+
+  const { rows: updated } = await pool.query(
+    `UPDATE donors SET health_screening = health_screening || $2::jsonb WHERE id = $1
+     RETURNING health_screening AS "healthScreening"`,
+    [req.donor.id, JSON.stringify(update)],
+  );
+  const healthScreening = updated[0].healthScreening;
+  res.json({ healthScreening, eligibility: classifyDonorRow({ ...donor, healthScreening }) });
 });
 
 // POST /api/donor/me/photo (multipart, field "photo") — the endpoint
@@ -324,7 +389,19 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   }
 
   if (healthScreening !== undefined) {
-    params.push(healthScreening === null ? null : JSON.stringify(healthScreening));
+    // The malaria symptom check and its reminder bookkeeping (see
+    // submitMalariaCheck, malariaReminders.js) live in the same JSONB but
+    // aren't wizard answers — keep them when an app retake resends the
+    // screening without them.
+    let screeningToSave = healthScreening;
+    if (healthScreening && typeof healthScreening === "object") {
+      const { rows: current } = await pool.query("SELECT health_screening FROM donors WHERE id = $1", [req.donor.id]);
+      const kept = Object.entries(current[0]?.health_screening ?? {}).filter(
+        ([key]) => MALARIA_CHECK_KEYS.includes(key) && !(key in healthScreening),
+      );
+      screeningToSave = { ...healthScreening, ...Object.fromEntries(kept) };
+    }
+    params.push(screeningToSave === null ? null : JSON.stringify(screeningToSave));
     updates.push(`health_screening = $${params.length}`);
   }
 

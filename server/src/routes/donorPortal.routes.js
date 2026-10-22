@@ -20,6 +20,7 @@ import {
   uploadMySignature,
   checkNearbyRequest,
   updateMyLocation,
+  submitMalariaCheck,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
 import { uploadVerificationFiles, uploadProfilePhoto, uploadSignature } from "../middleware/upload.js";
@@ -32,6 +33,7 @@ donorPortalRouter.use(requireDonorAuth);
 donorPortalRouter.get("/me", getMyProfile);
 donorPortalRouter.patch("/me", updateMyProfile);
 donorPortalRouter.delete("/me", deleteMyAccount);
+donorPortalRouter.post("/me/malaria-check", submitMalariaCheck);
 donorPortalRouter.post("/me/photo", uploadProfilePhoto, uploadMyPhoto);
 donorPortalRouter.post("/me/signature", uploadSignature, uploadMySignature);
 donorPortalRouter.post("/me/verification", uploadVerificationFiles, submitVerification); // legacy on-device flow, no longer called by the app

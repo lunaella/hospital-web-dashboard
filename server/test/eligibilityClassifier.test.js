@@ -74,13 +74,14 @@ const cases = [
   ["P11", "asthma described as controlled", donor({ screening: { hasMajorMedicalHistory: true, majorMedicalHistoryDesc: "Asthma, well controlled, no recent attacks" } }), "ELIGIBLE"],
   ["P12", "diabetes on diet and metformin", male({ screening: { hasMajorMedicalHistory: true, majorMedicalHistoryDesc: "Type 2 diabetes controlled with diet and oral medication (metformin)" } }), "ELIGIBLE"],
   ["P13", "last period 10 days ago", donor({ screening: { lastMensPeriodDate: daysAgo(10) } }), "ELIGIBLE"],
-  ["P14", "malaria-endemic travel 200 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Trip to Palawan, stayed in El Nido", travelOrNeedleDate: daysAgo(200) } }), "ELIGIBLE"],
+
+  ["P19", "66 years old (no upper age limit; evaluated first)", male({ age: 66 }), "ELIGIBLE"],
 
   ["P15", "not feeling well", male({ screening: { feelsWellToday: false } }), "DEFERRED", "deferredNotWell"],
   ["P16", "no meal in 4–6 hours", donor({ screening: { hasEatenRecently: false } }), "DEFERRED", "deferredFasting"],
   ["P17", "49.5 kg", male({ weightKg: "49.50" }), "DEFERRED", "deferredWeight"],
   ["P18", "17 years old", donor({ age: 17 }), "DEFERRED", "deferredAge"],
-  ["P19", "66 years old", male({ age: 66 }), "DEFERRED", "deferredAge"],
+  ["P14", "malaria-endemic travel 200 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Trip to Palawan, stayed in El Nido", travelOrNeedleDate: daysAgo(200) } }), "DEFERRED", "deferredTravelNeedle", 165],
   ["P20", "last donation 89 days ago", donor({ screening: { isFirstTimeDonor: false, lastDonationDate: daysAgo(89) } }), "DEFERRED", "deferredInterval", 1],
   ["P21", "last donation 30 days ago", male({ screening: { isFirstTimeDonor: false, lastDonationDate: daysAgo(30) } }), "DEFERRED", "deferredInterval", 60],
   ["P22", "active infection or medication", donor({ screening: { hasActiveInfectOrMeds: true } }), "CLINICAL_REVIEW", "deferredMedical"],
@@ -94,7 +95,7 @@ const cases = [
   ["P30", "tattoo 30 days ago", male({ screening: { hasTattsOrPierce: true, tattooDate: daysAgo(30) } }), "DEFERRED", "deferredTattsPierce", 335],
   ["P31", "piercing with no date", donor({ screening: { hasTattsOrPierce: true, tattooDate: null } }), "DEFERRED", "deferredTattsPierce"],
   ["P32", "transfusion 100 days ago", male({ screening: { hasTransfusionOrSurgery: true, transfusionOrSurgeryDate: daysAgo(100) } }), "DEFERRED", "deferredTransfusionSurgery", 265],
-  ["P33", "malaria-endemic travel 60 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Visited relatives in a rural area of Palawan", travelOrNeedleDate: daysAgo(60) } }), "DEFERRED", "deferredTravelNeedle", 30],
+  ["P33", "malaria-endemic travel 60 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Visited relatives in a rural area of Palawan", travelOrNeedleDate: daysAgo(60) } }), "DEFERRED", "deferredTravelNeedle", 305],
   ["P34", "needle-stick 90 days ago", donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: "Accidental needle stick injury while working at a clinic", travelOrNeedleDate: daysAgo(90) } }), "DEFERRED", "deferredTravelNeedle", 275],
   ["P35", "alcohol in the past 24 hours", male({ screening: { hasAlcoholPast24hr: true } }), "DEFERRED", "deferredAlcohol"],
   ["P36", "pregnant", donor({ screening: { isPregOrNursing: true } }), "DEFERRED", "deferredMaternal"],
@@ -184,27 +185,70 @@ test("an incomplete screening is UNKNOWN, not eligible by mistake", () => {
   assert.equal(classifyDonorRow(row).status, "UNKNOWN");
 });
 
-// Malaria: 3 months after a visit, 3 years after living there or after
-// finishing treatment, each counted from the date the donor gave.
-const malaria = (desc, days) =>
-  classifyDonorRow(donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: desc, travelOrNeedleDate: daysAgo(days) } }));
+// Malaria: 1 year after a visit, 3 years after living there or after
+// finishing treatment, each counted from the date the donor gave, then the
+// symptom check. Symptoms restart the wait: 3 years after they end.
+const malariaDonor = (desc, days, check = {}) =>
+  donor({ screening: { hasTravelOrNeedleStick: true, travelOrNeedleDesc: desc, travelOrNeedleDate: daysAgo(days), ...check } });
+const malaria = (desc, days, check) => classifyDonorRow(malariaDonor(desc, days, check));
+const checkedNoSymptoms = { malariaCheckedAt: new Date().toISOString(), malariaSymptomsOngoing: false };
 
-test("malaria visit defers 3 months", () => {
-  assert.equal(malaria("Trip to Palawan", 89).status, "DEFERRED");
-  assert.equal(malaria("Trip to Palawan", 89).daysRemaining, 1);
-  assert.equal(malaria("Trip to Palawan", 90).status, "ELIGIBLE");
+test("malaria visit defers 1 year", () => {
+  assert.equal(malaria("Trip to Palawan", 364).status, "DEFERRED");
+  assert.equal(malaria("Trip to Palawan", 364).reason, "deferredTravelNeedle");
+  assert.equal(malaria("Trip to Palawan", 364).daysRemaining, 1);
+  assert.equal(malaria("Trip to Palawan", 365, checkedNoSymptoms).status, "ELIGIBLE");
+});
+
+test("after the wait, the donor must answer the symptom check", () => {
+  const r = malaria("Trip to Palawan", 400);
+  assert.equal(r.status, "DEFERRED");
+  assert.equal(r.reason, "deferredMalariaCheck");
+  assert.equal(r.daysRemaining, null);
+  // A check answered during the wait (e.g. after the 3-month reminder)
+  // doesn't count: they could still have symptoms later.
+  assert.equal(malaria("Trip to Palawan", 400, { malariaCheckedAt: daysAgo(100) }).reason, "deferredMalariaCheck");
+  assert.equal(malaria("Trip to Palawan", 400, checkedNoSymptoms).status, "ELIGIBLE");
+});
+
+test("symptoms after the trip defer 3 years after they end", () => {
+  const symptoms = { malariaCheckedAt: daysAgo(150), malariaSymptomsEndDate: daysAgo(160) };
+  const r = malaria("Trip to Palawan", 200, symptoms);
+  assert.equal(r.reason, "deferredTravelNeedle");
+  assert.equal(r.daysRemaining, 935);
+  // Still deferred even though the 1-year visit wait has passed.
+  assert.equal(malaria("Trip to Palawan", 400, { ...symptoms, malariaCheckedAt: new Date().toISOString() }).reason, "deferredTravelNeedle");
+});
+
+test("ongoing symptoms defer with no end date", () => {
+  const r = malaria("Trip to Palawan", 400, { malariaCheckedAt: new Date().toISOString(), malariaSymptomsOngoing: true });
+  assert.equal(r.reason, "deferredTravelNeedle");
+  assert.equal(r.daysRemaining, null);
 });
 
 test("living in a malaria area defers 3 years after leaving", () => {
   const r = malaria("Lived in rural Palawan for 5 years", 400);
   assert.equal(r.status, "DEFERRED");
   assert.equal(r.daysRemaining, 695);
-  assert.equal(malaria("Lived in rural Palawan for 5 years", 1095).status, "ELIGIBLE");
+  assert.equal(malaria("Lived in rural Palawan for 5 years", 1095, checkedNoSymptoms).status, "ELIGIBLE");
 });
 
 test("past malaria defers 3 years after treatment", () => {
   const r = malaria("Had malaria, treated in 2024", 400);
   assert.equal(r.status, "DEFERRED");
   assert.equal(r.daysRemaining, 695);
-  assert.equal(malaria("Had malaria, treated in 2024", 1095).status, "ELIGIBLE");
+  assert.equal(malaria("Had malaria, treated in 2024", 1095, checkedNoSymptoms).status, "ELIGIBLE");
+});
+
+test("needle-stick still defers 12 months, with no symptom check", () => {
+  const needle = "Accidental needle stick injury while working at a clinic";
+  assert.equal(malaria(needle, 364).daysRemaining, 1);
+  assert.equal(malaria(needle, 365).status, "ELIGIBLE");
+});
+
+test("over 65 is eligible, with a note to evaluate first", () => {
+  const r = classifyDonorRow(male({ age: 70 }));
+  assert.equal(r.status, "ELIGIBLE");
+  assert.match(r.message, /Over 65/);
+  assert.doesNotMatch(classifyDonorRow(male({ age: 65 })).message, /Over 65/);
 });

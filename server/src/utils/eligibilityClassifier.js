@@ -15,12 +15,46 @@ const TATTOO_DEFERRAL_WINDOW_DAYS = 365;
 const RECENT_PROCEDURE_DEF_DAYS = 28;
 const TRANSFUSION_SURGERY_DEF_DAYS = 365;
 const TRAVEL_NEEDLE_DEF_DAYS = 365;
-// Malaria: 3 months after a visit, 3 years after leaving a place they
-// lived in, 3 years after finishing treatment.
-const MALARIA_WINDOW_DAYS = { visited: 90, lived: 1095, treated: 1095 };
+// Malaria: 1 year after a visit, 3 years after leaving a place they
+// lived in, 3 years after finishing treatment. Fever, chills or flu-like
+// illness after the exposure restarts the wait: 3 years after the symptoms
+// end. Once the wait is over the donor must answer the symptom check
+// (POST /api/donor/me/malaria-check) before they're eligible again, since
+// "symptom-free" is self-reported.
+const MALARIA_WINDOW_DAYS = { visited: 365, lived: 1095, treated: 1095 };
+const MALARIA_SYMPTOM_DEF_DAYS = 1095;
+// When to remind a donor back from a malaria-area trip to get checked if
+// they've felt unwell (malariaReminders.js).
+export const MALARIA_SYMPTOM_NUDGE_DAYS = 90;
 
 function daysBetween(from, to) {
   return Math.floor((to.getTime() - from.getTime()) / 86400000);
+}
+
+function addDays(date, days) {
+  return new Date(date.getTime() + days * 86400000);
+}
+
+// The malaria wait for a travel/needle-stick answer, or null when the
+// answer isn't a malaria exposure. endsAt is null when there's no date to
+// count from (or symptoms are ongoing): the donor stays deferred until they
+// give one. checkDone = they answered the symptom check after the wait
+// ended. Shared with the reminder job so both count the same dates.
+export function malariaWait(npt) {
+  if (!npt.hasTravelOrNeedleStick) return null;
+  const assessment = assessTravelOrNeedleStick(npt.travelOrNeedleDesc);
+  if (assessment.verdict !== "deferred" || !assessment.labels.includes("Malaria-Endemic Travel")) return null;
+  const exposure = malariaExposureOf(npt.travelOrNeedleDesc);
+  if (!npt.travelOrNeedleDate || npt.malariaSymptomsOngoing) {
+    return { exposure, endsAt: null, checkDone: false };
+  }
+  let endsAt = addDays(npt.travelOrNeedleDate, MALARIA_WINDOW_DAYS[exposure]);
+  if (npt.malariaSymptomsEndDate) {
+    const afterSymptoms = addDays(npt.malariaSymptomsEndDate, MALARIA_SYMPTOM_DEF_DAYS);
+    if (afterSymptoms > endsAt) endsAt = afterSymptoms;
+  }
+  const checkDone = npt.malariaCheckedAt != null && npt.malariaCheckedAt >= endsAt;
+  return { exposure, endsAt, checkDone };
 }
 
 // A handful of DecisionTreeClassifier's ten EligibleStats reasons are a
@@ -39,9 +73,10 @@ const REASON_MESSAGES = {
   deferredMajorMedical: "Reported a major medical history that needs clinical judgment before donating.",
   deferredTransfusionSurgery: "Reported a blood transfusion or surgery within the last 12 months.",
   deferredTravelNeedle:
-    "Reported malaria exposure (3 months after a visit, 3 years after living there or finishing treatment) or a needle-stick exposure (12 months) within its deferral window.",
+    "Reported malaria exposure (1 year after a visit, 3 years after living there, finishing treatment or the end of symptoms) or a needle-stick exposure (12 months) within its deferral window.",
+  deferredMalariaCheck: "Malaria waiting period is over, but the donor hasn't yet confirmed they've had no fever or other symptoms since.",
   deferredWeight: "Below the 50kg minimum weight threshold.",
-  deferredAge: "Outside the 18-65 eligible age range.",
+  deferredAge: "Under the minimum donor age of 18.",
   deferredInterval: "Within the mandatory 90-day interval since their last recorded donation.",
   deferredTattsPierce: "Within the 12-month deferral window for a recent tattoo/piercing.",
   deferredAlcohol: "Reported alcohol intake within the last 24 hours.",
@@ -69,8 +104,9 @@ function runDecisionTree(npt) {
     return { reason: "deferredWeight", daysRemaining: 0 };
   }
 
-  // Node 2: Age Bracket Check (Standard 18-65)
-  if (npt.age < 18 || npt.age > 65) {
+  // Node 2: Minimum Age Check. No upper limit: a donor over 65 is eligible
+  // but evaluated by the hospital first (see classifyDonorRow's message).
+  if (npt.age < 18) {
     return { reason: "deferredAge", daysRemaining: 0 };
   }
 
@@ -145,15 +181,25 @@ function runDecisionTree(npt) {
   }
 
   // Travel or Needle Stick Check — judged on the description: non-endemic
-  // travel doesn't defer, malaria defers 3 months after a visit or 3 years
-  // after living there or finishing treatment, and needle-stick or
-  // tattoo/piercing exposure has 12 months.
-  if (npt.hasTravelOrNeedleStick) {
+  // travel doesn't defer, malaria waits as in malariaWait() and then needs
+  // the symptom check, and needle-stick or tattoo/piercing exposure has 12
+  // months.
+  const malaria = malariaWait(npt);
+  if (malaria) {
+    if (!malaria.endsAt) {
+      return { reason: "deferredTravelNeedle", daysRemaining: 0 };
+    }
+    const now = new Date();
+    if (now < malaria.endsAt) {
+      return { reason: "deferredTravelNeedle", daysRemaining: Math.ceil((malaria.endsAt - now) / 86400000) };
+    }
+    if (!malaria.checkDone) {
+      return { reason: "deferredMalariaCheck", daysRemaining: 0 };
+    }
+  } else if (npt.hasTravelOrNeedleStick) {
     const assessment = assessTravelOrNeedleStick(npt.travelOrNeedleDesc);
     if (assessment.verdict === "deferred") {
-      const windowDays = assessment.labels.includes("Malaria-Endemic Travel")
-        ? MALARIA_WINDOW_DAYS[malariaExposureOf(npt.travelOrNeedleDesc)]
-        : TRAVEL_NEEDLE_DEF_DAYS;
+      const windowDays = TRAVEL_NEEDLE_DEF_DAYS;
       if (npt.travelOrNeedleDate) {
         const daysSince = daysBetween(npt.travelOrNeedleDate, new Date());
         if (daysSince < windowDays) {
@@ -188,6 +234,20 @@ function runDecisionTree(npt) {
     return { reason: "deferredClinicalRisk", daysRemaining: 0 };
   }
   return { reason: null, daysRemaining: 0 };
+}
+
+// malariaWait() straight from a health_screening JSONB, for the reminder
+// job, which doesn't need the rest of the decision tree.
+export function malariaWaitFromScreening(screening) {
+  if (!screening || typeof screening !== "object") return null;
+  return malariaWait({
+    hasTravelOrNeedleStick: screening.hasTravelOrNeedleStick === true,
+    travelOrNeedleDesc: screening.travelOrNeedleDesc ?? null,
+    travelOrNeedleDate: screening.travelOrNeedleDate ? new Date(screening.travelOrNeedleDate) : null,
+    malariaCheckedAt: screening.malariaCheckedAt ? new Date(screening.malariaCheckedAt) : null,
+    malariaSymptomsEndDate: screening.malariaSymptomsEndDate ? new Date(screening.malariaSymptomsEndDate) : null,
+    malariaSymptomsOngoing: screening.malariaSymptomsOngoing === true,
+  });
 }
 
 // Builds the DonorScreensNPT-equivalent input from a `donors` row (plus its
@@ -269,6 +329,9 @@ export function classifyDonorRow(donor) {
     isPregOrNursing: typeof screening.isPregOrNursing === "boolean" ? screening.isPregOrNursing : null,
     lastMensPeriodDate: screening.lastMensPeriodDate ? new Date(screening.lastMensPeriodDate) : null,
     hasHighRiskExpo: typeof screening.hasHighRiskExpo === "boolean" ? screening.hasHighRiskExpo : null,
+    malariaCheckedAt: screening.malariaCheckedAt ? new Date(screening.malariaCheckedAt) : null,
+    malariaSymptomsEndDate: screening.malariaSymptomsEndDate ? new Date(screening.malariaSymptomsEndDate) : null,
+    malariaSymptomsOngoing: screening.malariaSymptomsOngoing === true,
   };
 
   const result = runDecisionTree(npt);
@@ -276,7 +339,10 @@ export function classifyDonorRow(donor) {
     return {
       status: "ELIGIBLE",
       reason: null,
-      message: "No deferral flags — eligible to donate.",
+      message:
+        age > 65
+          ? "No deferral flags — eligible to donate. Over 65, so evaluate the donor before the donation."
+          : "No deferral flags — eligible to donate.",
       clearanceDate: null,
       daysRemaining: null,
     };
