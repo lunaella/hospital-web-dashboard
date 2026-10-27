@@ -216,6 +216,12 @@ function runDecisionTree(npt) {
     return { reason: "deferredAlcohol", daysRemaining: 0 };
   }
 
+  // High-risk exposure applies to every donor, so it is checked before the
+  // sex-specific branch (it used to run for male donors only).
+  if (npt.hasHighRiskExpo === true) {
+    return { reason: "deferredClinicalRisk", daysRemaining: 0 };
+  }
+
   // Node 7: Gender-Specific Branching
   if (npt.gender === "female") {
     if (npt.isPregOrNursing === true) {
@@ -228,10 +234,6 @@ function runDecisionTree(npt) {
       }
     }
     return { reason: null, daysRemaining: 0 };
-  }
-
-  if (npt.hasHighRiskExpo === true) {
-    return { reason: "deferredClinicalRisk", daysRemaining: 0 };
   }
   return { reason: null, daysRemaining: 0 };
 }

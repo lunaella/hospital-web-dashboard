@@ -116,6 +116,18 @@ for (const [id, description, row, status, reason = null, days = null] of cases) 
   });
 }
 
+// Found in code review after the validation: high-risk exposure was only
+// checked for male donors, so a female donor who reported it came out
+// eligible. None of the 41 profiles covered this case.
+test("high-risk exposure defers female donors too", () => {
+  const female = classifyDonorRow(donor({ screening: { hasHighRiskExpo: true } }));
+  assert.equal(female.status, "CLINICAL_REVIEW");
+  assert.equal(female.reason, "deferredClinicalRisk");
+  assert.equal(classifyDonorRow(donor({ screening: { hasHighRiskExpo: false } })).status, "ELIGIBLE");
+  // Screenings saved by older app builds have no answer for female donors.
+  assert.equal(classifyDonorRow(donor({ screening: { hasHighRiskExpo: null } })).status, "ELIGIBLE");
+});
+
 test("every deferral reason has a staff-facing message", () => {
   for (const [, , row, status] of cases) {
     if (status === "ELIGIBLE") continue;
