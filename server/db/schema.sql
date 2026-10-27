@@ -240,8 +240,8 @@ CREATE TABLE donors (
   name              VARCHAR(150) NOT NULL,
   phone             VARCHAR(30) NOT NULL,
   email             VARCHAR(255),         -- optional; SMS is the primary channel since every donor has a phone
-  blood_type        blood_type NOT NULL,
-  avatar_url        TEXT,                 -- unused; see photo/photo_mime_type below (migration 016) for the actual profile photo
+  blood_type        blood_type,           -- NULL = donor chose "I'm not sure"; staff record it at the first donation (migration 027)
+  avatar_url       TEXT,                 -- unused; see photo/photo_mime_type below (migration 016) for the actual profile photo
   photo             BYTEA,                -- profile photo bytes, served back via GET /api/donor-photos/:id
   photo_mime_type   TEXT,
   photo_updated_at  TIMESTAMPTZ,          -- cache-busts the serving URL when a donor replaces their photo

@@ -117,8 +117,13 @@ export function buildWelcomeEmailBody(donorName, bloodType) {
   return `
     <p style="font-size:15px;line-height:1.5;color:${TEXT_DARK};margin:0 0 20px;">Hi ${donorName},</p>
     <p style="font-size:15px;line-height:1.5;color:${TEXT_DARK};margin:0 0 16px;">
-      Your ResQ donor account is ready. You're registered as blood type
-      <strong style="color:${BRAND_RED};">${bloodType}</strong>.
+      ${
+        bloodType
+          ? `Your ResQ donor account is ready. You're registered as blood type
+      <strong style="color:${BRAND_RED};">${bloodType}</strong>.`
+          : `Your ResQ donor account is ready. Your blood type isn't on file yet —
+      the hospital will confirm it when you first donate.`
+      }
     </p>
     <p style="font-size:15px;line-height:1.5;color:${TEXT_DARK};margin:0 0 20px;">
       When a hospital needs your blood type, we'll text and email you here — open the app to respond.

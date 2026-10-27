@@ -313,7 +313,7 @@ export default function NotificationBell() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-poppins font-semibold text-[13px] text-black">
-                          {meta.label} · {e.bloodType}
+                          {meta.label} · {e.bloodType ?? "Unknown"}
                         </span>
                         <span className="flex items-center gap-1.5 shrink-0">
                           {isNew && <span className="w-[6px] h-[6px] rounded-full bg-[#9B1B20]" aria-label="New" />}

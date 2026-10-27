@@ -109,7 +109,7 @@ export default function DonorProfileModal({ donorId, onClose }) {
                 </div>
               </div>
               <span className="inline-flex items-center justify-center w-[58px] h-[28px] bg-[#f8f3f4] border-2 border-[#ebdfe1] rounded-[10px] text-[12px] font-semibold text-[#9B1B20]">
-                {donor.bloodType}
+                {donor.bloodType ?? "Unknown"}
               </span>
             </div>
 

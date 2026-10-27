@@ -243,7 +243,7 @@ export default function DonorManagement() {
         d.donorCode,
         d.name,
         d.phone,
-        d.bloodType,
+        d.bloodType ?? "Unknown",
         d.isEligible ? "Eligible" : d.daysUntilEligible ? `${d.daysUntilEligible} Days Lock` : `Deferred: ${d.lockMessage}`,
       ]);
       const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -270,12 +270,37 @@ export default function DonorManagement() {
     }
   }
 
+  // --- Record Blood Type prompt ---
+  // A donor who registered with "I'm not sure" has no blood type on file,
+  // and the server won't record their donation until staff enter one from
+  // the blood bank's typing (completeAppointment, donors.controller.js).
+  // Resolves with the chosen type, or null if staff cancel.
+  const [bloodTypePrompt, setBloodTypePrompt] = useState(null); // {donorName, resolve}
+  const [promptBloodType, setPromptBloodType] = useState(null);
+
+  function askForBloodType(donorName) {
+    setPromptBloodType(null);
+    return new Promise((resolve) => setBloodTypePrompt({ donorName, resolve }));
+  }
+
+  function closeBloodTypePrompt(value) {
+    bloodTypePrompt?.resolve(value);
+    setBloodTypePrompt(null);
+  }
+
   // Closes the loop on a confirmed appointment: logs the arrival, starts the
   // donor's 90-day cooling period, and bumps inventory server-side. Refetches
   // the donor list afterward since this donor's eligibility just changed.
   async function recordDonation(appointmentId) {
+    const appointment = appointments.find((a) => a.id === appointmentId);
+    let body;
+    if (appointment && !appointment.bloodType) {
+      const bloodType = await askForBloodType(appointment.name);
+      if (!bloodType) return;
+      body = { bloodType };
+    }
     try {
-      await api.post(`/api/appointments/${appointmentId}/complete`);
+      await api.post(`/api/appointments/${appointmentId}/complete`, body);
       setAppointments((prev) => prev.map((a) => (a.id === appointmentId ? { ...a, status: "completed" } : a)));
 
       const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
@@ -435,11 +460,23 @@ export default function DonorManagement() {
       return;
     }
 
+    let bloodType = donor.bloodType;
+    if (!bloodType) {
+      bloodType = await askForBloodType(donor.name);
+      if (!bloodType) {
+        setCheckinBanner({ type: "info", message: `${donor.name}'s donation was not recorded — their blood type is needed first.` });
+        return;
+      }
+    }
+
     try {
-      const result = await api.post(`/api/appointments/${activeAppointment.id}/complete`);
+      const result = await api.post(
+        `/api/appointments/${activeAppointment.id}/complete`,
+        donor.bloodType ? undefined : { bloodType }
+      );
       setAppointments((prev) => prev.map((a) => (a.id === activeAppointment.id ? { ...a, status: "completed" } : a)));
       const quotaNote = result.fulfilledRequest
-        ? ` Counted toward ${result.fulfilledRequest.requestCode} (${result.fulfilledRequest.unitsFulfilled}/${result.fulfilledRequest.unitsNeeded} ${donor.bloodType}).`
+        ? ` Counted toward ${result.fulfilledRequest.requestCode} (${result.fulfilledRequest.unitsFulfilled}/${result.fulfilledRequest.unitsNeeded} ${bloodType}).`
         : "";
       const eligibilityNote = screening?.status === "ELIGIBLE" ? " Verified eligible." : "";
       setCheckinBanner({
@@ -745,7 +782,7 @@ export default function DonorManagement() {
             </div>
             <div className="w-[128px] flex items-center justify-center">
               <span className="bg-[#f8f3f4] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#9B1B20]">
-                {donor.bloodType}
+                {donor.bloodType ?? "Unknown"}
               </span>
             </div>
             <div className="w-[176px] flex items-center justify-center">
@@ -900,7 +937,7 @@ export default function DonorManagement() {
             className="relative shrink-0 rounded-[10px] w-[280px] h-[148px] bg-[#f8f3f4] border-[1.5px] border-[#f1dddc] border-solid"
           >
             <span className="absolute bg-[#eadbdd] border-2 border-[#ebdfe1] border-solid rounded-[10px] h-[24px] w-[58px] flex items-center justify-center text-[11px] font-semibold text-[#9B1B20] left-[209px] top-[11px]">
-              {apt.bloodType}
+              {apt.bloodType ?? "Unknown"}
             </span>
             <p className="absolute left-[17px] top-[15px] flex items-center gap-1 text-[12px] font-medium text-[#aaa4a0]">
               <IconClock className="w-[10px] h-[10px]" />
@@ -1040,6 +1077,60 @@ export default function DonorManagement() {
           document.body
         )}
 
+      {bloodTypePrompt &&
+        createPortal(
+          <div className="fixed inset-0 z-50 font-poppins">
+            <div
+              className="absolute inset-0 backdrop-blur-[7.5px] bg-[rgba(217,217,217,0.85)]"
+              onClick={() => closeBloodTypePrompt(null)}
+              aria-hidden="true"
+            />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-[20px] w-[420px] max-w-[92vw] shadow-[0px_17px_38px_0px_rgba(0,0,0,0.1)] p-8">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-poppins font-bold text-[20px] text-black">Record Blood Type</h2>
+                <button
+                  type="button"
+                  onClick={() => closeBloodTypePrompt(null)}
+                  title="Close"
+                  aria-label="Close"
+                  className="cursor-pointer text-[#808080] hover:text-black text-xl leading-none"
+                >
+                  &times;
+                </button>
+              </div>
+              <p className="font-poppins text-[13px] text-[#808080] mb-5">
+                {bloodTypePrompt.donorName} registered without knowing their blood type. Enter it from the blood
+                bank's typing before recording this donation.
+              </p>
+              <div className="grid grid-cols-4 gap-2 mb-6">
+                {BLOOD_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => setPromptBloodType(type)}
+                    className={`h-[36px] rounded-[8px] border text-[13px] font-poppins font-semibold cursor-pointer ${
+                      promptBloodType === type
+                        ? "bg-[#9B1B20] border-[#9B1B20] text-white"
+                        : "bg-[#f8f3f4] border-[#ebdfe1] text-[#9B1B20]"
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={!promptBloodType}
+                onClick={() => closeBloodTypePrompt(promptBloodType)}
+                className="w-full h-[42px] rounded-[10px] bg-[#9B1B20] text-white text-[14px] font-poppins font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Save and Record Donation
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
+
       {walkInOpen &&
         createPortal(
           <div className="fixed inset-0 z-50 font-poppins">
@@ -1103,7 +1194,7 @@ export default function DonorManagement() {
                     <div className="flex items-center justify-between border-2 border-[#9B1B20] bg-[#fbf3f3] rounded-[10px] px-4 py-3 mt-1">
                       <div>
                         <p className="font-poppins font-medium text-[14px] text-black">{walkInSelected.name}</p>
-                        <p className="font-poppins text-[11px] text-[#808080]">{walkInSelected.id} &middot; {walkInSelected.bloodType}</p>
+                        <p className="font-poppins text-[11px] text-[#808080]">{walkInSelected.id} &middot; {walkInSelected.bloodType ?? "Unknown"}</p>
                       </div>
                       <button
                         type="button"
@@ -1127,7 +1218,7 @@ export default function DonorManagement() {
                             className="flex items-center justify-between border border-[#d9d9d9] rounded-[10px] px-4 py-2 hover:bg-[#f6f5f4] cursor-pointer text-left"
                           >
                             <span className="font-poppins text-[13px] text-black">{d.name}</span>
-                            <span className="font-poppins text-[11px] text-[#808080]">{d.id} &middot; {d.bloodType}</span>
+                            <span className="font-poppins text-[11px] text-[#808080]">{d.id} &middot; {d.bloodType ?? "Unknown"}</span>
                           </button>
                         ))}
                       </div>

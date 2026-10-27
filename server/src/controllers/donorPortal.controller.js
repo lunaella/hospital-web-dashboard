@@ -764,7 +764,10 @@ export const listOpenRequestsForDonor = asyncHandler(async (req, res) => {
        round((${distanceExpr})::numeric, 1) AS "distanceKm"
      FROM blood_requests r
      JOIN hospitals h ON h.id = r.hospital_id
-     WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED') AND r.blood_type = $1
+     WHERE r.status IN ('OPEN', 'PARTIALLY_FULFILLED')
+       -- A donor with no blood type on file yet (migration 027) sees every
+       -- open request; the hospital types their blood at the first donation.
+       AND ($1::blood_type IS NULL OR r.blood_type = $1::blood_type)
        ${hasRadius ? `AND (${distanceExpr}) <= $4` : ""}
      ORDER BY
        CASE r.priority WHEN 'EMERGENCY' THEN 0 WHEN 'URGENT' THEN 1 ELSE 2 END,

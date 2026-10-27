@@ -478,6 +478,24 @@ export const completeAppointment = asyncHandler(async (req, res) => {
       return res.status(400).json({ error: "This donation has already been recorded." });
     }
 
+    // A donor who registered with "I'm not sure" has no blood type on file
+    // (migration 027). Staff must record it here, from the blood bank's
+    // typing, before the unit can go into inventory or toward a request.
+    let bloodType = appt.bloodType;
+    if (!bloodType) {
+      bloodType = req.body?.bloodType;
+      if (!BLOOD_TYPES.includes(bloodType)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          error: "This donor's blood type is not on file yet. Record it before recording the donation.",
+        });
+      }
+      await client.query("UPDATE donors SET blood_type = $1, updated_at = now() WHERE id = $2", [
+        bloodType,
+        appt.donorId,
+      ]);
+    }
+
     await client.query(
       "UPDATE appointments SET status = 'completed', updated_at = now() WHERE id = $1",
       [appt.id]
@@ -505,7 +523,7 @@ export const completeAppointment = asyncHandler(async (req, res) => {
        VALUES ($1, $2, 1)
        ON CONFLICT (hospital_id, blood_type)
        DO UPDATE SET units_available = blood_inventory.units_available + 1, updated_at = now()`,
-      [appt.hospitalId, appt.bloodType]
+      [appt.hospitalId, bloodType]
     );
 
     // Min-Heap Queue Activation: every still-open request for this exact
@@ -523,7 +541,7 @@ export const completeAppointment = asyncHandler(async (req, res) => {
        FROM blood_requests
        WHERE hospital_id = $1 AND blood_type = $2 AND status IN ('OPEN', 'PARTIALLY_FULFILLED')
        FOR UPDATE`,
-      [appt.hospitalId, appt.bloodType]
+      [appt.hospitalId, bloodType]
     );
     const priorityRank = { EMERGENCY: 0, URGENT: 1 };
     const requestHeap = new MinHeap((a, b) => {

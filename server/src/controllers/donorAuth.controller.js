@@ -250,12 +250,15 @@ export const completeProfile = asyncHandler(async (req, res) => {
   // first login, not a registration, so it stays silent.
   const isNewDonor = !donor;
 
-  const { name, bloodType, email, age, weightKg, gender, healthScreening, password } = req.body;
-  if (!name?.trim() || !bloodType) {
-    return res.status(400).json({ error: "name and bloodType are required." });
+  const { name, email, age, weightKg, gender, healthScreening, password } = req.body;
+  if (!name?.trim()) {
+    return res.status(400).json({ error: "name is required." });
   }
-  if (!BLOOD_TYPES.includes(bloodType)) {
-    return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}` });
+  // "Unknown" (or no value) is the app's "I'm not sure" choice — stored as
+  // NULL until staff record the type at the first donation (migration 027).
+  const bloodType = !req.body.bloodType || req.body.bloodType === "Unknown" ? null : req.body.bloodType;
+  if (bloodType !== null && !BLOOD_TYPES.includes(bloodType)) {
+    return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}, or Unknown` });
   }
   // age/weightKg/gender/healthScreening are all optional — the mobile
   // app's screening wizard is a separate step from this bare-minimum
