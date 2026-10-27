@@ -235,9 +235,14 @@ export default function DonorManagement() {
     }
   }
 
+  // Exports exactly what the list is showing: the same blood type and
+  // eligibility filters, every page (TC-DM-004).
   async function exportCsv() {
     try {
-      const allDonors = await api.get("/api/donors/export");
+      const params = new URLSearchParams();
+      bloodTypeFilter.forEach((t) => params.append("bloodType", t));
+      if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
+      const allDonors = await api.get(`/api/donors/export?${params.toString()}`);
       const header = ["ID", "Name", "Phone", "Blood Type", "Status"];
       const rows = allDonors.map((d) => [
         d.donorCode,

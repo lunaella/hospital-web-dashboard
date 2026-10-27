@@ -37,15 +37,14 @@ function withEligibility(donor) {
   return { ...rest, ...eligibility, canMarkEligible };
 }
 
-export const listDonors = asyncHandler(async (req, res) => {
-  const page = Math.max(Number(req.query.page) || 1, 1);
-  const pageSize = Math.min(Number(req.query.pageSize) || PAGE_SIZE_DEFAULT, 100);
-  const offset = (page - 1) * pageSize;
+// The donor list's filters (blood type, search, hospital), shared with the
+// CSV export so an export always contains exactly the rows the list shows
+// (TC-DM-004: the export used to ignore every filter).
+function donorFilters(req) {
   const bloodTypes = req.query.bloodType
     ? [].concat(req.query.bloodType) // supports ?bloodType=O-&bloodType=A+
     : null;
   const search = req.query.q?.trim() || null;
-  const eligibility = req.query.eligibility; // "eligible" | "locked" | undefined/"all"
   const hospitalId = hospitalIdParam(req);
 
   const conditions = [];
@@ -70,7 +69,19 @@ export const listDonors = asyncHandler(async (req, res) => {
         OR EXISTS (SELECT 1 FROM donor_arrivals da WHERE da.donor_id = donors.id AND da.hospital_id = $${params.length}))`
     );
   }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  return { where: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "", params };
+}
+
+// "eligible" | "locked" | undefined/"all"
+function matchesEligibility(donor, eligibility) {
+  return eligibility === "eligible" ? donor.isEligible : eligibility === "locked" ? !donor.isEligible : true;
+}
+
+export const listDonors = asyncHandler(async (req, res) => {
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const pageSize = Math.min(Number(req.query.pageSize) || PAGE_SIZE_DEFAULT, 100);
+  const offset = (page - 1) * pageSize;
+  const { where, params } = donorFilters(req);
 
   // Eligibility is the same full screening check the donor's app and the
   // broadcast pushes use (donorEligibility), not just the 90-day rule. The
@@ -89,9 +100,7 @@ export const listDonors = asyncHandler(async (req, res) => {
   );
   const classified = matching
     .map((donor) => withEligibility(donor))
-    .filter((donor) =>
-      eligibility === "eligible" ? donor.isEligible : eligibility === "locked" ? !donor.isEligible : true
-    );
+    .filter((donor) => matchesEligibility(donor, req.query.eligibility));
   const total = classified.length;
   const rows = classified.slice(offset, offset + pageSize);
 
@@ -224,14 +233,7 @@ export const setDonorEligibility = asyncHandler(async (req, res) => {
 // hospital scoping as listDonors, so an export taken while a specific
 // hospital is selected matches what that admin actually sees on screen.
 export const exportDonors = asyncHandler(async (req, res) => {
-  const hospitalId = hospitalIdParam(req);
-  const params = [];
-  let where = "";
-  if (hospitalId) {
-    params.push(hospitalId);
-    where = `WHERE (EXISTS (SELECT 1 FROM appointments a WHERE a.donor_id = donors.id AND a.hospital_id = $1)
-                     OR EXISTS (SELECT 1 FROM donor_arrivals da WHERE da.donor_id = donors.id AND da.hospital_id = $1))`;
-  }
+  const { where, params } = donorFilters(req);
   const { rows } = await pool.query(
     `SELECT donor_code AS "donorCode", name, phone, blood_type AS "bloodType",
             last_donation_at AS "lastDonationAt",
@@ -241,7 +243,9 @@ export const exportDonors = asyncHandler(async (req, res) => {
      ORDER BY name`,
     params
   );
-  res.json(rows.map((donor) => withEligibility(donor)));
+  res.json(
+    rows.map((donor) => withEligibility(donor)).filter((donor) => matchesEligibility(donor, req.query.eligibility))
+  );
 });
 
 export const getDonor = asyncHandler(async (req, res) => {
