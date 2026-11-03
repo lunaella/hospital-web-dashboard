@@ -15,6 +15,7 @@
 // that entirely.
 import { createPortal } from "react-dom";
 import { IconAlert } from "./icons";
+import { priorityLabel } from "../lib/priorityLabels";
 
 function priorityColorFor(priority) {
   return priority === "EMERGENCY" ? "text-[#c26460]" : "text-[#868686]";
@@ -78,12 +79,12 @@ export default function FulfillmentLogModal({ open, rows, onClose, onViewBroadca
                   <>
                     <IconAlert className="w-[14px] h-[12px] text-[#c26460]" />
                     <span className={`font-poppins font-semibold text-[11px] tracking-wide ${priorityColorFor(row.priority)}`}>
-                      {row.priority}
+                      {priorityLabel(row.priority)}
                     </span>
                   </>
                 ) : (
                   <span className="font-poppins font-medium text-[12px] text-[#868686]">
-                    {row.priority.charAt(0) + row.priority.slice(1).toLowerCase()}
+                    {priorityLabel(row.priority)}
                   </span>
                 )}
               </div>

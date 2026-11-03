@@ -18,6 +18,7 @@ import {
   IconSearch,
   IconChart,
 } from "../components/icons";
+import { priorityLabel } from "../lib/priorityLabels";
 
 // Static per-card chrome (icon/label/copy) — only the numbers underneath
 // come from the API. Trend badges only render for metrics the backend
@@ -43,7 +44,7 @@ const POLL_MS = 30000;
 const RELOAD_DEBOUNCE_MS = 400;
 
 const STAT_CARD_META = {
-  codeRed: { icon: IconMegaphone, accent: true, label: "CODE RED BROADCASTS", sub: "Active emergency requests" },
+  codeRed: { icon: IconMegaphone, accent: true, label: "CODE RED BROADCASTS", sub: "Active STAT requests" },
   unitsNeeded: { icon: IconDroplet, label: "Units Needed", sub: "Total volume across all active broadcast" },
   activeDonors: { icon: IconUsers, label: "Active Donors" },
   fulfillmentRate: { icon: IconCheckCircle, label: "Fulfillment Rate", sub: "Successful quotas met (Last 24h)" },
@@ -82,7 +83,7 @@ function stockStatusColor(status) {
 function attentionPillMeta(openEmergencyCount) {
   if (openEmergencyCount > 0) {
     return {
-      label: `${openEmergencyCount} Emergency Request${openEmergencyCount === 1 ? "" : "s"} Open`,
+      label: `${openEmergencyCount} STAT Request${openEmergencyCount === 1 ? "" : "s"} Open`,
       border: "border-[#eec3c1]",
       bg: "bg-[#fbeeed]",
       text: "text-[#b94842]",
@@ -90,7 +91,7 @@ function attentionPillMeta(openEmergencyCount) {
     };
   }
   return {
-    label: "No Emergency Requests Open",
+    label: "No STAT Requests Open",
     border: "border-[#bfe3c8]",
     bg: "bg-[#f0faf3]",
     text: "text-[#1e7d32]",
@@ -110,7 +111,7 @@ function PriorityBadge({ priority }) {
   return (
     <div className="flex items-center justify-center gap-1">
       {priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#9B1B20]" />}
-      <span className={`font-poppins font-semibold text-[11px] tracking-wide ${colorMap[priority]}`}>{priority}</span>
+      <span className={`font-poppins font-semibold text-[11px] tracking-wide ${colorMap[priority]}`}>{priorityLabel(priority)}</span>
     </div>
   );
 }

@@ -5,18 +5,13 @@ import { sendPush } from "../utils/push.js";
 import { MinHeap } from "../utils/minHeap.js";
 import { canDonateNow } from "../utils/eligibilityClassifier.js";
 import { wrapBrandedEmail, buildBroadcastAlertEmailBody } from "../utils/emailTemplate.js";
+import { priorityLabel } from "../utils/priorityLabels.js";
 
 // Donors with no arrival history have no measured response time yet. They
 // still get notified, but a min-heap keyed on response time needs *some*
 // number to place them at — treat them as an average responder rather than
 // letting `NULL` sort as either best or worst.
 const FALLBACK_RESPONSE_MINUTES = 60;
-
-const PRIORITY_LABEL = {
-  EMERGENCY: "EMERGENCY",
-  URGENT: "Urgent",
-  NORMAL: "Routine",
-};
 
 // Used only if a broadcast's hospital somehow can't be resolved (shouldn't
 // happen — hospital_id is NOT NULL + FK-constrained on blood_requests) so a
@@ -30,14 +25,14 @@ const FALLBACK_HOSPITAL_NAME = "the requesting hospital";
 // admin actually selected.
 function buildSmsBody(request) {
   return (
-    `ResQ Alert: ${PRIORITY_LABEL[request.priority] ?? request.priority} need for ` +
+    `ResQ Alert: ${priorityLabel(request.priority)} need for ` +
     `${request.bloodType} blood at ${request.hospitalName} (Ward: ${request.ward}). ` +
     `Request #${request.requestCode}. If you're able to donate, please contact the hospital.`
   );
 }
 
 function buildPushTitle(request) {
-  return `${PRIORITY_LABEL[request.priority] ?? request.priority} need: ${request.bloodType} blood`;
+  return `${priorityLabel(request.priority)} need: ${request.bloodType} blood`;
 }
 
 function buildPushBody(request) {
@@ -64,7 +59,7 @@ function buildEmailHtml(donorName, request) {
   return wrapBrandedEmail(
     buildBroadcastAlertEmailBody({
       donorName,
-      priorityLabel: PRIORITY_LABEL[request.priority] ?? request.priority,
+      priorityLabel: priorityLabel(request.priority),
       bloodType: request.bloodType,
       hospitalName: request.hospitalName,
       ward: request.ward,
@@ -182,7 +177,7 @@ export async function notifyDonorsForRequest(request) {
   const emailJob = sendEmailBatch(
     emailDonors.map((donor) => ({
       to: donor.email,
-      subject: `Urgent Blood Donation Request — ${request.bloodType} Needed`,
+      subject: `${priorityLabel(request.priority)} Blood Donation Request — ${request.bloodType} Needed`,
       html: buildEmailHtml(donor.name, request),
     }))
   ).then((results) =>

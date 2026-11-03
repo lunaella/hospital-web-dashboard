@@ -12,8 +12,8 @@ import { connectRealtime } from "../lib/realtime";
 // read off data that already exists instead of a parallel read/unread system.
 
 const PRIORITY_META = {
-  EMERGENCY: { label: "EMERGENCY", dot: "bg-[#9B1B20]", text: "text-[#9B1B20]" },
-  URGENT: { label: "Urgent", dot: "bg-[#c9a227]", text: "text-black" },
+  EMERGENCY: { label: "STAT", dot: "bg-[#9B1B20]", text: "text-[#9B1B20]" },
+  URGENT: { label: "ASAP", dot: "bg-[#c9a227]", text: "text-black" },
   NORMAL: { label: "Routine", dot: "bg-[#5b8a52]", text: "text-black" },
 };
 

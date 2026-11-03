@@ -12,6 +12,7 @@ import {
   REQUEST_ALIASES,
   APPOINTMENT_ALIASES,
 } from "../utils/importHelpers.js";
+import { PRIORITY_LABEL, priorityFromInput } from "../utils/priorityLabels.js";
 
 // knownAliases tells parseSpreadsheet which header row, among any title/
 // note/blank rows a real hospital export might have above it, to actually
@@ -174,7 +175,7 @@ export const importRequests = asyncHandler(async (req, res) => {
     const rowNum = i + 2;
 
     const bloodType = normalizeBloodType(field(row, ...REQUEST_ALIASES.bloodType));
-    const priority = String(field(row, ...REQUEST_ALIASES.priority) || "NORMAL").toUpperCase();
+    const priority = priorityFromInput(field(row, ...REQUEST_ALIASES.priority) || "NORMAL");
     const ward = field(row, ...REQUEST_ALIASES.ward) || "Unspecified";
     const unitsNeeded = Number(field(row, ...REQUEST_ALIASES.unitsNeeded));
     const unitsFulfilledRaw = Number(field(row, ...REQUEST_ALIASES.unitsFulfilled));
@@ -185,7 +186,7 @@ export const importRequests = asyncHandler(async (req, res) => {
       continue;
     }
     if (!REQUEST_PRIORITIES.includes(priority)) {
-      result.errors.push({ row: rowNum, message: `Priority must be one of: ${REQUEST_PRIORITIES.join(", ")}.` });
+      result.errors.push({ row: rowNum, message: `Priority must be one of: ${Object.values(PRIORITY_LABEL).join(", ")}.` });
       continue;
     }
     if (!Number.isInteger(unitsNeeded) || unitsNeeded < 1) {

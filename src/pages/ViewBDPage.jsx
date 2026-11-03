@@ -8,6 +8,7 @@ import { IconAlert, IconClock, IconSearch } from "../components/icons";
 import PageHeader from "../components/PageHeader";
 import BroadcastDetailsModal from "../components/BroadcastDetailsModal";
 import CallRedCrossButton from "../components/CallRedCrossButton";
+import { priorityLabel } from "../lib/priorityLabels";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -288,7 +289,7 @@ export default function ViewBDPage() {
 
                 <span className={`flex items-center gap-1.5 text-[11px] font-semibold ${priorityTextClass[b.priority]}`}>
                   {b.priority === "EMERGENCY" && <IconAlert className="w-[16px] h-[14px] text-[#c26460]" />}
-                  {b.priority}
+                  {priorityLabel(b.priority)}
                 </span>
 
                 <span className="flex flex-col items-start gap-0.5 text-[11px] font-semibold text-black">

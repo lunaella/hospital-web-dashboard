@@ -3,6 +3,7 @@ import { api } from "../lib/apiClient";
 import { connectRealtime } from "../lib/realtime";
 import { playAlertSound, unlockAlertSound } from "../lib/alertSound";
 import { IconAlert } from "./icons";
+import { priorityLabel } from "../lib/priorityLabels";
 
 // Super admin only (rendered by AppShell). The Red Cross won't sit
 // watching a dashboard, so a hospital's broadcast waiting on their
@@ -50,7 +51,7 @@ function readPromptDismissed() {
 function showDesktopNotification(request) {
   if (notificationPermission() !== "granted") return;
   try {
-    const n = new Notification(`${request.priority} blood request awaiting approval`, {
+    const n = new Notification(`${priorityLabel(request.priority)} blood request awaiting approval`, {
       body: `${request.hospitalName ?? "A hospital"} needs ${request.unitsNeeded} unit${request.unitsNeeded === 1 ? "" : "s"} of ${request.bloodType} (${request.ward}).`,
       tag: request.id,
       requireInteraction: request.priority === "EMERGENCY",
@@ -234,7 +235,7 @@ export default function PendingApprovalAlerts() {
             Pending Approvals ({pending.length})
           </span>
           <span className="text-[12px] font-semibold text-[#808080]">
-            {hasEmergency ? "· includes an EMERGENCY · donors aren't notified until you approve" : "· donors aren't notified until you approve"}
+            {hasEmergency ? "· includes a STAT request · donors aren't notified until you approve" : "· donors aren't notified until you approve"}
           </span>
           <span className="text-[12px] font-semibold text-[#9B1B20] underline ml-1">{expanded ? "Hide" : "Review"}</span>
         </button>

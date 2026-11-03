@@ -13,6 +13,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../lib/apiClient";
+import { priorityLabel } from "../lib/priorityLabels";
 
 const priorityTextClass = {
   EMERGENCY: "text-[#c26460]",
@@ -110,7 +111,7 @@ function DetailsCard({ b, onClose, canCancel, startCancelling, onCancelled }) {
             {b.status ? STATUS_LABEL[b.status] ?? b.status.charAt(0) + b.status.slice(1).toLowerCase() : "—"}
           </span>
           <span className={`text-[12px] font-semibold ${priorityTextClass[b.priority] ?? "text-black"}`}>
-            {b.priority} PRIORITY
+            {priorityLabel(b.priority)} PRIORITY
           </span>
         </div>
 

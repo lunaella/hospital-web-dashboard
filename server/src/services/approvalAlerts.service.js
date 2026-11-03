@@ -4,6 +4,7 @@ import { sendSms } from "../utils/sms.js";
 import { sendEmail } from "../utils/email.js";
 import { wrapBrandedEmail } from "../utils/emailTemplate.js";
 import { getSettings, splitNumberList, SETTING_KEYS } from "../utils/appSettings.js";
+import { priorityLabel } from "../utils/priorityLabels.js";
 
 // Texts/emails the Red Cross (super admin) about a hospital's broadcast
 // waiting on their approval, so it reaches them even when nobody has the
@@ -32,21 +33,21 @@ function buildSms(r) {
   const units = `${r.unitsNeeded} unit${r.unitsNeeded === 1 ? "" : "s"} ${r.bloodType}`;
   const link = reviewLink() ? ` Review: ${reviewLink()}` : " Review it in RESQ.";
   if (r.attempt === 1) {
-    return `RESQ: ${r.priority} request awaiting your approval. ${r.hospitalName} needs ${units} (${r.ward}). ${r.requestCode}.${link}`;
+    return `RESQ: ${priorityLabel(r.priority)} request awaiting your approval. ${r.hospitalName} needs ${units} (${r.ward}). ${r.requestCode}.${link}`;
   }
-  return `RESQ REMINDER ${r.attempt - 1}/${MAX_ESCALATIONS}: ${r.priority} request from ${r.hospitalName} still awaiting approval after ${r.minutesWaiting} min. ${units}, ${r.requestCode}.${link}`;
+  return `RESQ REMINDER ${r.attempt - 1}/${MAX_ESCALATIONS}: ${priorityLabel(r.priority)} request from ${r.hospitalName} still awaiting approval after ${r.minutesWaiting} min. ${units}, ${r.requestCode}.${link}`;
 }
 
 function buildEmail(r) {
   const isReminder = r.attempt > 1;
   const subject = isReminder
-    ? `Reminder: ${r.priority} blood request from ${r.hospitalName} still awaiting approval`
-    : `${r.priority} blood request from ${r.hospitalName} awaiting your approval`;
+    ? `Reminder: ${priorityLabel(r.priority)} blood request from ${r.hospitalName} still awaiting approval`
+    : `${priorityLabel(r.priority)} blood request from ${r.hospitalName} awaiting your approval`;
   const link = reviewLink();
   const html = wrapBrandedEmail(`
     <p style="font-size:15px;line-height:1.5;color:#1a1a1a;margin:0 0 16px;">
       ${isReminder ? `Still waiting after <strong>${r.minutesWaiting} minutes</strong>: ` : ""}
-      <strong>${escapeHtml(r.hospitalName)}</strong> submitted a <strong>${escapeHtml(r.priority)}</strong> request for
+      <strong>${escapeHtml(r.hospitalName)}</strong> submitted a <strong>${escapeHtml(priorityLabel(r.priority))}</strong> request for
       <strong style="color:#9B1B20;">${r.unitsNeeded} unit${r.unitsNeeded === 1 ? "" : "s"} of ${escapeHtml(r.bloodType)}</strong>
       (Ward: ${escapeHtml(r.ward)}, Request #${escapeHtml(r.requestCode)}).
     </p>

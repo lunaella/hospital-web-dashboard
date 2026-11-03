@@ -5,6 +5,7 @@ import { useHospital } from "../context/HospitalContext";
 import { useAuth } from "../context/AuthContext";
 import CallRedCrossButton from "../components/CallRedCrossButton";
 import { IconDroplet } from "../components/icons";
+import { priorityLabel } from "../lib/priorityLabels";
 
 // Rebuilt from the "Create New Broadcast" reference screenshot the user provided
 // directly from Figma (node 510:812, "NewBDPage") — the Figma MCP tool quota was
@@ -13,7 +14,7 @@ import { IconDroplet } from "../components/icons";
 
 const URGENCY_LEVELS = [
   {
-    key: "Emergency",
+    key: "EMERGENCY",
     icon: (
       <svg viewBox="0 0 20 20" className="w-[14px] h-[14px]" fill="none">
         <path d="M10 2 1 17h18L10 2Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
@@ -23,7 +24,7 @@ const URGENCY_LEVELS = [
     ),
   },
   {
-    key: "Urgent",
+    key: "URGENT",
     icon: (
       <svg viewBox="0 0 20 20" className="w-[14px] h-[14px]" fill="none">
         <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.5" />
@@ -32,7 +33,7 @@ const URGENCY_LEVELS = [
     ),
   },
   {
-    key: "Normal",
+    key: "NORMAL",
     icon: (
       <svg viewBox="0 0 20 20" className="w-[14px] h-[14px]" fill="none">
         <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.5" />
@@ -52,7 +53,7 @@ export default function NewBDPage() {
   // else's waits for super admin approval (see createRequest on the server).
   const { isSuperAdmin } = useAuth();
 
-  const [urgency, setUrgency] = useState("Emergency");
+  const [urgency, setUrgency] = useState("EMERGENCY");
   const [bloodType, setBloodType] = useState("O-");
   const [ward, setWard] = useState("");
   const [units, setUnits] = useState(2);
@@ -83,7 +84,7 @@ export default function NewBDPage() {
     try {
       await api.post("/api/requests", {
         hospitalId,
-        priority: urgency.toUpperCase(),
+        priority: urgency,
         bloodType,
         ward,
         unitsNeeded: units,
@@ -136,9 +137,9 @@ export default function NewBDPage() {
           {!isSuperAdmin && (
             <p className="mt-1 font-poppins font-semibold text-[12px] text-[#8a5a00]">
               This broadcast will be sent to the super admin for approval. Donors are notified only after it's approved.
-              {urgency === "Emergency" && (
+              {urgency === "EMERGENCY" && (
                 <>
-                  {" "}For an emergency, you can also <CallRedCrossButton variant="link" />.
+                  {" "}For a STAT request, you can also <CallRedCrossButton variant="link" />.
                 </>
               )}
             </p>
@@ -166,7 +167,7 @@ export default function NewBDPage() {
                 }`}
               >
                 {level.icon}
-                {level.key}
+                {priorityLabel(level.key)}
               </button>
             ))}
           </div>

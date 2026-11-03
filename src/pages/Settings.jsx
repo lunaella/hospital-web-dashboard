@@ -814,7 +814,7 @@ export default function Settings() {
           When a hospital submits a broadcast, these mobile numbers get a text and every super admin gets an email, even if
           nobody has the dashboard open.
           {alertSchedule &&
-            ` If it's still waiting after ${alertSchedule.escalateAfterMinutes.EMERGENCY} min (Emergency), ${alertSchedule.escalateAfterMinutes.URGENT} min (Urgent) or ${alertSchedule.escalateAfterMinutes.NORMAL} min (Normal), it texts again and adds the backup numbers, up to ${alertSchedule.maxEscalations} more times. Requests are never approved automatically.`}
+            ` If it's still waiting after ${alertSchedule.escalateAfterMinutes.EMERGENCY} min (STAT), ${alertSchedule.escalateAfterMinutes.URGENT} min (ASAP) or ${alertSchedule.escalateAfterMinutes.NORMAL} min (Routine), it texts again and adds the backup numbers, up to ${alertSchedule.maxEscalations} more times. Requests are never approved automatically.`}
         </p>
         <form
           onSubmit={saveAlertNumbers}

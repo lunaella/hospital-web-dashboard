@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { priorityLabel } from "../lib/priorityLabels";
 
 // Builds the Reports "Export PDF" file directly from the same data the
 // screen already fetched — real text and tables, not a screenshot of the
@@ -137,7 +138,7 @@ export function exportReportPdf({
   y += 14;
   doc.text(
     `Range: ${dateRange || "Last 30 days"}   ·   Priority filter: ${
-      priorityFilter && priorityFilter !== "all" ? priorityFilter : "All"
+      priorityFilter && priorityFilter !== "all" ? priorityLabel(priorityFilter) : "All"
     }`,
     PAGE_MARGIN,
     y
@@ -205,7 +206,7 @@ export function exportReportPdf({
       fulfillmentLog.map((r) => [
         r.reqId ?? "—",
         r.blood ?? "—",
-        r.priority ? r.priority.charAt(0) + r.priority.slice(1).toLowerCase() : "—",
+        r.priority ? priorityLabel(r.priority) : "—",
         r.time ?? "—",
         r.rating ?? "Pending",
       ]),

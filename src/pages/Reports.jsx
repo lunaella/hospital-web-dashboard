@@ -18,6 +18,7 @@ import {
 import FulfillmentLogModal from "../components/FulfillmentLogModal";
 import CompletedRequestsModal from "../components/CompletedRequestsModal";
 import { exportReportPdf } from "../utils/exportReportPdf";
+import { priorityLabel } from "../lib/priorityLabels";
 
 // Static per-card chrome; value/trend come from the API.
 const KPI_META = {
@@ -63,9 +64,9 @@ const PRIORITY_FILTERS = ["all", "EMERGENCY", "URGENT", "NORMAL"];
 // login page's vivid gradient red (#d94636), so this brings the donut in
 // line with that punchier feel instead of a desaturated earth-tone set.
 const BREAKDOWN_META = [
-  { key: "emergency", label: "Emergency", color: "#d94636" },
-  { key: "urgent", label: "Urgent", color: "#e8b923" },
-  { key: "normal", label: "Normal", color: "#43a047" },
+  { key: "emergency", label: "STAT", color: "#d94636" },
+  { key: "urgent", label: "ASAP", color: "#e8b923" },
+  { key: "normal", label: "Routine", color: "#43a047" },
 ];
 
 const chartYAxis = ["24", "18", "12", "6", "0"];
@@ -332,7 +333,7 @@ export default function Reports() {
                     priorityFilter === p ? "bg-[#9B1B20] text-white" : "text-[#808080] hover:bg-[#fbf3f3]"
                   }`}
                 >
-                  {p === "all" ? "All Priorities" : p}
+                  {p === "all" ? "All Priorities" : priorityLabel(p)}
                 </button>
               ))}
             </div>
@@ -540,11 +541,11 @@ export default function Reports() {
               {row.hasEllipse ? (
                 <>
                   <IconAlert className="w-[16px] h-[14px] text-[#c26460]" />
-                  <span className={`font-poppins font-semibold text-[11px] tracking-wide ${priorityColorFor(row.priority)}`}>{row.priority}</span>
+                  <span className={`font-poppins font-semibold text-[11px] tracking-wide ${priorityColorFor(row.priority)}`}>{priorityLabel(row.priority)}</span>
                 </>
               ) : (
                 <span className="font-poppins font-medium text-[13px] text-[#868686]">
-                  {row.priority.charAt(0) + row.priority.slice(1).toLowerCase()}
+                  {priorityLabel(row.priority)}
                 </span>
               )}
             </div>
