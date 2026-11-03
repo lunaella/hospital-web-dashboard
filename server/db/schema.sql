@@ -255,6 +255,7 @@ CREATE TABLE donors (
   birth_date              DATE,           -- optional; set from Settings — shown on the Digital Health Card (migration 018)
   emergency_contact_name  TEXT,           -- optional; see migration 018
   emergency_contact_phone TEXT,
+  personal_details_edited_at TIMESTAMPTZ, -- set by the donor's one self-service edit of the fields above (migration 028)
   health_screening  JSONB,                -- mobile app's raw intake answers — the decision tree itself lives client-side
   notify_sms        BOOLEAN NOT NULL DEFAULT true,  -- per-channel opt-out; see migration 008
   notify_email      BOOLEAN NOT NULL DEFAULT true,

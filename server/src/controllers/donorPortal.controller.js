@@ -59,6 +59,7 @@ export const getMyProfile = asyncHandler(async (req, res) => {
             d.birth_date AS "birthDate",
             d.emergency_contact_name AS "emergencyContactName",
             d.emergency_contact_phone AS "emergencyContactPhone",
+            d.personal_details_edited_at AS "personalDetailsEditedAt",
             d.notify_sms AS "notifySms", d.notify_email AS "notifyEmail",
             (d.photo IS NOT NULL) AS "hasPhoto", d.photo_updated_at AS "photoUpdatedAt",
             (d.signature IS NOT NULL) AS "hasSignature", d.signature_updated_at AS "signatureUpdatedAt",
@@ -324,6 +325,25 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   const updates = [];
   const params = [];
 
+  // Donors get one self-service edit of their personal details (migration
+  // 028); after that only staff can change them. Health screening answers
+  // (age/weightKg/gender/healthScreening) aren't covered and stay editable.
+  const editsPersonalDetails = [name, phone, email, birthDate, emergencyContactName, emergencyContactPhone].some(
+    (v) => v !== undefined,
+  );
+  if (editsPersonalDetails) {
+    const { rows: lockRows } = await pool.query(
+      `SELECT personal_details_edited_at AS "editedAt" FROM donors WHERE id = $1`,
+      [req.donor.id],
+    );
+    if (lockRows[0]?.editedAt) {
+      return res.status(403).json({
+        error: "You've already used your one edit of your personal details. Please contact the blood bank to change them.",
+      });
+    }
+    updates.push("personal_details_edited_at = now()");
+  }
+
   if (name !== undefined) {
     if (!name.trim()) return res.status(400).json({ error: "name cannot be empty." });
     params.push(name.trim());
@@ -477,7 +497,8 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
                age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
                notify_sms AS "notifySms", notify_email AS "notifyEmail",
                birth_date AS "birthDate", emergency_contact_name AS "emergencyContactName",
-               emergency_contact_phone AS "emergencyContactPhone"`,
+               emergency_contact_phone AS "emergencyContactPhone",
+               personal_details_edited_at AS "personalDetailsEditedAt"`,
     params
   );
   res.json(rows[0]);
