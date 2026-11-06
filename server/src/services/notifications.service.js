@@ -11,7 +11,7 @@ import { priorityLabel } from "../utils/priorityLabels.js";
 // still get notified, but a min-heap keyed on response time needs *some*
 // number to place them at — treat them as an average responder rather than
 // letting `NULL` sort as either best or worst.
-const FALLBACK_RESPONSE_MINUTES = 60;
+export const FALLBACK_RESPONSE_MINUTES = 60;
 
 // Used only if a broadcast's hospital somehow can't be resolved (shouldn't
 // happen — hospital_id is NOT NULL + FK-constrained on blood_requests) so a
@@ -83,7 +83,7 @@ function overdueRankMs(donor) {
 // Breaking it by "longest since last donation" (never-donated counts as
 // longest) gives every tie a real, defensible answer: the donor who's most
 // overdue goes first.
-function compareDonorRank(a, b) {
+export function compareDonorRank(a, b) {
   if (a.avgResponseMinutes !== b.avgResponseMinutes) return a.avgResponseMinutes - b.avgResponseMinutes;
   return overdueRankMs(a.donor) - overdueRankMs(b.donor);
 }

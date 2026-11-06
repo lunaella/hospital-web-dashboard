@@ -78,7 +78,10 @@ export async function apiFetch(path, options = {}) {
 
   if (!res.ok) {
     if (res.status === 401 && token) handleSessionExpired();
-    throw new Error(body?.error || `Request failed with status ${res.status}`);
+    const error = new Error(body?.error || `Request failed with status ${res.status}`);
+    error.status = res.status;
+    error.body = body;
+    throw error;
   }
   return body;
 }

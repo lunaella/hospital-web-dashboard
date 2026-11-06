@@ -14,6 +14,8 @@ import {
   getActiveAppointmentForDonor,
   getScreeningSummary,
   getDonationHistory,
+  correctDonorBloodType,
+  getDonorChangeLog,
 } from "../controllers/donors.controller.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireSection, requireHospitalScope } from "../middleware/permissions.js";
@@ -36,6 +38,8 @@ donorsRouter.get("/:id/active-appointment", getActiveAppointmentForDonor);
 donorsRouter.get("/:id/screening-summary", getScreeningSummary);
 donorsRouter.get("/:id/donation-history", getDonationHistory);
 donorsRouter.patch("/:id/eligibility", requireSection("donor_management", "edit"), setDonorEligibility);
+donorsRouter.patch("/:id/blood-type", requireSection("donor_management", "edit"), correctDonorBloodType);
+donorsRouter.get("/:id/changes", getDonorChangeLog);
 
 // Looks up an existing appointment's own hospital_id — updateAppointmentStatus
 // and completeAppointment identify their target purely by :id, with no

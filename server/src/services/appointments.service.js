@@ -33,6 +33,22 @@ export async function bookAppointment({ donorId, hospitalId, scheduledAt }) {
       throw new AppointmentBookingError(400, "donorId or hospitalId does not match a known record.");
     }
 
+    // One active (pending/confirmed) appointment per donor. The donor row is
+    // locked so two simultaneous bookings by the same donor (a double tap,
+    // or the app and staff at once) can't both pass this check; the partial
+    // unique index from migration 029 backs it up at the database level.
+    await client.query("SELECT id FROM donors WHERE id = $1 FOR UPDATE", [donorId]);
+    const { rows: activeRows } = await client.query(
+      `SELECT 1 FROM appointments WHERE donor_id = $1 AND status IN ('pending', 'confirmed') LIMIT 1`,
+      [donorId]
+    );
+    if (activeRows[0]) {
+      throw new AppointmentBookingError(
+        409,
+        "This donor already has an active appointment. Cancel or complete it before booking another."
+      );
+    }
+
     const { rows: countRows } = await client.query(
       `SELECT COUNT(*)::int AS count FROM appointments
        WHERE hospital_id = $1 AND scheduled_at = $2 AND status != 'cancelled'`,
@@ -57,6 +73,9 @@ export async function bookAppointment({ donorId, hospitalId, scheduledAt }) {
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     if (err instanceof AppointmentBookingError) throw err;
+    if (err.code === "23505" && err.constraint === "uniq_active_appointment_per_donor") {
+      throw new AppointmentBookingError(409, "This donor already has an active appointment.");
+    }
     if (err.code === "23503") throw new AppointmentBookingError(400, "donorId or hospitalId does not match a known record.");
     throw err;
   } finally {

@@ -8,10 +8,14 @@
 
 import { performance } from "node:perf_hooks";
 import { MinHeap } from "../src/utils/minHeap.js";
-import { rankDonorsByResponseTime } from "../src/services/notifications.service.js";
+import {
+  rankDonorsByResponseTime,
+  compareDonorRank,
+  FALLBACK_RESPONSE_MINUTES,
+} from "../src/services/notifications.service.js";
 
 const SIZES = [100, 1_000, 10_000, 100_000, 1_000_000];
-const DONOR_SIZES = [100, 1_000, 10_000, 100_000];
+const DONOR_SIZES = [10, 100, 1_000, 10_000, 100_000];
 const RUNS = 7;
 
 function rng(seed) {
@@ -63,9 +67,24 @@ function donorRun(n) {
     lastDonationAt: rand() < 0.3 ? null : new Date(Date.UTC(2025, 0, 1) + Math.floor(rand() * 600) * 86400000).toISOString(),
   }));
   const avg = new Map(donors.filter(() => rand() < 0.7).map((d) => [d.id, rand() * 120]));
-  const runs = [];
-  for (let r = 0; r < RUNS; r++) runs.push(time(() => rankDonorsByResponseTime(donors, avg)));
-  return { donors: n, rankMs: median(runs) };
+  // The equivalent the panel asked for: the same entries, the same
+  // comparator, ordered by Array.prototype.sort instead of the heap. Both
+  // produce the full ranking (every matching donor), which is what a
+  // broadcast actually uses.
+  const sortRank = () =>
+    donors
+      .map((donor) => ({ donor, avgResponseMinutes: avg.get(donor.id) ?? FALLBACK_RESPONSE_MINUTES }))
+      .sort(compareDonorRank);
+  const heapRuns = [], sortRuns = [];
+  let heapOut, sortOut;
+  for (let r = 0; r < RUNS; r++) {
+    heapRuns.push(time(() => { heapOut = rankDonorsByResponseTime(donors, avg); }));
+    sortRuns.push(time(() => { sortOut = sortRank(); }));
+  }
+  // Same order? Compared on the ranking keys, since donors that tie on both
+  // keys may come out in either order (the heap isn't stable; sort is).
+  const sameOrder = heapOut.length === sortOut.length && heapOut.every((h, i) => compareDonorRank(h, sortOut[i]) === 0);
+  return { donors: n, rankMs: median(heapRuns), sortMs: median(sortRuns), sameOrder };
 }
 
 // Warm up the JIT so the first size isn't penalized.
@@ -81,6 +100,11 @@ if (process.argv.includes("--json")) {
     "insert µs/op": h.insertPerOpUs.toFixed(3), "extract µs/op": h.extractPerOpUs.toFixed(3),
     "heap top-10 (ms)": h.heapFirst10Ms.toFixed(2), "sort top-10 (ms)": h.sortFirst10Ms.toFixed(2),
   })));
-  console.table(ranking.map((r) => ({ donors: r.donors, "rank for broadcast (ms)": r.rankMs.toFixed(2) })));
+  console.table(ranking.map((r) => ({
+    donors: r.donors,
+    "heap full ranking (ms)": r.rankMs.toFixed(2),
+    "sort full ranking (ms)": r.sortMs.toFixed(2),
+    "same order": r.sameOrder,
+  })));
 }
 process.exit(0);

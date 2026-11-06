@@ -331,11 +331,16 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
   const editsPersonalDetails = [name, phone, email, birthDate, emergencyContactName, emergencyContactPhone].some(
     (v) => v !== undefined,
   );
+  let before = null;
   if (editsPersonalDetails) {
     const { rows: lockRows } = await pool.query(
-      `SELECT personal_details_edited_at AS "editedAt" FROM donors WHERE id = $1`,
+      `SELECT personal_details_edited_at AS "editedAt", name, phone, email,
+              to_char(birth_date, 'YYYY-MM-DD') AS birth_date,
+              emergency_contact_name, emergency_contact_phone
+       FROM donors WHERE id = $1`,
       [req.donor.id],
     );
+    before = lockRows[0] ?? null;
     if (lockRows[0]?.editedAt) {
       return res.status(403).json({
         error: "You've already used your one edit of your personal details. Please contact the blood bank to change them.",
@@ -501,6 +506,27 @@ export const updateMyProfile = asyncHandler(async (req, res) => {
                personal_details_edited_at AS "personalDetailsEditedAt"`,
     params
   );
+
+  // Record the donor's own edit of their personal details (donor_change_log),
+  // so staff can see what was changed from what.
+  if (before) {
+    const after = rows[0];
+    const fields = [
+      ["name", before.name, after.name],
+      ["phone", before.phone, after.phone],
+      ["email", before.email, after.email],
+      ["birth_date", before.birth_date, birthDate === undefined ? before.birth_date : birthDate],
+      ["emergency_contact_name", before.emergency_contact_name, after.emergencyContactName],
+      ["emergency_contact_phone", before.emergency_contact_phone, after.emergencyContactPhone],
+    ].filter(([, oldValue, newValue]) => (oldValue ?? null) !== (newValue ?? null));
+    for (const [field, oldValue, newValue] of fields) {
+      await pool.query(
+        `INSERT INTO donor_change_log (donor_id, field, old_value, new_value, changed_by)
+         VALUES ($1, $2, $3, $4, 'donor')`,
+        [req.donor.id, field, oldValue, newValue],
+      );
+    }
+  }
   res.json(rows[0]);
 });
 
@@ -904,6 +930,46 @@ export const bookMyAppointment = asyncHandler(async (req, res) => {
   const { hospitalId, scheduledAt } = req.body;
   if (!hospitalId || !scheduledAt) {
     return res.status(400).json({ error: "hospitalId and scheduledAt are required." });
+  }
+  // The app only offers booking to an eligible donor, but the server checks
+  // again so a deferred donor (or a stale app) can't book by calling the API.
+  const { rows: donorRows } = await pool.query(
+    `SELECT age, weight_kg AS "weightKg", gender, health_screening AS "healthScreening",
+            last_donation_at AS "lastDonationAt"
+     FROM donors WHERE id = $1`,
+    [req.donor.id]
+  );
+  const screening = classifyDonorRow(donorRows[0] ?? {});
+  if (screening.status !== "ELIGIBLE") {
+    return res.status(409).json({
+      error:
+        screening.status === "UNKNOWN"
+          ? "Complete your health screening before booking."
+          : `You can't book right now: ${screening.message}`,
+      screening,
+    });
+  }
+  // Identity verification (Didit) is required before booking. The app shows
+  // a "Verification required" gate on the booking screen; this is the
+  // server-side check so the API can't be called around it. Verification
+  // can still be skipped at registration — it only blocks booking.
+  // Staff-booked walk-ins (admin side) don't go through this route.
+  const { rows: verRows } = await pool.query(
+    `SELECT status FROM donor_verifications WHERE donor_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
+    [req.donor.id]
+  );
+  const verificationStatus = verRows[0]?.status ?? null;
+  if (verificationStatus !== "verified") {
+    return res.status(403).json({
+      code: "VERIFICATION_REQUIRED",
+      verificationStatus,
+      error:
+        verificationStatus === "pending" || verificationStatus === "in_review"
+          ? "Your ID verification is still being reviewed. You can book once it's approved."
+          : verificationStatus === "rejected"
+            ? "Your ID verification wasn't approved. Verify again from your profile before booking."
+            : "Verify your identity from your profile before booking an appointment.",
+    });
   }
   try {
     const appointment = await bookAppointment({ donorId: req.donor.id, hospitalId, scheduledAt });

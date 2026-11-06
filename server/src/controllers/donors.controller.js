@@ -4,7 +4,7 @@ import { hospitalIdParam } from "../utils/hospitalScope.js";
 import { bookAppointment, AppointmentBookingError } from "../services/appointments.service.js";
 import { verifySessionToken } from "../utils/jwt.js";
 import { broadcast, broadcastToDonors, sendToDonor } from "../realtime/hub.js";
-import { ratingFor } from "./requests.controller.js";
+import { newUnitCode } from "./donationUnits.controller.js";
 import { classifyDonorRow, donorEligibility } from "../utils/eligibilityClassifier.js";
 import { MinHeap } from "../utils/minHeap.js";
 import { sendPushToDonor } from "../utils/push.js";
@@ -387,22 +387,35 @@ export const createAppointment = asyncHandler(async (req, res) => {
   }
 });
 
-// "completed" is deliberately excluded here — recording a completed donation
-// has real side effects (donor_arrivals, last_donation_at, inventory) and
-// must go through the transactional completeAppointment endpoint below
-// instead of this plain status-only update.
+// "completed" is deliberately excluded here — recording a donation has real
+// side effects (donor_arrivals, last_donation_at, a collected unit) and must
+// go through the transactional completeAppointment endpoint below instead of
+// this plain status-only update.
 export const updateAppointmentStatus = asyncHandler(async (req, res) => {
   const { status } = req.body;
   const allowed = ["confirmed", "pending", "cancelled", "no_show"];
   if (!allowed.includes(status)) {
     return res.status(400).json({ error: `status must be one of: ${allowed.join(", ")}` });
   }
+  // A completed appointment has a collected unit behind it; changing its
+  // status here would leave that unit and the donor's 90-day interval in
+  // place while the appointment said otherwise. "confirmed" means the donor
+  // has arrived, so it stamps the check-in time (kept if already set).
   const { rows } = await pool.query(
-    `UPDATE appointments SET status = $1, updated_at = now() WHERE id = $2
-     RETURNING id, donor_id AS "donorId", hospital_id AS "hospitalId", scheduled_at AS "scheduledAt", status`,
+    `UPDATE appointments
+     SET status = $1::appointment_status,
+         checked_in_at = CASE WHEN $1::appointment_status = 'confirmed' THEN COALESCE(checked_in_at, now()) ELSE checked_in_at END,
+         updated_at = now()
+     WHERE id = $2 AND status != 'completed'
+     RETURNING id, donor_id AS "donorId", hospital_id AS "hospitalId", scheduled_at AS "scheduledAt", status,
+               checked_in_at AS "checkedInAt"`,
     [status, req.params.id]
   );
-  if (!rows[0]) return res.status(404).json({ error: "Appointment not found." });
+  if (!rows[0]) {
+    const { rows: exists } = await pool.query("SELECT status FROM appointments WHERE id = $1", [req.params.id]);
+    if (exists[0]) return res.status(409).json({ error: "This donation has already been recorded; its status can't be changed." });
+    return res.status(404).json({ error: "Appointment not found." });
+  }
   res.json(rows[0]);
   sendToDonor(rows[0].donorId, { type: "appointment_status_changed" });
   broadcast({ type: "appointment_updated", hospitalId: rows[0].hospitalId, appointment: { id: rows[0].id, status: rows[0].status } });
@@ -446,26 +459,35 @@ export const getScreeningSummary = asyncHandler(async (req, res) => {
   res.json(classifyDonorRow(rows[0]));
 });
 
-// Records an actual completed donation. This is the one place that closes
-// the loop between "donor showed up" and the rest of the system: it flips
-// the appointment to completed, logs a donor_arrivals row (so the donor
-// shows up in Dashboard's Recent Arrivals) tagged to the same hospital as
-// the appointment, starts the donor's 90-day DOH cooling period, and adds
-// one unit to that hospital's inventory for that blood type. It also
-// counts this donation toward whichever broadcast is currently asking for
-// this exact blood type at this hospital (same units_fulfilled/auto-resolve
-// logic as fulfillRequest, requests.controller.js) — a completed donation
-// is a real unit collected, so it should move that request's quota the
-// same way a manual "record units" entry would, without staff having to
-// remember to do that separately. Wrapped in a single transaction with a
-// row lock so a double-click can't double-count the same donation.
+// Records that blood was collected from the donor. It deliberately does NOT
+// add the unit to inventory or count it toward a request: collected blood
+// still has to pass testing (donationUnits.controller.js release/discard)
+// and then be issued to a request (issue). What it does:
+//   - re-runs the donor's screening server-side (classifyDonorRow). A donor
+//     who isn't ELIGIBLE (deferred, needs clinical review, or no screening on
+//     file) is refused unless staff send screeningOverride: true after the
+//     on-site interview/physician clearance; the override and its note are
+//     stored on the unit.
+//   - flips the appointment to completed and starts the 90-day interval
+//   - logs the donor_arrivals row (arrived_at = the check-in time if the
+//     donor was checked in, for response-time tracking)
+//   - creates a donation_units row with status 'collected'
+//   - credits the donation to an open request of the same blood type at this
+//     hospital, chosen by the MinHeap (most urgent tier, then oldest). The
+//     credit records which request the donor responded to; the request's
+//     units_fulfilled only changes when a released unit is issued to it.
+// Everything runs in one transaction with the appointment row locked, so a
+// double-click can't record the same donation twice.
 export const completeAppointment = asyncHandler(async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `SELECT a.id, a.status, a.donor_id AS "donorId", a.hospital_id AS "hospitalId", d.blood_type AS "bloodType"
+      `SELECT a.id, a.status, a.donor_id AS "donorId", a.hospital_id AS "hospitalId",
+              a.checked_in_at AS "checkedInAt", d.blood_type AS "bloodType",
+              d.age, d.weight_kg AS "weightKg", d.gender, d.health_screening AS "healthScreening",
+              d.last_donation_at AS "lastDonationAt"
        FROM appointments a
        JOIN donors d ON d.id = a.donor_id
        WHERE a.id = $1
@@ -481,123 +503,120 @@ export const completeAppointment = asyncHandler(async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "This donation has already been recorded." });
     }
+    if (appt.status === "cancelled" || appt.status === "no_show") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: `This appointment is ${appt.status.replace("_", "-")}; book a new one first.` });
+    }
 
-    // A donor who registered with "I'm not sure" has no blood type on file
-    // (migration 027). Staff must record it here, from the blood bank's
-    // typing, before the unit can go into inventory or toward a request.
+    const screening = classifyDonorRow(appt);
+    const override = req.body?.screeningOverride === true;
+    const screeningNote = typeof req.body?.screeningNote === "string" ? req.body.screeningNote.trim() || null : null;
+    if (screening.status !== "ELIGIBLE" && !override) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        error:
+          screening.status === "UNKNOWN"
+            ? `${screening.message} Screen the donor on site before recording the donation.`
+            : `The donor's screening says ${screening.status.replace("_", " ").toLowerCase()}: ${screening.message}`,
+        code: "SCREENING_NOT_CLEAR",
+        screening,
+      });
+    }
+
+    // Provisional type for the unit: the donor's type on file, or what staff
+    // enter for a donor registered as "not sure" (migration 027). The lab's
+    // typing confirms or corrects it at release.
     let bloodType = appt.bloodType;
-    if (!bloodType) {
-      bloodType = req.body?.bloodType;
-      if (!BLOOD_TYPES.includes(bloodType)) {
+    if (!bloodType && req.body?.bloodType !== undefined) {
+      if (!BLOOD_TYPES.includes(req.body.bloodType)) {
         await client.query("ROLLBACK");
-        return res.status(400).json({
-          error: "This donor's blood type is not on file yet. Record it before recording the donation.",
-        });
+        return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}` });
       }
-      await client.query("UPDATE donors SET blood_type = $1, updated_at = now() WHERE id = $2", [
-        bloodType,
-        appt.donorId,
-      ]);
+      bloodType = req.body.bloodType;
     }
 
     await client.query(
-      "UPDATE appointments SET status = 'completed', updated_at = now() WHERE id = $1",
+      `UPDATE appointments SET status = 'completed', checked_in_at = COALESCE(checked_in_at, now()), updated_at = now()
+       WHERE id = $1`,
       [appt.id]
     );
-    await client.query(
-      "UPDATE donors SET last_donation_at = now(), updated_at = now() WHERE id = $1",
-      [appt.donorId]
-    );
-    // request_id starts NULL and is backfilled below once the matching
-    // request (if any) is determined — this is the one place donor_arrivals
-    // rows get created, so it's also the only place that can ever link a
-    // visit to the request it fulfilled (the Completed Requests report's
-    // "Assigned Donor(s)" column reads this).
+    await client.query("UPDATE donors SET last_donation_at = now(), updated_at = now() WHERE id = $1", [appt.donorId]);
     const { rows: arrivalRows } = await client.query(
-      "INSERT INTO donor_arrivals (donor_id, hospital_id, arrived_at) VALUES ($1, $2, now()) RETURNING id",
-      [appt.donorId, appt.hospitalId]
+      `INSERT INTO donor_arrivals (donor_id, hospital_id, arrived_at, appointment_id)
+       VALUES ($1, $2, COALESCE($3, now()), $4) RETURNING id`,
+      [appt.donorId, appt.hospitalId, appt.checkedInAt, appt.id]
     );
     const arrivalId = arrivalRows[0].id;
-    // Upsert rather than a plain UPDATE: a hospital might not have a
-    // pre-seeded inventory row for every blood type, and the first
-    // completed donation of a given type at a given hospital should still
-    // count instead of silently updating zero rows.
-    await client.query(
-      `INSERT INTO blood_inventory (hospital_id, blood_type, units_available)
-       VALUES ($1, $2, 1)
-       ON CONFLICT (hospital_id, blood_type)
-       DO UPDATE SET units_available = blood_inventory.units_available + 1, updated_at = now()`,
-      [appt.hospitalId, bloodType]
-    );
 
-    // Min-Heap Queue Activation: every still-open request for this exact
-    // blood type at this hospital is a candidate this donor's arrival could
-    // satisfy — inserted into a real MinHeap (utils/minHeap.js, the same
-    // class notifications.service.js uses to rank donor response times) so
-    // extractMin() is the thing actually deciding which request benefits,
-    // not a SQL ORDER BY LIMIT 1 standing in for one. Same priority-tier-
-    // then-age comparator as the donor feed's own sort (donorPortal.
-    // controller.js's listOpenRequestsForDonor) so the request most likely
-    // to be why this donor showed up is the one credited.
-    const { rows: candidateRows } = await client.query(
-      `SELECT id, request_code AS "requestCode", units_needed AS "unitsNeeded",
-              units_fulfilled AS "unitsFulfilled", priority, created_at AS "createdAt"
-       FROM blood_requests
-       WHERE hospital_id = $1 AND blood_type = $2 AND status IN ('OPEN', 'PARTIALLY_FULFILLED')
-       FOR UPDATE`,
-      [appt.hospitalId, bloodType]
-    );
-    const priorityRank = { EMERGENCY: 0, URGENT: 1 };
-    const requestHeap = new MinHeap((a, b) => {
-      const rankA = priorityRank[a.priority] ?? 2;
-      const rankB = priorityRank[b.priority] ?? 2;
-      if (rankA !== rankB) return rankA - rankB;
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    });
-    for (const row of candidateRows) requestHeap.insert(row);
-
-    let fulfilledRequest = null;
-    const match = requestHeap.extractMin();
-    if (match) {
-      const newFulfilled = Math.min(match.unitsNeeded, match.unitsFulfilled + 1);
-      const isNowFulfilled = newFulfilled >= match.unitsNeeded;
-      const resolvedAt = isNowFulfilled ? new Date() : null;
-      const rating = isNowFulfilled
-        ? ratingFor(match.priority, (resolvedAt - new Date(match.createdAt)) / 60000)
-        : null;
-      const { rows: updated } = await client.query(
-        `UPDATE blood_requests
-         SET units_fulfilled = $1,
-             status = $2,
-             resolved_at = COALESCE($3, resolved_at),
-             system_rating = COALESCE($4, system_rating)
-         WHERE id = $5
-         RETURNING request_code AS "requestCode", units_needed AS "unitsNeeded",
-                   units_fulfilled AS "unitsFulfilled", status`,
-        [newFulfilled, isNowFulfilled ? "FULFILLED" : "PARTIALLY_FULFILLED", resolvedAt, rating, match.id]
+    // Min-Heap: open requests for this exact blood type at this hospital,
+    // most urgent tier first, then oldest — extractMin() picks the request
+    // this donation is credited to.
+    let creditedRequest = null;
+    if (bloodType) {
+      const { rows: candidateRows } = await client.query(
+        `SELECT id, request_code AS "requestCode", units_needed AS "unitsNeeded",
+                units_fulfilled AS "unitsFulfilled", priority, created_at AS "createdAt"
+         FROM blood_requests
+         WHERE hospital_id = $1 AND blood_type = $2 AND status IN ('OPEN', 'PARTIALLY_FULFILLED')`,
+        [appt.hospitalId, bloodType]
       );
-      fulfilledRequest = updated[0];
-      await client.query("UPDATE donor_arrivals SET request_id = $1 WHERE id = $2", [match.id, arrivalId]);
+      const priorityRank = { EMERGENCY: 0, URGENT: 1 };
+      const requestHeap = new MinHeap((a, b) => {
+        const rankA = priorityRank[a.priority] ?? 2;
+        const rankB = priorityRank[b.priority] ?? 2;
+        if (rankA !== rankB) return rankA - rankB;
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      });
+      for (const row of candidateRows) requestHeap.insert(row);
+      const match = requestHeap.extractMin();
+      if (match) {
+        creditedRequest = { requestCode: match.requestCode, unitsNeeded: match.unitsNeeded, unitsFulfilled: match.unitsFulfilled };
+        await client.query("UPDATE donor_arrivals SET request_id = $1 WHERE id = $2", [match.id, arrivalId]);
+        creditedRequest.id = match.id;
+      }
     }
 
-    await client.query("COMMIT");
-    res.json({ id: appt.id, status: "completed", fulfilledRequest });
+    let unit = null;
+    for (let attempt = 0; attempt < 5 && !unit; attempt++) {
+      await client.query("SAVEPOINT unit_code");
+      try {
+        const { rows: unitRows } = await client.query(
+          `INSERT INTO donation_units (unit_code, appointment_id, donor_id, hospital_id, blood_type, request_id,
+                                       screening_override, screening_note, collected_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           RETURNING id, unit_code AS "unitCode", status, blood_type AS "bloodType"`,
+          [
+            newUnitCode(),
+            appt.id,
+            appt.donorId,
+            appt.hospitalId,
+            bloodType,
+            creditedRequest?.id ?? null,
+            screening.status !== "ELIGIBLE",
+            screening.status !== "ELIGIBLE" ? screeningNote ?? `Recorded with screening ${screening.status}` : null,
+            req.admin?.id ?? null,
+          ]
+        );
+        unit = unitRows[0];
+      } catch (err) {
+        if (err.code !== "23505" || !/unit_code/.test(err.constraint ?? "")) throw err;
+        await client.query("ROLLBACK TO SAVEPOINT unit_code");
+      }
+    }
+    if (!unit) throw new Error("Could not generate a unique unit code.");
 
-    // Pushes the completion to every open admin tab/station in real time —
-    // same fire-and-forget-after-respond pattern as appointment_booked/
-    // appointment_cancelled (donorPortal.controller.js).
+    await client.query("COMMIT");
+    if (creditedRequest) delete creditedRequest.id;
+    res.json({ id: appt.id, status: "completed", unit, creditedRequest, screening: screening.status });
+
     broadcast({
       type: "appointment_completed",
       hospitalId: appt.hospitalId,
       appointment: { id: appt.id, status: "completed" },
-      fulfilledRequest,
     });
     sendToDonor(appt.donorId, { type: "donation_completed" });
-    // A matched request's units/status changed, so every donor's open
-    // requests list may be stale.
-    if (fulfilledRequest) broadcastToDonors({ type: "blood_request_updated" });
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     throw err;
   } finally {
     client.release();
@@ -630,7 +649,9 @@ export const checkInByQr = asyncHandler(async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT a.id, a.status, a.hospital_id AS "hospitalId", a.scheduled_at AS "scheduledAt",
-            d.name AS "donorName", d.donor_code AS "donorCode", d.blood_type AS "bloodType"
+            d.name AS "donorName", d.donor_code AS "donorCode", d.blood_type AS "bloodType",
+            d.age, d.weight_kg AS "weightKg", d.gender, d.health_screening AS "healthScreening",
+            d.last_donation_at AS "lastDonationAt"
      FROM appointments a
      JOIN donors d ON d.id = a.donor_id
      WHERE a.id = $1 AND a.donor_id = $2`,
@@ -642,7 +663,13 @@ export const checkInByQr = asyncHandler(async (req, res) => {
     return res.status(400).json({ error: `This appointment is already ${appt.status}.` });
   }
 
-  await pool.query("UPDATE appointments SET status = 'confirmed', updated_at = now() WHERE id = $1", [appt.id]);
+  await pool.query(
+    "UPDATE appointments SET status = 'confirmed', checked_in_at = COALESCE(checked_in_at, now()), updated_at = now() WHERE id = $1",
+    [appt.id]
+  );
+  // Re-run the screening server-side so staff see it at check-in; it is
+  // enforced when the donation is recorded (completeAppointment).
+  const screening = classifyDonorRow(appt);
 
   res.json({
     id: appt.id,
@@ -651,7 +678,73 @@ export const checkInByQr = asyncHandler(async (req, res) => {
     donorCode: appt.donorCode,
     bloodType: appt.bloodType,
     scheduledAt: appt.scheduledAt,
+    screening,
   });
   sendToDonor(payload.donorId, { type: "appointment_status_changed" });
   broadcast({ type: "appointment_updated", hospitalId: appt.hospitalId, appointment: { id: appt.id, status: "confirmed" } });
+});
+
+// Staff correction of a donor's blood type (e.g. the donor typed it wrong at
+// registration and the blood bank has a record). Donors can never change it
+// themselves (updateMyProfile ignores it). A reason is required, and the
+// old and new values go to donor_change_log with the admin who made the
+// change. Lab typing at unit release (donationUnits.controller.js) is the
+// other way it changes, and is logged the same way.
+export const correctDonorBloodType = asyncHandler(async (req, res) => {
+  const { bloodType } = req.body ?? {};
+  const reason = String(req.body?.reason ?? "").trim();
+  if (!BLOOD_TYPES.includes(bloodType)) {
+    return res.status(400).json({ error: `bloodType must be one of: ${BLOOD_TYPES.join(", ")}` });
+  }
+  if (!reason) return res.status(400).json({ error: "Give a reason for the correction." });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(`SELECT blood_type AS "bloodType" FROM donors WHERE id = $1 FOR UPDATE`, [
+      req.params.id,
+    ]);
+    if (!rows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Donor not found." });
+    }
+    if (rows[0].bloodType === bloodType) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: `The donor's blood type is already ${bloodType}.` });
+    }
+    await client.query(
+      `INSERT INTO donor_change_log (donor_id, field, old_value, new_value, changed_by, admin_id, reason)
+       VALUES ($1, 'blood_type', $2, $3, 'staff', $4, $5)`,
+      [req.params.id, rows[0].bloodType, bloodType, req.admin.id, reason]
+    );
+    // A staff correction isn't lab typing, so the lab confirmation is cleared
+    // until the donor's next unit is typed.
+    await client.query(
+      "UPDATE donors SET blood_type = $1, blood_type_confirmed_at = NULL, updated_at = now() WHERE id = $2",
+      [bloodType, req.params.id]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+  res.json({ id: req.params.id, bloodType });
+  sendToDonor(req.params.id, { type: "profile_updated" });
+});
+
+// History of changes to a donor's details (donor_change_log), newest first.
+export const getDonorChangeLog = asyncHandler(async (req, res) => {
+  const { rows } = await pool.query(
+    `SELECT c.id, c.field, c.old_value AS "oldValue", c.new_value AS "newValue", c.changed_by AS "changedBy",
+            a.username AS "adminName", c.reason, c.created_at AS "createdAt"
+     FROM donor_change_log c
+     LEFT JOIN admins a ON a.id = c.admin_id
+     WHERE c.donor_id = $1
+     ORDER BY c.created_at DESC
+     LIMIT 100`,
+    [req.params.id]
+  );
+  res.json(rows);
 });

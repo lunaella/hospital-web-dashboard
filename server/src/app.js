@@ -12,6 +12,7 @@ import { teamRouter } from "./routes/team.routes.js";
 import { donorAuthRouter } from "./routes/donorAuth.routes.js";
 import { donorPortalRouter } from "./routes/donorPortal.routes.js";
 import { diditWebhookRouter } from "./routes/diditWebhook.routes.js";
+import { donationUnitsRouter } from "./routes/donationUnits.routes.js";
 import { getDonorPhoto, getDonorSignature } from "./controllers/donorPortal.controller.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
@@ -33,6 +34,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/donors", donorsRouter);
 app.use("/api/appointments", appointmentsRouter);
+app.use("/api/donation-units", donationUnitsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/requests", requestsRouter);

@@ -12,7 +12,6 @@ import {
   markMyNotificationsRead,
   getAppointmentQrToken,
   deleteMyAccount,
-  submitVerification,
   startDiditVerification,
   registerDevice,
   unregisterDevice,
@@ -23,7 +22,7 @@ import {
   submitMalariaCheck,
 } from "../controllers/donorPortal.controller.js";
 import { requireDonorAuth } from "../middleware/donorAuth.js";
-import { uploadVerificationFiles, uploadProfilePhoto, uploadSignature } from "../middleware/upload.js";
+import { uploadProfilePhoto, uploadSignature } from "../middleware/upload.js";
 
 // Everything here requires a real donor session (see middleware/donorAuth.js)
 // — this is the "logged in" surface of the Android app's API.
@@ -36,7 +35,12 @@ donorPortalRouter.delete("/me", deleteMyAccount);
 donorPortalRouter.post("/me/malaria-check", submitMalariaCheck);
 donorPortalRouter.post("/me/photo", uploadProfilePhoto, uploadMyPhoto);
 donorPortalRouter.post("/me/signature", uploadSignature, uploadMySignature);
-donorPortalRouter.post("/me/verification", uploadVerificationFiles, submitVerification); // legacy on-device flow, no longer called by the app
+// The legacy on-device flow marked a donor verified from whatever the client
+// sent, with no third-party check. The app uses Didit (below) instead, so
+// this is closed; verification only comes from the signed Didit webhook.
+donorPortalRouter.post("/me/verification", (req, res) =>
+  res.status(410).json({ error: "This verification method is no longer available. Update the app and verify with Didit." })
+);
 donorPortalRouter.post("/me/verification/didit-session", startDiditVerification);
 donorPortalRouter.get("/requests", listOpenRequestsForDonor);
 donorPortalRouter.get("/requests/nearby", checkNearbyRequest);

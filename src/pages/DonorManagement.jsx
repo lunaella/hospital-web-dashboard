@@ -10,6 +10,7 @@ import Avatar from "../components/Avatar";
 import { IconFilter, IconCalendar, IconCheck, IconPlus, IconClock, IconLock, IconX } from "../components/icons";
 import { maskPhone } from "../utils/pii";
 import DonorProfileModal from "../components/DonorProfileModal";
+import CollectedUnits from "../components/CollectedUnits";
 
 const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
@@ -293,9 +294,40 @@ export default function DonorManagement() {
     setBloodTypePrompt(null);
   }
 
-  // Closes the loop on a confirmed appointment: logs the arrival, starts the
-  // donor's 90-day cooling period, and bumps inventory server-side. Refetches
-  // the donor list afterward since this donor's eligibility just changed.
+  // Records that blood was collected from a checked-in donor: starts their
+  // 90-day interval and creates a "collected" unit (see Collected Units
+  // below). It does NOT add to inventory or to a request's count — that only
+  // happens when the unit is released after testing and then issued. The
+  // server re-runs the donor's screening first; if it isn't clear, staff
+  // must confirm the on-site assessment cleared the donor, with a note.
+  async function postDonation(appointmentId, body) {
+    try {
+      return await api.post(`/api/appointments/${appointmentId}/complete`, body);
+    } catch (err) {
+      if (err.status !== 409 || err.body?.code !== "SCREENING_NOT_CLEAR") throw err;
+      const note = window.prompt(
+        `${err.message}\n\nOnly continue if the on-site interview or physician cleared this donor. ` +
+          "Enter who cleared them and why to record the donation, or cancel."
+      );
+      if (!note?.trim()) return null;
+      return api.post(`/api/appointments/${appointmentId}/complete`, {
+        ...body,
+        screeningOverride: true,
+        screeningNote: note.trim(),
+      });
+    }
+  }
+
+  async function refreshDonorList() {
+    const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
+    bloodTypeFilter.forEach((t) => params.append("bloodType", t));
+    if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
+    const data = await api.get(`/api/donors?${params.toString()}`);
+    setDonors(data.donors.map(mapDonor));
+    setTotalDonors(data.total);
+    setTotalPages(data.totalPages);
+  }
+
   async function recordDonation(appointmentId) {
     const appointment = appointments.find((a) => a.id === appointmentId);
     let body;
@@ -305,16 +337,16 @@ export default function DonorManagement() {
       body = { bloodType };
     }
     try {
-      await api.post(`/api/appointments/${appointmentId}/complete`, body);
+      const result = await postDonation(appointmentId, body);
+      if (!result) return;
       setAppointments((prev) => prev.map((a) => (a.id === appointmentId ? { ...a, status: "completed" } : a)));
-
-      const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
-      bloodTypeFilter.forEach((t) => params.append("bloodType", t));
-      if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
-      const data = await api.get(`/api/donors?${params.toString()}`);
-      setDonors(data.donors.map(mapDonor));
-      setTotalDonors(data.total);
-      setTotalPages(data.totalPages);
+      setCheckinBanner({
+        type: "success",
+        message:
+          `Donation collected as unit ${result.unit.unitCode}. It goes into inventory once it passes testing (Collected Units).` +
+          (result.creditedRequest ? ` Credited as a response to ${result.creditedRequest.requestCode}.` : ""),
+      });
+      await refreshDonorList();
     } catch (err) {
       setAppointmentsError(err.message);
     }
@@ -465,41 +497,24 @@ export default function DonorManagement() {
       return;
     }
 
-    let bloodType = donor.bloodType;
-    if (!bloodType) {
-      bloodType = await askForBloodType(donor.name);
-      if (!bloodType) {
-        setCheckinBanner({ type: "info", message: `${donor.name}'s donation was not recorded — their blood type is needed first.` });
-        return;
-      }
-    }
-
+    // Scanning the pass checks the donor in (arrived). Recording the donation
+    // is a separate step after collection ("Record Donation" on the
+    // appointment card), so a scan never stands for collected or usable blood.
     try {
-      const result = await api.post(
-        `/api/appointments/${activeAppointment.id}/complete`,
-        donor.bloodType ? undefined : { bloodType }
-      );
-      setAppointments((prev) => prev.map((a) => (a.id === activeAppointment.id ? { ...a, status: "completed" } : a)));
-      const quotaNote = result.fulfilledRequest
-        ? ` Counted toward ${result.fulfilledRequest.requestCode} (${result.fulfilledRequest.unitsFulfilled}/${result.fulfilledRequest.unitsNeeded} ${bloodType}).`
-        : "";
-      const eligibilityNote = screening?.status === "ELIGIBLE" ? " Verified eligible." : "";
+      await api.patch(`/api/appointments/${activeAppointment.id}`, { status: "confirmed" });
+      setAppointments((prev) => prev.map((a) => (a.id === activeAppointment.id ? { ...a, status: "confirmed" } : a)));
+      const eligibilityNote =
+        screening?.status === "ELIGIBLE"
+          ? " Screening clear."
+          : screening?.status === "UNKNOWN"
+          ? " No screening on file: screen the donor on site before collection."
+          : "";
       setCheckinBanner({
         type: "success",
-        message: `${donor.name} checked in and donation recorded.${eligibilityNote}${quotaNote}`,
+        message: `${donor.name} checked in.${eligibilityNote} Press Record Donation on their appointment after the blood is collected.`,
       });
-
-      // Same donor-list refetch recordDonation does after a manual
-      // "Record Donation" click — this donor's eligibility just changed.
-      const params = new URLSearchParams({ page: String(page + 1), pageSize: String(PAGE_SIZE) });
-      bloodTypeFilter.forEach((t) => params.append("bloodType", t));
-      if (eligibilityFilter !== "all") params.set("eligibility", eligibilityFilter);
-      const data = await api.get(`/api/donors?${params.toString()}`);
-      setDonors(data.donors.map(mapDonor));
-      setTotalDonors(data.total);
-      setTotalPages(data.totalPages);
     } catch (err) {
-      setCheckinBanner({ type: "error", message: `Couldn't complete ${donor.name}'s check-in: ${err.message}` });
+      setCheckinBanner({ type: "error", message: `Couldn't check in ${donor.name}: ${err.message}` });
     }
   }
 
@@ -632,6 +647,7 @@ export default function DonorManagement() {
   }
 
   return (
+    <>
     <div className="bg-white relative w-[1440px] h-[1050px] mx-auto font-poppins">
 
       {/* Top bar */}
@@ -960,7 +976,7 @@ export default function DonorManagement() {
                 <div className="w-[13px] h-[13px] text-black">
                   <IconCheck className="block max-w-none size-full" />
                 </div>
-                <span className="text-[13px] font-medium text-black">Donation Recorded</span>
+                <span className="text-[13px] font-medium text-black">Donation Collected</span>
               </div>
             ) : apt.status === "cancelled" ? (
               <div className="absolute border border-[#f1dddc] border-solid h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center gap-1 bg-[#f8f3f4]">
@@ -986,7 +1002,7 @@ export default function DonorManagement() {
                 onClick={() => confirmArrival(apt.id)}
                 className="absolute bg-[#9B1B20] h-[28px] left-[26px] rounded-[4px] top-[104px] w-[228px] flex items-center justify-center cursor-pointer hover:bg-[#8B1218] transition-colors"
               >
-                <span className="text-[13px] font-medium text-white">Confirm Arrival</span>
+                <span className="text-[13px] font-medium text-white">Check In</span>
               </button>
             )}
           </div>
@@ -1323,5 +1339,9 @@ export default function DonorManagement() {
 
       <DonorProfileModal donorId={profileDonorId} onClose={() => setProfileDonorId(null)} />
     </div>
+    <div className="w-[1440px] mx-auto font-poppins pl-[320px] pr-[63px] pb-12">
+      <CollectedUnits hospitalId={hospitalId} onMessage={setCheckinBanner} />
+    </div>
+    </>
   );
 }

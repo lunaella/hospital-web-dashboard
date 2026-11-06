@@ -466,6 +466,74 @@ CREATE TABLE system_health_snapshots (
 
 CREATE INDEX idx_system_health_recorded_at ON system_health_snapshots(recorded_at DESC);
 
+-- Donation stages, donor change log and uniqueness safeguards (migration 029;
+-- see that file for the stage definitions).
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ;
+
+ALTER TABLE donor_arrivals ADD COLUMN IF NOT EXISTS appointment_id UUID REFERENCES appointments(id) ON DELETE CASCADE;
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_donor_arrivals_appointment
+  ON donor_arrivals(appointment_id) WHERE appointment_id IS NOT NULL;
+
+DO $$ BEGIN
+  CREATE TYPE donation_unit_status AS ENUM ('collected', 'released', 'discarded', 'issued');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS donation_units (
+  id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  unit_code         TEXT NOT NULL UNIQUE,
+  appointment_id    UUID UNIQUE REFERENCES appointments(id) ON DELETE SET NULL,
+  -- SET NULL, not CASCADE: a unit already in the blood bank stays on record
+  -- even if the donor later deletes their account.
+  donor_id          UUID REFERENCES donors(id) ON DELETE SET NULL,
+  hospital_id       UUID NOT NULL REFERENCES hospitals(id) ON DELETE CASCADE,
+  -- Provisional (the donor's type on file) until the lab confirms it at release.
+  blood_type        blood_type,
+  -- The open request this donation was credited to by the min-heap at
+  -- collection (response tracking). It only counts toward that request's
+  -- units_fulfilled once the unit is issued.
+  request_id        UUID REFERENCES blood_requests(id) ON DELETE SET NULL,
+  status            donation_unit_status NOT NULL DEFAULT 'collected',
+  screening_override BOOLEAN NOT NULL DEFAULT false,
+  screening_note    TEXT,
+  collected_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  collected_by      UUID REFERENCES admins(id) ON DELETE SET NULL,
+  released_at       TIMESTAMPTZ,
+  released_by       UUID REFERENCES admins(id) ON DELETE SET NULL,
+  discarded_at      TIMESTAMPTZ,
+  discarded_by      UUID REFERENCES admins(id) ON DELETE SET NULL,
+  discard_reason    TEXT,
+  issued_at         TIMESTAMPTZ,
+  issued_by         UUID REFERENCES admins(id) ON DELETE SET NULL,
+  issued_request_id UUID REFERENCES blood_requests(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_donation_units_hospital_status ON donation_units(hospital_id, status);
+CREATE INDEX IF NOT EXISTS idx_donation_units_donor ON donation_units(donor_id);
+
+ALTER TABLE donors ADD COLUMN IF NOT EXISTS blood_type_confirmed_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS donor_change_log (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  donor_id      UUID NOT NULL REFERENCES donors(id) ON DELETE CASCADE,
+  field         TEXT NOT NULL,
+  old_value     TEXT,
+  new_value     TEXT,
+  changed_by    TEXT NOT NULL CHECK (changed_by IN ('donor', 'staff', 'lab')),
+  admin_id      UUID REFERENCES admins(id) ON DELETE SET NULL,
+  reason        TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_donor_change_log_donor ON donor_change_log(donor_id, created_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_active_appointment_per_donor
+  ON appointments(donor_id) WHERE status IN ('pending', 'confirmed');
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_donors_phone ON donors(phone);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_donors_email ON donors(lower(email)) WHERE email IS NOT NULL;
+
+
 -- ---------------------------------------------------------------------------
 -- Seed data (mirrors current frontend mock data, for local dev only)
 -- ---------------------------------------------------------------------------
@@ -500,7 +568,7 @@ INSERT INTO admins (username, email, password_hash, clearance) VALUES
 -- starting defaults, not a fixed rule; admins can tune per hospital via
 -- Settings > Inventory Thresholds (PATCH /api/dashboard/stock/:bloodType).
 INSERT INTO blood_inventory (hospital_id, blood_type, units_available, critical_threshold, low_threshold)
-SELECT id, 'O-', 12, 18, 30 FROM hospitals WHERE code = 'QMC-LC'
+SELECT id, 'O-'::blood_type, 12, 18, 30 FROM hospitals WHERE code = 'QMC-LC'
 UNION ALL SELECT id, 'AB-', 12, 15, 25 FROM hospitals WHERE code = 'QMC-LC'
 UNION ALL SELECT id, 'A+', 12, 10, 15 FROM hospitals WHERE code = 'QMC-LC'
 UNION ALL SELECT id, 'O+', 12, 10, 15 FROM hospitals WHERE code = 'QMC-LC'
@@ -523,7 +591,7 @@ INSERT INTO donors (donor_code, name, phone, blood_type, last_donation_at) VALUE
   ('D-8652', 'Theresita Ambrosio', '+63 9088563463', 'AB+', now() - INTERVAL '35 days');
 
 INSERT INTO blood_requests (hospital_id, request_code, blood_type, priority, ward, units_needed, units_fulfilled, status, created_at, resolved_at)
-SELECT id, 'REQ-9012', 'O-', 'EMERGENCY', 'ICU-4', 10, 4, 'PARTIALLY_FULFILLED', now() - INTERVAL '12 minutes', NULL FROM hospitals WHERE code = 'QMC-LC'
+SELECT id, 'REQ-9012', 'O-'::blood_type, 'EMERGENCY'::request_priority, 'ICU-4', 10, 4, 'PARTIALLY_FULFILLED'::request_status, now() - INTERVAL '12 minutes', NULL::timestamptz FROM hospitals WHERE code = 'QMC-LC'
 UNION ALL SELECT id, 'REQ-8843', 'A+', 'EMERGENCY', 'ER-A', 3, 2, 'PARTIALLY_FULFILLED', now() - INTERVAL '28 minutes', NULL FROM hospitals WHERE code = 'MMG-LC'
 UNION ALL SELECT id, 'REQ-9104', 'B-', 'URGENT', 'Surgery-B', 5, 1, 'PARTIALLY_FULFILLED', now() - INTERVAL '45 minutes', NULL FROM hospitals WHERE code = 'LUDH-LC'
 UNION ALL SELECT id, 'REQ-8756', 'AB+', 'URGENT', 'General-2', 5, 5, 'FULFILLED', now() - INTERVAL '65 minutes', now() - INTERVAL '12 minutes' FROM hospitals WHERE code = 'QMC-LC'
