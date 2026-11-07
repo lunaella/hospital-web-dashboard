@@ -86,42 +86,68 @@ const REASON_MESSAGES = {
   deferredClinicalRisk: "Reported a high-risk exposure — needs clinical judgment, not a fixed wait.",
 };
 
-// Mirrors DecisionTreeClassifier.classify(): same nodes, evaluated in the
-// same order, first match wins. Returns { reason: null } for eligible.
-function runDecisionTree(npt) {
-  // Immediate Wellness Check
-  if (!npt.feelsWellToday) {
-    return { reason: "deferredNotWell", daysRemaining: 0 };
+// How strict a finding is, for picking the one the donor and staff see
+// first when more than one rule matches (higher wins):
+//   3  needs clinical review (no fixed wait; a clinician has to decide)
+//   2  deferred with no date to count down to (under 50 kg, under 18,
+//      pregnant/nursing, or a date the rules need is missing)
+//   1  deferred with a countdown; the longest countdown wins
+//   0  clears the same day or with one quick action (not well today,
+//      no meal, alcohol in the last 24 hours, malaria symptom check)
+const SAME_DAY_REASONS = new Set(["deferredNotWell", "deferredFasting", "deferredAlcohol", "deferredMalariaCheck"]);
+
+function strictness(finding) {
+  if (CLINICAL_REVIEW_REASONS.has(finding.reason)) return 3;
+  if (finding.daysRemaining > 0) return 1;
+  if (SAME_DAY_REASONS.has(finding.reason)) return 0;
+  return 2;
+}
+
+// The strictest finding (ties keep tree order), or null when none.
+export function strictestFinding(findings) {
+  let best = null;
+  for (const f of findings) {
+    if (!best) {
+      best = f;
+      continue;
+    }
+    const a = strictness(f);
+    const b = strictness(best);
+    if (a > b || (a === 1 && b === 1 && f.daysRemaining > best.daysRemaining)) best = f;
   }
+  return best;
+}
+
+// Mirrors DecisionTreeClassifier.evaluateAll(): same nodes, same order, same
+// thresholds. Every node is checked (the tree used to stop at the first
+// match, so a donor with two risks was only told about one of them, and the
+// countdown could be shorter than the real wait). Returns every finding in
+// tree order; an empty list means eligible.
+function evaluateAllRules(npt) {
+  const found = [];
+  const add = (reason, daysRemaining = 0) => found.push({ reason, daysRemaining });
+
+  // Immediate Wellness Check
+  if (!npt.feelsWellToday) add("deferredNotWell");
 
   // Meal / Fluid Intake Check (last 4-6 hrs)
-  if (!npt.hasEatenRecently) {
-    return { reason: "deferredFasting", daysRemaining: 0 };
-  }
+  if (!npt.hasEatenRecently) add("deferredFasting");
 
   // Node 1: Weight Threshold Check (DOH Standard >= 50kg)
-  if (npt.weight < 50.0) {
-    return { reason: "deferredWeight", daysRemaining: 0 };
-  }
+  if (npt.weight < 50.0) add("deferredWeight");
 
   // Node 2: Minimum Age Check. No upper limit: a donor over 65 is eligible
   // but evaluated by the hospital first (see classifyDonorRow's message).
-  if (npt.age < 18) {
-    return { reason: "deferredAge", daysRemaining: 0 };
-  }
+  if (npt.age < 18) add("deferredAge");
 
   // Node 3: Last Donation Interval Check (90-day deferral for returning donors)
   if (!npt.isFirstTimeDonor && npt.lastDonationDate) {
     const daysSince = daysBetween(npt.lastDonationDate, new Date());
-    if (daysSince < MIN_DONATION_INTERVAL_DAYS) {
-      return { reason: "deferredInterval", daysRemaining: MIN_DONATION_INTERVAL_DAYS - daysSince };
-    }
+    if (daysSince < MIN_DONATION_INTERVAL_DAYS) add("deferredInterval", MIN_DONATION_INTERVAL_DAYS - daysSince);
   }
 
   // Node 4: Medical / Active Infection Check
-  if (npt.hasActiveInfectOrMeds) {
-    return { reason: "deferredMedical", daysRemaining: 0 };
-  }
+  if (npt.hasActiveInfectOrMeds) add("deferredMedical");
 
   // Recent Minor Medications/Procedures Check (4-week window, judged
   // against the most recent selected item; any item without a date defers).
@@ -138,33 +164,27 @@ function runDecisionTree(npt) {
       if (!mostRecent || date > mostRecent) mostRecent = date;
     }
     if (anyMissingDate || !mostRecent) {
-      return { reason: "deferredRecentProcedure", daysRemaining: 0 };
-    }
-    const daysSince = daysBetween(mostRecent, new Date());
-    if (daysSince < RECENT_PROCEDURE_DEF_DAYS) {
-      return { reason: "deferredRecentProcedure", daysRemaining: RECENT_PROCEDURE_DEF_DAYS - daysSince };
+      add("deferredRecentProcedure");
+    } else {
+      const daysSince = daysBetween(mostRecent, new Date());
+      if (daysSince < RECENT_PROCEDURE_DEF_DAYS) add("deferredRecentProcedure", RECENT_PROCEDURE_DEF_DAYS - daysSince);
     }
   }
 
   // Major Medical History Check — judged on the free-text description
   // (medKeywordRules.js), so controlled asthma/diabetes doesn't defer.
-  if (npt.hasMajorMedicalHistory) {
-    if (assessMajorMedicalHistory(npt.majorMedicalHistoryDesc).verdict === "deferred") {
-      return { reason: "deferredMajorMedical", daysRemaining: 0 };
-    }
+  if (npt.hasMajorMedicalHistory && assessMajorMedicalHistory(npt.majorMedicalHistoryDesc).verdict === "deferred") {
+    add("deferredMajorMedical");
   }
 
-  // Node 5: Tattoo / Piercing Window Check (12 months from the procedure date)
+  // Node 5: Tattoo / Piercing Window Check (12 months from the procedure
+  // date; no date on file defers).
   if (npt.hasTattsOrPierce) {
     if (npt.tattooDate) {
       const daysSince = daysBetween(npt.tattooDate, new Date());
-      if (daysSince < TATTOO_DEFERRAL_WINDOW_DAYS) {
-        return { reason: "deferredTattsPierce", daysRemaining: TATTOO_DEFERRAL_WINDOW_DAYS - daysSince };
-      }
-      // else: window has passed — fall through, no longer deferred for this.
+      if (daysSince < TATTOO_DEFERRAL_WINDOW_DAYS) add("deferredTattsPierce", TATTOO_DEFERRAL_WINDOW_DAYS - daysSince);
     } else {
-      // No date on file to verify the window has elapsed — defer.
-      return { reason: "deferredTattsPierce", daysRemaining: 0 };
+      add("deferredTattsPierce");
     }
   }
 
@@ -172,11 +192,9 @@ function runDecisionTree(npt) {
   if (npt.hasTransfusionOrSurgery) {
     if (npt.transfusionOrSurgeryDate) {
       const daysSince = daysBetween(npt.transfusionOrSurgeryDate, new Date());
-      if (daysSince < TRANSFUSION_SURGERY_DEF_DAYS) {
-        return { reason: "deferredTransfusionSurgery", daysRemaining: TRANSFUSION_SURGERY_DEF_DAYS - daysSince };
-      }
+      if (daysSince < TRANSFUSION_SURGERY_DEF_DAYS) add("deferredTransfusionSurgery", TRANSFUSION_SURGERY_DEF_DAYS - daysSince);
     } else {
-      return { reason: "deferredTransfusionSurgery", daysRemaining: 0 };
+      add("deferredTransfusionSurgery");
     }
   }
 
@@ -186,56 +204,39 @@ function runDecisionTree(npt) {
   // months.
   const malaria = malariaWait(npt);
   if (malaria) {
-    if (!malaria.endsAt) {
-      return { reason: "deferredTravelNeedle", daysRemaining: 0 };
-    }
     const now = new Date();
-    if (now < malaria.endsAt) {
-      return { reason: "deferredTravelNeedle", daysRemaining: Math.ceil((malaria.endsAt - now) / 86400000) };
+    if (!malaria.endsAt) {
+      add("deferredTravelNeedle");
+    } else if (now < malaria.endsAt) {
+      add("deferredTravelNeedle", Math.ceil((malaria.endsAt - now) / 86400000));
+    } else if (!malaria.checkDone) {
+      add("deferredMalariaCheck");
     }
-    if (!malaria.checkDone) {
-      return { reason: "deferredMalariaCheck", daysRemaining: 0 };
-    }
-  } else if (npt.hasTravelOrNeedleStick) {
-    const assessment = assessTravelOrNeedleStick(npt.travelOrNeedleDesc);
-    if (assessment.verdict === "deferred") {
-      const windowDays = TRAVEL_NEEDLE_DEF_DAYS;
-      if (npt.travelOrNeedleDate) {
-        const daysSince = daysBetween(npt.travelOrNeedleDate, new Date());
-        if (daysSince < windowDays) {
-          return { reason: "deferredTravelNeedle", daysRemaining: windowDays - daysSince };
-        }
-      } else {
-        return { reason: "deferredTravelNeedle", daysRemaining: 0 };
-      }
+  } else if (npt.hasTravelOrNeedleStick && assessTravelOrNeedleStick(npt.travelOrNeedleDesc).verdict === "deferred") {
+    if (npt.travelOrNeedleDate) {
+      const daysSince = daysBetween(npt.travelOrNeedleDate, new Date());
+      if (daysSince < TRAVEL_NEEDLE_DEF_DAYS) add("deferredTravelNeedle", TRAVEL_NEEDLE_DEF_DAYS - daysSince);
+    } else {
+      add("deferredTravelNeedle");
     }
   }
 
   // Node 6: Alcohol Intake Check (< 24 hrs)
-  if (npt.hasAlcoholPast24hr) {
-    return { reason: "deferredAlcohol", daysRemaining: 0 };
-  }
+  if (npt.hasAlcoholPast24hr) add("deferredAlcohol");
 
   // High-risk exposure applies to every donor, so it is checked before the
   // sex-specific branch (it used to run for male donors only).
-  if (npt.hasHighRiskExpo === true) {
-    return { reason: "deferredClinicalRisk", daysRemaining: 0 };
-  }
+  if (npt.hasHighRiskExpo === true) add("deferredClinicalRisk");
 
-  // Node 7: Gender-Specific Branching
+  // Node 7: Female-specific checks
   if (npt.gender === "female") {
-    if (npt.isPregOrNursing === true) {
-      return { reason: "deferredMaternal", daysRemaining: 0 };
-    }
+    if (npt.isPregOrNursing === true) add("deferredMaternal");
     if (npt.lastMensPeriodDate) {
       const daysSince = daysBetween(npt.lastMensPeriodDate, new Date());
-      if (daysSince < 7) {
-        return { reason: "deferredMensCycle", daysRemaining: 7 - daysSince };
-      }
+      if (daysSince < 7) add("deferredMensCycle", 7 - daysSince);
     }
-    return { reason: null, daysRemaining: 0 };
   }
-  return { reason: null, daysRemaining: 0 };
+  return found;
 }
 
 // malariaWait() straight from a health_screening JSONB, for the reminder
@@ -266,6 +267,7 @@ export function classifyDonorRow(donor) {
       message: "No completed screening on file for this donor.",
       clearanceDate: null,
       daysRemaining: null,
+      reasons: [],
     };
   }
 
@@ -291,6 +293,7 @@ export function classifyDonorRow(donor) {
       message: "Screening on file for this donor is incomplete.",
       clearanceDate: null,
       daysRemaining: null,
+      reasons: [],
     };
   }
 
@@ -336,8 +339,9 @@ export function classifyDonorRow(donor) {
     malariaSymptomsOngoing: screening.malariaSymptomsOngoing === true,
   };
 
-  const result = runDecisionTree(npt);
-  if (!result.reason) {
+  const findings = evaluateAllRules(npt);
+  const result = strictestFinding(findings);
+  if (!result) {
     return {
       status: "ELIGIBLE",
       reason: null,
@@ -347,6 +351,7 @@ export function classifyDonorRow(donor) {
           : "No deferral flags — eligible to donate.",
       clearanceDate: null,
       daysRemaining: null,
+      reasons: [],
     };
   }
 
@@ -355,13 +360,24 @@ export function classifyDonorRow(donor) {
     status === "DEFERRED" && result.daysRemaining > 0
       ? new Date(Date.now() + result.daysRemaining * 86400000).toISOString()
       : null;
+  // Every matching reason, strictest first then tree order, so staff see
+  // all of them on the QR scan, not just the one that decides the status.
+  const reasons = [result, ...findings.filter((f) => f !== result)].map((f) => ({
+    reason: f.reason,
+    message: REASON_MESSAGES[f.reason] || "Deferred.",
+    daysRemaining: f.daysRemaining > 0 ? f.daysRemaining : null,
+  }));
+  const primaryMessage = REASON_MESSAGES[result.reason] || "Deferred.";
+  const message =
+    reasons.length > 1 ? `${primaryMessage} Also: ${reasons.slice(1).map((r) => r.message).join(" ")}` : primaryMessage;
 
   return {
     status,
     reason: result.reason,
-    message: REASON_MESSAGES[result.reason] || "Deferred.",
+    message,
     clearanceDate,
     daysRemaining: result.daysRemaining > 0 ? result.daysRemaining : null,
+    reasons,
   };
 }
 

@@ -25,13 +25,6 @@ import {
 // so a real hospital spreadsheet doesn't have to match this exactly.
 const IMPORT_TYPES = [
   {
-    key: "donors",
-    label: "Donors",
-    endpoint: "/api/import/donors",
-    needsHospital: false,
-    template: ["Name", "Phone", "Email", "Blood Type", "Last Donation Date"],
-  },
-  {
     key: "inventory",
     label: "Inventory",
     endpoint: "/api/import/inventory",
@@ -207,7 +200,7 @@ export default function Settings() {
   const [savingType, setSavingType] = useState(null);
   const [hospitalFormSaving, setHospitalFormSaving] = useState(false);
 
-  const [importType, setImportType] = useState("donors");
+  const [importType, setImportType] = useState("inventory");
   // Which hospital an import lands in — a dedicated choice inside this card
   // rather than silently following the global switcher at the top of the
   // app, so switching hospitals to check something else while this card is
@@ -1261,7 +1254,7 @@ export default function Settings() {
         <>
         <h2 className="mt-10 font-poppins font-semibold text-[20px] text-black">Data Import</h2>
         <p className="mt-1.5 font-poppins font-semibold text-[15px] text-[#808080] max-w-[616px]">
-          Bring existing records into ResQ from a spreadsheet — donors, current inventory, and past requests
+          Bring existing records into ResQ from a spreadsheet — current inventory, past requests,
           or appointments. Accepts .csv or .xlsx files.
         </p>
 

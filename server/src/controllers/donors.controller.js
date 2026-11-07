@@ -7,6 +7,7 @@ import { broadcast, broadcastToDonors, sendToDonor } from "../realtime/hub.js";
 import { newUnitCode } from "./donationUnits.controller.js";
 import { classifyDonorRow, donorEligibility } from "../utils/eligibilityClassifier.js";
 import { MinHeap } from "../utils/minHeap.js";
+import { compareRequestsForCredit } from "../utils/requestPriority.js";
 import { sendPushToDonor } from "../utils/push.js";
 import { buildPhotoUrl } from "../utils/mediaUrl.js";
 
@@ -560,13 +561,7 @@ export const completeAppointment = asyncHandler(async (req, res) => {
          WHERE hospital_id = $1 AND blood_type = $2 AND status IN ('OPEN', 'PARTIALLY_FULFILLED')`,
         [appt.hospitalId, bloodType]
       );
-      const priorityRank = { EMERGENCY: 0, URGENT: 1 };
-      const requestHeap = new MinHeap((a, b) => {
-        const rankA = priorityRank[a.priority] ?? 2;
-        const rankB = priorityRank[b.priority] ?? 2;
-        if (rankA !== rankB) return rankA - rankB;
-        return new Date(a.createdAt) - new Date(b.createdAt);
-      });
+      const requestHeap = new MinHeap(compareRequestsForCredit);
       for (const row of candidateRows) requestHeap.insert(row);
       const match = requestHeap.extractMin();
       if (match) {

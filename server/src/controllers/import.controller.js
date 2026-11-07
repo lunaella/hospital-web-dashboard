@@ -7,7 +7,6 @@ import {
   BLOOD_TYPES,
   finalizeResult,
   flattenAliases,
-  DONOR_ALIASES,
   INVENTORY_ALIASES,
   REQUEST_ALIASES,
   APPOINTMENT_ALIASES,
@@ -33,63 +32,10 @@ function parseDateOrNull(raw) {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
-// POST /api/import/donors — donors are hospital-agnostic (see schema.sql:
-// which hospital a donor visits is decided per-appointment, not fixed to the
-// donor record), so this doesn't take a hospitalId. One row per donor: Name,
-// Phone, Blood Type required; Email and Last Donation Date optional.
-// donor_code is always generated fresh (same D-XXXX pattern as the manual
-// walk-in form) — existing donors are matched, and skipped rather than
-// duplicated, by phone number instead.
-export const importDonors = asyncHandler(async (req, res) => {
-  const rows = parseUploadedFile(req, DONOR_ALIASES);
-  const result = { imported: 0, skipped: 0, errors: [] };
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const rowNum = i + 2; // +1 for the header row, +1 for 1-indexing
-
-    const name = field(row, ...DONOR_ALIASES.name);
-    const phone = field(row, ...DONOR_ALIASES.phone);
-    const email = field(row, ...DONOR_ALIASES.email);
-    const bloodType = normalizeBloodType(field(row, ...DONOR_ALIASES.bloodType));
-    const lastDonationAt = parseDateOrNull(field(row, ...DONOR_ALIASES.lastDonationAt));
-
-    if (!name || !phone) {
-      result.errors.push({ row: rowNum, message: "Missing name or phone." });
-      continue;
-    }
-    if (!bloodType) {
-      result.errors.push({ row: rowNum, message: `Blood type must be one of: ${BLOOD_TYPES.join(", ")}.` });
-      continue;
-    }
-
-    const { rows: existing } = await pool.query("SELECT id FROM donors WHERE phone = $1", [phone]);
-    if (existing.length > 0) {
-      result.skipped++;
-      continue;
-    }
-
-    let inserted = false;
-    for (let attempt = 0; attempt < 5 && !inserted; attempt++) {
-      const code = `D-${Math.floor(1000 + Math.random() * 9000)}`;
-      try {
-        await pool.query(
-          `INSERT INTO donors (donor_code, name, phone, blood_type, email, last_donation_at)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [code, name, phone, bloodType, email || null, lastDonationAt]
-        );
-        inserted = true;
-        result.imported++;
-      } catch (err) {
-        if (err.code === "23505") continue; // donor_code collision — regenerate and retry
-        result.errors.push({ row: rowNum, message: err.message });
-        break;
-      }
-    }
-  }
-
-  res.json(finalizeResult(result));
-});
+// Donor import was removed (panel revisions, Nov 2026): imported donors
+// had no health screening or identity verification but could still receive
+// broadcast alerts. Donors now join only through the app (screened and
+// verified) or a staff walk-in record.
 
 // POST /api/import/inventory — requires hospitalId (form field alongside the
 // file; inventory is per hospital). One row per blood type: Blood Type,
@@ -229,7 +175,7 @@ const APPOINTMENT_STATUSES = ["confirmed", "pending", "cancelled", "completed", 
 
 // POST /api/import/appointments — historical donation appointments,
 // hospital-scoped. Donors are matched by phone number and must already
-// exist (import donors first). Deliberately does NOT run the same side
+// exist (registered through the app or as a walk-in). Deliberately does NOT run the same side
 // effects as completing a live appointment (donor_arrivals row, inventory
 // bump, last_donation_at update) even for rows marked "completed" — that
 // donation and that inventory unit were already consumed when it actually
@@ -266,7 +212,7 @@ export const importAppointments = asyncHandler(async (req, res) => {
 
     const { rows: donorRows } = await pool.query("SELECT id FROM donors WHERE phone = $1", [phone]);
     if (!donorRows[0]) {
-      result.errors.push({ row: rowNum, message: `No donor found with phone ${phone}. Import donors first.` });
+      result.errors.push({ row: rowNum, message: `No donor found with phone ${phone}. The donor must already be registered in ResQ.` });
       continue;
     }
 

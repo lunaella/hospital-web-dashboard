@@ -264,3 +264,62 @@ test("over 65 is eligible, with a note to evaluate first", () => {
   assert.match(r.message, /Over 65/);
   assert.doesNotMatch(classifyDonorRow(male({ age: 65 })).message, /Over 65/);
 });
+
+// Every rule is checked and the strictest outcome is reported, so a donor
+// with more than one risk sees the real wait and every reason.
+test("multiple risks: the longest countdown wins and every reason is listed", () => {
+  const r = classifyDonorRow(
+    male({
+      lastDonationAt: daysAgo(30),
+      screening: { hasTransfusionOrSurgery: true, transfusionOrSurgeryDate: daysAgo(100) },
+    }),
+  );
+  assert.equal(r.status, "DEFERRED");
+  assert.equal(r.reason, "deferredTransfusionSurgery");
+  assert.equal(r.daysRemaining, 265);
+  assert.deepEqual(
+    r.reasons.map((x) => [x.reason, x.daysRemaining]),
+    [
+      ["deferredTransfusionSurgery", 265],
+      ["deferredInterval", 60],
+    ],
+  );
+  assert.match(r.message, /Also: Within the mandatory 90-day interval/);
+});
+
+test("multiple risks: a deferral with no end date beats a same-day one", () => {
+  const r = classifyDonorRow(
+    donor({ screening: { isPregOrNursing: true, hasAlcoholPast24hr: true, lastMensPeriodDate: daysAgo(3) } }),
+  );
+  assert.equal(r.reason, "deferredMaternal");
+  assert.equal(r.daysRemaining, null);
+  assert.deepEqual(
+    r.reasons.map((x) => x.reason),
+    ["deferredMaternal", "deferredAlcohol", "deferredMensCycle"],
+  );
+});
+
+test("multiple risks: clinical review beats any fixed deferral", () => {
+  const r = classifyDonorRow(
+    male({
+      weightKg: "49.00",
+      screening: { hasMajorMedicalHistory: true, majorMedicalHistoryDesc: "Type 1 diabetes, on insulin" },
+    }),
+  );
+  assert.equal(r.status, "CLINICAL_REVIEW");
+  assert.equal(r.reason, "deferredMajorMedical");
+  assert.deepEqual(r.reasons.map((x) => x.reason), ["deferredMajorMedical", "deferredWeight"]);
+});
+
+test("a countdown beats a same-day deferral", () => {
+  const r = classifyDonorRow(male({ screening: { hasAlcoholPast24hr: true, hasTattsOrPierce: true, tattooDate: daysAgo(30) } }));
+  assert.equal(r.reason, "deferredTattsPierce");
+  assert.equal(r.daysRemaining, 335);
+});
+
+test("one risk: reasons holds just that one", () => {
+  const r = classifyDonorRow(male({ screening: { hasAlcoholPast24hr: true } }));
+  assert.deepEqual(r.reasons.map((x) => x.reason), ["deferredAlcohol"]);
+  assert.doesNotMatch(r.message, /Also:/);
+  assert.deepEqual(classifyDonorRow(male()).reasons, []);
+});
